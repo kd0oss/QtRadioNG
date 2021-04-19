@@ -41,7 +41,7 @@
 * Foundation, Inc., 59 Temple Pl
 */
 
-#include <ortp/rtp.h>
+//#include <ortp/rtp.h>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -56,7 +56,7 @@ Audio_playback::Audio_playback()
     recv_ts = 0;
     audio_byte_order = QAudioFormat::LittleEndian;
     audio_encoding = 0;
-    rtpSession = 0;
+//    rtpSession = 0;
     rtp_connected = false;
     useRTP = false;
     pdecoded_buffer = &queue;
@@ -88,9 +88,9 @@ void Audio_playback::set_audio_encoding(int encoding){
     audio_encoding = encoding;
 }
 
-void Audio_playback::set_rtpSession(RtpSession *session){
-    rtpSession = session;
-}
+//void Audio_playback::set_rtpSession(RtpSession *session){
+//    rtpSession = session;
+//}
 
 void Audio_playback::set_rtp_connected(bool connected){
     rtp_connected = connected;
@@ -279,7 +279,7 @@ void Audio::get_audio_devices(QComboBox* comboBox) {
         audio_out->set_audio_byte_order(audio_format.byteOrder());
         audio_out->set_audio_encoding(audio_encoding);
         audio_out->set_decoded_buffer(&decoded_buffer);
-        audio_out->set_rtpSession(0);
+//        audio_out->set_rtpSession(0);
         audio_out->set_rtp_connected(false);
         audio_out->set_useRTP(false);
         audio_out->start();
@@ -369,7 +369,7 @@ void Audio::select_audio(QAudioDeviceInfo info,int rate,int channels,QAudioForma
 		audio_out->set_audio_byte_order(audio_format.byteOrder());
 		audio_out->set_audio_encoding(audio_encoding);
 		audio_out->set_decoded_buffer(&decoded_buffer);
-		audio_out->set_rtpSession(0);
+//		audio_out->set_rtpSession(0);
 		audio_out->set_rtp_connected(false);
 		audio_out->set_useRTP(false);
 		audio_out->start();
@@ -469,11 +469,11 @@ void Audio::rtp_set_disconnected(void){
     audio_out->set_rtp_connected(false);
 }
 
-void Audio::rtp_set_rtpSession(RtpSession* session){
+//void Audio::rtp_set_rtpSession(RtpSession* session){
     //qDebug() << "Audio::rtp_set_rtpSession";
-    rtpSession = session;
-    audio_out->set_rtpSession(session);
-}
+//    rtpSession = session;
+//    audio_out->set_rtpSession(session);
+//}
 
 Audio_processing::Audio_processing(){
     int sr_error;
