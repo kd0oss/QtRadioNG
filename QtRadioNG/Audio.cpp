@@ -39,13 +39,14 @@
 * You should have received a copy of the GNU General Public License
 * along with this program; if not, write to the Free Software
 * Foundation, Inc., 59 Temple Pl
+
+
+Additions and changes by Rick Schnicker KD0OSS 2021
 */
 
-//#include <ortp/rtp.h>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
-//#include <codec2/codec2.h>
 #include "Audio.h"
 
 
@@ -56,9 +57,6 @@ Audio_playback::Audio_playback()
     recv_ts = 0;
     audio_byte_order = QAudioFormat::LittleEndian;
     audio_encoding = 0;
-//    rtpSession = 0;
-    rtp_connected = false;
-    useRTP = false;
     pdecoded_buffer = &queue;
 }
 
@@ -88,17 +86,6 @@ void Audio_playback::set_audio_encoding(int encoding){
     audio_encoding = encoding;
 }
 
-//void Audio_playback::set_rtpSession(RtpSession *session){
-//    rtpSession = session;
-//}
-
-void Audio_playback::set_rtp_connected(bool connected){
-    rtp_connected = connected;
-}
-
-void Audio_playback::set_useRTP(bool use){
-    useRTP = use;
-}
 
 qint64 Audio_playback::readData(char *data, qint64 maxlen)
  {
@@ -147,8 +134,6 @@ Audio::Audio() {
     audio_encoding = 0;
     audio_channels=1;
     audio_byte_order=QAudioFormat::LittleEndian;
-    rtp_connected = false;
-    useRTP = false;
 
     //qDebug() << "Audio: LittleEndian=" << QAudioFormat::LittleEndian << " BigEndian=" << QAudioFormat::BigEndian;
 
@@ -279,9 +264,6 @@ void Audio::get_audio_devices(QComboBox* comboBox) {
         audio_out->set_audio_byte_order(audio_format.byteOrder());
         audio_out->set_audio_encoding(audio_encoding);
         audio_out->set_decoded_buffer(&decoded_buffer);
-//        audio_out->set_rtpSession(0);
-        audio_out->set_rtp_connected(false);
-        audio_out->set_useRTP(false);
         audio_out->start();
         audio_output->start(audio_out);
 
@@ -369,9 +351,6 @@ void Audio::select_audio(QAudioDeviceInfo info,int rate,int channels,QAudioForma
 		audio_out->set_audio_byte_order(audio_format.byteOrder());
 		audio_out->set_audio_encoding(audio_encoding);
 		audio_out->set_decoded_buffer(&decoded_buffer);
-//		audio_out->set_rtpSession(0);
-		audio_out->set_rtp_connected(false);
-		audio_out->set_useRTP(false);
 		audio_out->start();
 		audio_output->start(audio_out);
 
@@ -446,34 +425,6 @@ void Audio::process_audio(char* header, char* buffer, int length){
     emit audio_processing_process_audio(header,buffer,length);
 }
 
-void Audio::set_RTP(bool use){
-    useRTP = use;
-    audio_out->set_useRTP(use);
-}
-
-void Audio::rtp_set_connected(void){
-    //qDebug() << "Audio::rtp_set_connected";
-#if 0
-    /*
-     *  send first packet in order to help to establish session
-     */
-    unsigned char fake [] = "BBBBBBBBBBBBBBBB";
-    rtp_session_send_with_ts(rtpSession,(uint8_t*)fake,sizeof(fake),1);
-#endif
-    rtp_connected = true;
-    audio_out->set_rtp_connected(true);
-}
-
-void Audio::rtp_set_disconnected(void){
-    rtp_connected = false;
-    audio_out->set_rtp_connected(false);
-}
-
-//void Audio::rtp_set_rtpSession(RtpSession* session){
-    //qDebug() << "Audio::rtp_set_rtpSession";
-//    rtpSession = session;
-//    audio_out->set_rtpSession(session);
-//}
 
 Audio_processing::Audio_processing(){
     int sr_error;
@@ -530,15 +481,15 @@ void Audio_processing::set_audio_encoding(int enc){
 
 void Audio_processing::process_audio(char* header,char* buffer,int length) {
 
-    if (pdecoded_buffer->count() < 4000){
+    if (pdecoded_buffer->count() < 4000)
+    {
         if (audio_encoding == 0) aLawDecode(buffer,length);
         else if (audio_encoding == 1) pcmDecode(buffer,length);
-        else if (audio_encoding == 2) codec2Decode(buffer,length);
-        else {
+        else
+        {
             //qDebug() << "Error: Audio::process_audio:  audio_encoding = " << audio_encoding;
         }
     }
-//    if (header != NULL) free(header);
     if (buffer != NULL) free(buffer);
 }
 
@@ -591,27 +542,6 @@ void Audio_processing::pcmDecode(char* buffer,int length) {
     //resample(length/2);
 }
 
-void Audio_processing::codec2Decode(char* buffer,int length) {
-    int i,j,k;
- //   int samples_per_frame = codec2_samples_per_frame(codec2);
- //   short v[samples_per_frame];
-//    int bits_size = codec2_bits_per_frame(codec2)/8;
-//    unsigned char bits[bits_size];
-
-    j = 0;
-    k = 0;
-    while (j < length) {
- //       memcpy(bits,&buffer[j],bits_size);
- //       codec2_decode(codec2, v, bits);
-   //     for (i=0; i < samples_per_frame; i++){
-            //buffer_in[i] = (float)v[i]/32767.0f;
-        //    pdecoded_buffer->enqueue(v[i]);
-     //   }
-  //      j += bits_size;
-        k++;
-    }
-    //resample(samples_per_frame);
-}
 
 void Audio_processing::init_decodetable() {
     //qDebug() << "init_decodetable";
