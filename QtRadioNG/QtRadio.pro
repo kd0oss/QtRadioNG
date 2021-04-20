@@ -45,7 +45,7 @@ greaterThan(QT_MAJOR_VERSION, 4) {
     }
 }
 
-
+QMAKE_CXXFLAGS_WARN_ON += -Wno-unused-parameter
 QMAKE_CXXFLAGS += -fopenmp
 
 SOURCES += main.cpp\
@@ -79,7 +79,6 @@ SOURCES += main.cpp\
     Audioinput.cpp\
     servers.cpp \
     G711A.cpp \
-    powermate.cpp \
     calc.cpp \
     EqualizerDialog.cpp \
     Panadapter.cpp \
@@ -119,7 +118,6 @@ HEADERS  += \
     servers.h \
     G711A.h \
     cusdr_queue.h \
-    powermate.h \
     calc.h \
     EqualizerDialog.h \
     Panadapter.h \

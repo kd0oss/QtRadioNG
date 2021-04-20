@@ -46,7 +46,6 @@
 #include "smeter.h"
 #include "servers.h"
 #include "ctl.h"
-#include "powermate.h"
 #include "Frequency.h"
 #include "EqualizerDialog.h"
 #include "calc.h"

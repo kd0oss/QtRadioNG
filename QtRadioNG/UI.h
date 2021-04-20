@@ -61,7 +61,6 @@
 #include "ctl.h"
 #include "G711A.h"
 //#include "hermesframe.h"
-#include "powermate.h"
 #include "EqualizerDialog.h"
 
 #define DSPSERVER_BASE_PORT 8000
