@@ -82,8 +82,6 @@ UI::UI(const QString server)
     mic_frame_count = 0;
     connection_valid = false;
 
- //   spectrumConnection = SpectrumConnection();
-
     isConnected = false;
     modeFlag = false;
     infotick = 0;
@@ -92,7 +90,7 @@ UI::UI(const QString server)
     dspversiontxt = "Unknown";
     meter = -121;
 
-    widget.statusbar->showMessage("QtRadio II branch: KD0OSS 2019");
+    widget.statusbar->showMessage("QtRadio NG branch: KD0OSS 2020");
 
     // connect up all the menus
     connect(&connection, SIGNAL(isConnected(int)), this, SLOT(connected(int)));
