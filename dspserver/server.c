@@ -632,6 +632,16 @@ void errorcb(struct bufferevent *bev, short error, void *ctx)
         if (client_count <= 0)
         {
             sem_wait(&bufferevent_semaphore);
+            for (int i=0;i<active_channels;i++)
+            {
+                if (channels[i].enabled)
+                {
+                    CloseChannel(channels[i].receiver);
+                    if (channels[i].transmitter >= 0)
+                        CloseChannel(channels[i].transmitter);
+                    channels[i].enabled = false;
+                }
+            }
             send_audio = 0;
             sem_post(&bufferevent_semaphore);
         }
@@ -2046,7 +2056,7 @@ void readcb(struct bufferevent *bev, void *ctx)
                 calculate_display_average();
 
                 SetChannelState(rx, 1, 1);
-
+                channels[current_channel].enabled = true;
                 current_rx = rx;
              //   channels[active_channels].radio_id = radio_id;
              //   channels[active_channels].receiver = rx;
