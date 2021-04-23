@@ -664,7 +664,7 @@ void UI::connected(int channel)
     connection.sendCommand(command);
     command.clear();
 
-    command.append((char)STARTRECEIVER);
+    command.append((char)STARTXCVR);
     command.append((char)channel);
     connection.sendCommand(command);
     command.clear();
