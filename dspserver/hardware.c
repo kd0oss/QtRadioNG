@@ -52,10 +52,10 @@ static sem_t hw_cmd_semaphore;
 // Added by Alex lee 18 Aug 2010
 double LO_offset = 0; // 9000;  // LO offset 9khz
 
-int connected_radios = 0;
+short int connected_radios = 0;
 
 
-int active_channels;
+short int active_channels;
 static pthread_t iq_thread_id;
 
 static int hw_debug = 0;

@@ -57,8 +57,8 @@ struct audio_entry {
     struct sockaddr_in client;
     struct bufferevent * bev;
     unsigned char *buf;
-	int length;
-	TAILQ_ENTRY(audio_entry) entries;
+    int length;
+    TAILQ_ENTRY(audio_entry) entries;
 };
 
 /**
@@ -92,7 +92,7 @@ void audio_stream_init(int port);
 void allocate_audio_buffer(void);
 void init_alaw_tables(void);
 void audio_stream_queue_add(unsigned char *buffer, int length);
-struct audio_entry  *audio_stream_queue_remove(void);
+//struct audio_entry  *audio_stream_queue_remove(void);
 void audio_stream_queue_free(void);
 void Mic_stream_queue_free(void);
 

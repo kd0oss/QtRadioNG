@@ -119,7 +119,7 @@ typedef struct _channel
 
 extern CHANNEL channels[35];
 extern int iq_socket;
-extern int connected_radios;
+extern short int connected_radios;
 
 #define SPECTRUM_BUFFER_SIZE 8192
 

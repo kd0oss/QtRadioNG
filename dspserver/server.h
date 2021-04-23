@@ -201,9 +201,9 @@ enum COMMAND_SET {
     SETRXEQPRO,
     SETTXEQPRO,
 
-    // Hardware server calls
-    STARTTRANSMITTER = 242,
-    STARTRECEIVER = 243,
+
+    STOPXCVR = 242,
+    STARTXCVR = 243,
     SETSAMPLERATE = 244,
     SETRECORD = 245,
     SETFREQ = 246,
@@ -225,7 +225,7 @@ enum CLIENT_TYPE {
 };
 
 enum CLIENT_CONNECTION {
-	connection_unknown,
+    connection_unknown,
     connection_tcp = 0
 } client_connection;
 
@@ -251,7 +251,7 @@ typedef struct _mic_buffer
     unsigned short length;
     float          fwd_pwr;
     float          rev_pwr;
-    float data[512];
+    float          data[512];
 } MIC_BUFFER;
 
 typedef struct _spectrum
@@ -267,7 +267,7 @@ typedef struct _spectrum
     char           *samples; // not used here, just a place holder for client side consistancy.
 } spectrum;
 
-extern int active_channels;
+extern short int active_channels;
 
 char servername[21];
 unsigned char bUseNB;

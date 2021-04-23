@@ -81,9 +81,9 @@
 
 RADIO *radio[5];
 CHANNEL channels[35];
-int active_channels = 0;
-int current_channel = -1;
-int connected_radios;
+short int active_channels = 0;
+short int current_channel = -1;
+short int connected_radios;
 
 extern float txfwd;
 extern float txref;
@@ -97,10 +97,10 @@ static int current_tx = -1;
 static long sample_rate = 48000L;
 
 static pthread_t mic_audio_client_thread_id,
-client_thread_id,
-audio_client_thread_id,
-spectrum_client_thread_id,
-tx_thread_id;
+                 client_thread_id,
+                 audio_client_thread_id,
+                 spectrum_client_thread_id,
+                 tx_thread_id;
 
 #define BASE_PORT 8000
 static int port = BASE_PORT;
@@ -239,11 +239,11 @@ void audio_stream_queue_add(unsigned char *buffer, int length)
 } // end audio_stream_queue_add
 
 
-struct audio_entry *audio_stream_queue_remove()
+struct _client_entry *audio_stream_queue_remove()
 {
     return NULL;
 
-    struct audio_entry *first_item;
+    struct _client_entry *first_item;
     sem_wait(&audio_bufevent_semaphore);
     first_item = TAILQ_FIRST(&Audio_client_list);
     if (first_item != NULL)
@@ -631,6 +631,7 @@ void errorcb(struct bufferevent *bev, short error, void *ctx)
 
         if (client_count <= 0)
         {
+            fprintf(stderr, "No more clients so closing all DSP channels.\n");
             sem_wait(&bufferevent_semaphore);
             for (int i=0;i<active_channels;i++)
             {
@@ -712,7 +713,7 @@ void do_accept(evutil_socket_t listener, short event, void *arg)
     }
 } // end do_accept
 
-
+#ifdef USE_SSL
 /*************************************************************************************************
  * ********************************************************************************************
  * ***********************************************************************************************/
@@ -881,7 +882,7 @@ void pthreads_locking_callback(int mode, int type, char *file, int line)
         pthread_mutex_unlock(&(lock_cs[type]));
     }
 } // end pthreads_locking_callback
-
+#endif
 
 unsigned long pthreads_thread_id(void)
 {
@@ -900,10 +901,11 @@ void* client_thread(void* arg)
     struct sockaddr_in server;
     int serverSocket;
 
-    SSL_CTX *ctx;
+#ifdef USE_SSL
     struct evconnlistener *listener;
+    SSL_CTX *ctx;
     struct sockaddr_in server_ssl;
-
+#endif
     fprintf(stderr,"client_thread\n");
 
     // setting up non-ssl open serverSocket
@@ -929,7 +931,7 @@ void* client_thread(void* arg)
     if(bind(serverSocket,(struct sockaddr *)&server,sizeof(server))<0)
     {
         perror("client bind");
-        fprintf(stderr,"port=%d\n",port);
+        fprintf(stderr, "port=%d\n", port);
         return NULL;
     }
 
@@ -940,7 +942,7 @@ void* client_thread(void* arg)
         perror("client listen");
         exit(1);
     }
-
+#ifdef USE_SSL
     // setting up ssl server
     memset(&server_ssl, 0, sizeof(server_ssl));
     server_ssl.sin_family = AF_INET;
@@ -955,14 +957,14 @@ void* client_thread(void* arg)
     }
     // setup openssl thread-safe callbacks
     thread_setup();
-
+#endif
     // this is the Event base for both non-ssl and ssl servers
     base = event_base_new();
 
     // add the non-ssl listener to event base
     listener_event = event_new(base, serverSocket, EV_READ|EV_PERSIST, do_accept, (void*)base);
     event_add(listener_event, NULL);
-
+#ifdef USE_SSL
     // add the ssl listener to event base
     listener = evconnlistener_new_bind(
                 base, do_accept_ssl, (void *)ctx,
@@ -971,15 +973,15 @@ void* client_thread(void* arg)
                 (struct sockaddr *)&server_ssl, sizeof(server_ssl));
 
     sdr_log(SDR_LOG_INFO, "client_thread: listening on port %d for ssl connection\n", port_ssl);
-
+#endif
     // this will be an endless loop to service all the network events
     event_base_loop(base, 0);
-
+#ifdef USE_SSL
     // if for whatever reason the Event loop terminates, cleanup
     evconnlistener_free(listener);
     thread_cleanup();
     SSL_CTX_free(ctx);
-
+#endif
     return NULL;
 } // end client_thread
 
@@ -1122,14 +1124,14 @@ void spectrum_readcb(struct bufferevent *bev, void *ctx)
             sdr_log(SDR_LOG_ERROR, "Short read from spectrum client; shouldn't happen\n");
             return;
         }
-        fprintf(stderr, "Spectrum message: %s\n", message+1);
+        fprintf(stderr, "Spectrum message: %s\n", (const char*)(message+1));
         switch ((unsigned char)message[0])
         {
         case SETFPS:
         {
             int samp, fps;
 
-            sscanf(message+1, "%d,%d", &samp, &fps);
+            sscanf((const char*)(message+1), "%d,%d", &samp, &fps);
             sdr_log(SDR_LOG_INFO, "Spectrum fps set to = '%d'  Samples = '%d'\n", fps, samp);
             sem_wait(&spec_bufevent_semaphore);
             //            if (slave)
@@ -1149,8 +1151,8 @@ void spectrum_readcb(struct bufferevent *bev, void *ctx)
 
         case GETSPECTRUM:
         {
-            printf("Spec: %s\n", message+1);
-            int samples = atoi(message+1);
+            printf("Spec: %s\n", (const char*)(message+1));
+            int samples = atoi((const char*)(message+1));
             char *client_samples = malloc(BUFFER_HEADER_SIZE + samples);
             sem_wait(&spectrum_semaphore);
             // spectrumBuffer is updated by spectrum_timer thread every 20ms
@@ -1341,7 +1343,7 @@ void audio_writecb(struct bufferevent *bev, void *ctx)
     struct audio_entry *item;
     client_entry *client_item;
 
-    while ((item = audio_stream_queue_remove()) != NULL)
+    while ((client_item = audio_stream_queue_remove()) != NULL)
     {
         sem_wait(&audio_bufevent_semaphore);
         TAILQ_FOREACH(client_item, &Audio_client_list, entries)
@@ -1409,7 +1411,7 @@ void audio_readcb(struct bufferevent *bev, void *ctx)
             sdr_log(SDR_LOG_ERROR, "Short read from audio client; shouldn't happen\n");
             return;
         }
-        fprintf(stderr, "Audio message: %s\n", message+1);
+        fprintf(stderr, "Audio message: %s\n", (const char*)(message+1));
         switch ((unsigned char)message[0])
         {
 
@@ -1669,14 +1671,14 @@ void mic_audio_readcb(struct bufferevent *bev, void *ctx)
             sdr_log(SDR_LOG_ERROR, "Short read from mic audio client; shouldn't happen\n");
             return;
         }
-        //        fprintf(stderr, "Mic audio message: %s\n", message+1);
+        //        fprintf(stderr, "Mic audio message: %s\n", (const char*)(message+1));
         switch ((unsigned char)message[0])
         {
         case ISMIC:
         {
             //  int samp, fps;
             //    fprintf(stderr, "mic 4\n");
-            //  sscanf(message+1, "%d,%d", &samp, &fps);
+            //  sscanf((const char*)(message+1), "%d,%d", &samp, &fps);
             //  sdr_log(SDR_LOG_INFO, "Spectrum fps set to = '%d'  Samples = '%d'\n", fps, samp);
             sem_wait(&mic_semaphore);
             memcpy(mic_buffer, &message[6], MIC_ALAW_BUFFER_SIZE);
@@ -1918,7 +1920,7 @@ void readcb(struct bufferevent *bev, void *ctx)
 
         if (message[0] == QUESTION)
         {
-            //            answer_question(message+1, role, bev);
+            //            answer_question((const char*)(message+1), role, bev);
             fprintf(stderr, "Question.....%02X\n", message[1]);
 
             if (message[1] == STARHARDWARE)
@@ -1939,7 +1941,7 @@ void readcb(struct bufferevent *bev, void *ctx)
             }
             else
                 if (message[1] == QINFO)
-                {
+                {  // FIX_ME: this mess needs to be changed to binary structure.
                     answer[0] = 0;
                     char hdr[4];
                     hdr[2] = QINFO;
@@ -1998,7 +2000,7 @@ void readcb(struct bufferevent *bev, void *ctx)
             }
                 break;
 
-            case STARTRECEIVER:
+            case STARTXCVR:
             {
                 short int current_channel = (short int)message[1];
                 short int rx = channels[current_channel].receiver;
@@ -2058,18 +2060,12 @@ void readcb(struct bufferevent *bev, void *ctx)
                 SetChannelState(rx, 1, 1);
                 channels[current_channel].enabled = true;
                 current_rx = rx;
-             //   channels[active_channels].radio_id = radio_id;
-             //   channels[active_channels].receiver = rx;
-           //     current_channel = active_channels;
-                active_channels++;
-      //      }
-      //          break;
 
-      //      case STARTTRANSMITTER:
-       //     {
+                active_channels++;
+
                 short int tx = (short int)channels[current_channel].transmitter;
                 if (tx < 0) break;
-          //      tx = 2;
+
                 OpenChannel(tx, 512, 2048, 48000, 96000, 192000, 1, 0, 0.010, 0.025, 0.000, 0.010, 0);
                 printf("TX channel %d opened.\n", tx);fflush(stdout);
 
@@ -2131,7 +2127,23 @@ void readcb(struct bufferevent *bev, void *ctx)
                 SetDisplayDetectorMode(tx, 0, DETECTOR_MODE_PEAK/*display_detector_mode*/);
                 SetDisplayAverageMode(tx, 0, AVERAGE_MODE_NONE/*display_average_mode*/);
                 current_tx = tx;
-         //       channels[active_channels-1].transmitter = tx;
+            }
+                break;
+
+            case STOPXCVR:
+            {
+                short int ch = (short int)message[1];
+                current_channel = (short int)message[2];
+                sem_wait(&bufferevent_semaphore);
+                if (channels[ch].enabled)
+                {
+                    CloseChannel(channels[ch].receiver);
+                    if (channels[ch].transmitter >= 0)
+                        CloseChannel(channels[ch].transmitter);
+                    channels[ch].enabled = false;
+                }
+                sem_post(&bufferevent_semaphore);
+                active_channels--;
             }
                 break;
 
@@ -2151,7 +2163,7 @@ void readcb(struct bufferevent *bev, void *ctx)
             case SETFIXEDAGC:
             {
                 double agc;
-                agc = atof(message+1);
+                agc = atof((const char*)(message+1));
                 SetRXAAGCFixed(current_rx, agc);
             }
                 break;
@@ -2165,7 +2177,7 @@ void readcb(struct bufferevent *bev, void *ctx)
                 double freq[11] = {0.0, 32.0, 63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0};
                 double gain[11];
 
-                sscanf(message+2, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf",
+                sscanf((const char*)(message+2), "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf",
                        &gain[0], &gain[1], &gain[2], &gain[3], &gain[4], &gain[5], &gain[6], &gain[7], &gain[8], &gain[9], &gain[10]);
                 SetRXAEQProfile(current_rx, message[1], freq, gain);
             }
@@ -2176,7 +2188,7 @@ void readcb(struct bufferevent *bev, void *ctx)
                 double freq[11] = {0.0, 32.0, 63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0};
                 double gain[11];
 
-                sscanf(message+2, "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf",
+                sscanf((const char*)(message+2), "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf",
                        &gain[0], &gain[1], &gain[2], &gain[3], &gain[4], &gain[5], &gain[6], &gain[7], &gain[8], &gain[9], &gain[10]);
                 SetTXAEQProfile(current_tx, message[1], freq, gain);
             }
@@ -2190,7 +2202,7 @@ void readcb(struct bufferevent *bev, void *ctx)
             {
                 int samp, fps;
 
-                sscanf(message+1, "%d,%d", &samp, &fps);
+                sscanf((const char*)(message+1), "%d,%d", &samp, &fps);
                 sdr_log(SDR_LOG_INFO, "Spectrum fps set to = '%d'  Samples = '%d'\n", fps, samp);
                 sem_wait(&bufferevent_semaphore);
                 if (item->client_type != CONTROL)
@@ -2210,8 +2222,8 @@ void readcb(struct bufferevent *bev, void *ctx)
                 break;
 
             case SETFREQ:
-                hwSetFrequency(message[1], atoll(message+2));
-                     fprintf(stderr, "Set frequency: %lld\n", atoll(message+2));
+                hwSetFrequency(message[1], atoll((const char*)(message+2)));
+                     fprintf(stderr, "Set frequency: %lld\n", atoll((const char*)(message+2)));
                 break;
 
             case SETMODE:
@@ -2336,7 +2348,7 @@ void readcb(struct bufferevent *bev, void *ctx)
             {
                 int low, high;
                 current_rx = channels[message[1]].receiver;
-                sscanf(message+2, "%d,%d", &low, &high);
+                sscanf((const char*)(message+2), "%d,%d", &low, &high);
                 printf("Low: %d   High: %d\n", low, high);
                 RXASetPassband(current_rx, (double)low, (double)high);
             }
@@ -2373,7 +2385,7 @@ void readcb(struct bufferevent *bev, void *ctx)
                 rate = 8000;
                 channels = 1;
                 micEncoding = 0;
-                ntok = sscanf(message+1, "%d,%d,%d,%d", &bufsize, &rate, &channels, &micEncoding);
+                ntok = sscanf((const char*)(message+1), "%d,%d,%d,%d", &bufsize, &rate, &channels, &micEncoding);
 
                 if (ntok >= 1)
                 {
@@ -2435,7 +2447,7 @@ void readcb(struct bufferevent *bev, void *ctx)
                 break;
 
             case SETPAN:
-                SetRXAPanelPan(current_rx, atof(message+1));
+                SetRXAPanelPan(current_rx, atof((const char*)(message+1)));
                 break;
 
             case SETANFVALS:
@@ -2443,7 +2455,7 @@ void readcb(struct bufferevent *bev, void *ctx)
                 int taps, delay;
                 double gain, leakage;
 
-                if (sscanf(message+1, "%d,%d,%f,%f", &taps, &delay, (float*)&gain, (float*)&leakage) != 4)
+                if (sscanf((const char*)(message+1), "%d,%d,%f,%f", &taps, &delay, (float*)&gain, (float*)&leakage) != 4)
                     goto badcommand;
 
                 SetRXAANFVals(current_rx, taps, delay, gain, leakage);
@@ -2459,7 +2471,7 @@ void readcb(struct bufferevent *bev, void *ctx)
                 int taps, delay;
                 double gain, leakage;
 
-                if (sscanf(message+1, "%d,%d,%f,%f", &taps, &delay, (float*)&gain, (float*)&leakage) != 4)
+                if (sscanf((const char*)(message+1), "%d,%d,%f,%f", &taps, &delay, (float*)&gain, (float*)&leakage) != 4)
                     goto badcommand;
 
                 SetRXAANRVals(current_rx, taps, delay, gain, leakage);
@@ -2483,13 +2495,13 @@ void readcb(struct bufferevent *bev, void *ctx)
             case SETNBVAL:
             {
                 double thresh;
-                sscanf(message+1, "%lf", &thresh);
+                sscanf((const char*)(message+1), "%lf", &thresh);
                 SetEXTNOBThreshold(current_rx, thresh);
             }
                 break;
 
             case SETSQUELCHVAL:
-                SetRXAAMSQThreshold(current_rx, atof(message+1));
+                SetRXAAMSQThreshold(current_rx, atof((const char*)(message+1)));
                 break;
 
             case SETSQUELCHSTATE:
@@ -2497,22 +2509,22 @@ void readcb(struct bufferevent *bev, void *ctx)
                 break;
 
             case SETWINDOW:
-                SetRXABandpassWindow(current_rx, atoi(message+1));
-                SetTXABandpassWindow(current_tx, atoi(message+1));
+                SetRXABandpassWindow(current_rx, atoi((const char*)(message+1)));
+                SetTXABandpassWindow(current_tx, atoi((const char*)(message+1)));
                 break;
 
             case SETCLIENT:
-                sdr_log(SDR_LOG_INFO, "RX%d: client is %s\n", receiver, message+1);
+                sdr_log(SDR_LOG_INFO, "RX%d: client is %s\n", receiver, (const char*)(message+1));
                 break;
 
             case SETRXOUTGAIN:
-                SetRXAPanelGain1(current_rx, (double)atoi(message+1)/100.0);
+                SetRXAPanelGain1(current_rx, (double)atoi((const char*)(message+1))/100.0);
                 break;
 
             case SETMICGAIN:
             {
                 double gain;
-                if (sscanf(message+1, "%lf", (double*)&gain) > 1)
+                if (sscanf((const char*)(message+1), "%lf", (double*)&gain) > 1)
                     goto badcommand;
 
                 SetTXAPanelGain1(current_tx, pow(10.0, gain / 20.0));
@@ -2522,7 +2534,7 @@ void readcb(struct bufferevent *bev, void *ctx)
 
             case SETSAMPLERATE:
             {
-                if (sscanf(message+1, "%ld", (long*)&sample_rate) > 1)
+                if (sscanf((const char*)(message+1), "%ld", (long*)&sample_rate) > 1)
                     goto badcommand;
                 SetChannelState(current_rx, 0, 1);
                 //    SetInputSampleratecurrent_rx, sample_rate);
@@ -2540,7 +2552,7 @@ void readcb(struct bufferevent *bev, void *ctx)
                 char user[20];
                 char pass[20];
 
-                if (sscanf(message+1, "%lf %s %s", (double*)&level, user, pass) > 3)
+                if (sscanf((const char*)(message+1), "%lf %s %s", (double*)&level, user, pass) > 3)
                     goto badcommand;
 
                 SetTXAAMCarrierLevel(current_tx, level * 10.0);
@@ -2549,11 +2561,11 @@ void readcb(struct bufferevent *bev, void *ctx)
                 break;
 
             case SETRXBPASSWIN:
-                SetRXABandpassWindow(current_rx, atoi(message+1));
+                SetRXABandpassWindow(current_rx, atoi((const char*)(message+1)));
                 break;
 
             case SETTXBPASSWIN:
-                SetTXABandpassWindow(current_tx, atoi(message+1));
+                SetTXABandpassWindow(current_tx, atoi((const char*)(message+1)));
                 break;
 
             case MOX:
@@ -2561,7 +2573,7 @@ void readcb(struct bufferevent *bev, void *ctx)
                 char user[20];
                 char pass[20];
 
-                if (sscanf(message+1, "%d %s %s", &mox, user, pass) > 3)
+                if (sscanf((const char*)(message+1), "%d %s %s", &mox, user, pass) > 3)
                     goto badcommand;
 
 
@@ -2588,7 +2600,7 @@ void readcb(struct bufferevent *bev, void *ctx)
         }
         continue;
 badcommand:
-        sdr_log(SDR_LOG_INFO, "Invalid command: %d  '%s'\n", message[0], message+1);
+        sdr_log(SDR_LOG_INFO, "Invalid command: %d  '%s'\n", message[0], (const char*)(message+1));
     }  // end main WHILE loop
 } // end readcb
 
