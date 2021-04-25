@@ -261,7 +261,7 @@ extern int diversity_enabled;
 
 extern char *discovered_xml;
 
-extern int main_start();
+extern int main_start(char *);
 extern int main_delete(int);
 extern bool start_radio(int);
 extern int isTransmitting();

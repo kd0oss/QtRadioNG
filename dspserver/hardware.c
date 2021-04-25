@@ -406,9 +406,10 @@ void send_command(char* command, int len, char *response)
 void* keepalive_thread(void* arg)
 {
     char command[128], response[HW_RESPONSE_SIZE];
-    sprintf(command, "keepalive %d", receiver);
+    sprintf(command, "keepalive 0");
     while (1)
     {
+        fprintf(stderr, "keepalive\n");
         sleep(5);
         send_command(command, strlen(command), response);
     }

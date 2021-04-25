@@ -43,7 +43,7 @@
 
 
 /*  2019 - Rick Schnicker, KD0OSS
- *  Rewrite to QTRadioII.
+ *  Rewrite to QTRadioNG.
  */
 
 #include "Connection.h"
@@ -267,7 +267,7 @@ void ServerConnection::cmdSocketData()
             thisRead = tcpSocket->read(&hdr[bytes], 4 - bytes);
             if (thisRead < 0)
             {
-                fprintf(stderr,"QtRadioII: FATAL: READ_HEADER_TYPE: error in read: %d\n", thisRead);
+                fprintf(stderr,"QtRadio: FATAL: READ_HEADER_TYPE: error in read: %d\n", thisRead);
                 tcpSocket->close();
                 return;
             }
@@ -1036,7 +1036,7 @@ void SpectrumConnection::spectrumSocketData()
             thisRead = tcpSocket->read((char*)&spec+bytes, header_size - bytes);
             if (thisRead < 0)
             {
-                fprintf(stderr, "QtRadioII: FATAL: READ_HEADER: error in read: %d\n", thisRead);
+                fprintf(stderr, "QtRadio: FATAL: READ_HEADER: error in read: %d\n", thisRead);
                 tcpSocket->close();
                 return;
             }
@@ -1254,7 +1254,7 @@ void AudioConnection::socketData()
             thisRead = tcpSocket->read(&hdr[bytes], header_size - bytes);
             if (thisRead < 0)
             {
-                fprintf(stderr, "QtRadioII: FATAL: READ_HEADER: error in read: %d\n", thisRead);
+                fprintf(stderr, "QtRadio: FATAL: READ_HEADER: error in read: %d\n", thisRead);
                 tcpSocket->close();
                 return;
             }

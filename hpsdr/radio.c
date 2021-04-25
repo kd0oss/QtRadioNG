@@ -1048,7 +1048,7 @@ void setFrequency(int v, long long f)
 } // end setFrequency
 
 
-int main_start()
+int main_start(char *dsp_server_address)
 {
     int status = 0;
     char name[1024];
@@ -1071,7 +1071,7 @@ int main_start()
         }
     }
 
-    create_listener_thread();
+    create_listener_thread(dsp_server_address);
 
     // loop until terminated with extreme prejudice
     while (1)

@@ -88,7 +88,6 @@ short int connected_radios;
 extern float txfwd;
 extern float txref;
 
-int receiver = 0;  /*********** remove *******************/
 
 static int timing = 0;
 static int current_rx = -1;
@@ -614,8 +613,8 @@ void errorcb(struct bufferevent *bev, short error, void *ctx)
             {
                 char ipstr[16];
                 inet_ntop(AF_INET, (void *)&item->client.sin_addr, ipstr, sizeof(ipstr));
-                sdr_log(SDR_LOG_INFO, "RX%d: client disconnection from %s:%d\n",
-                        receiver, ipstr, ntohs(item->client.sin_port));
+                sdr_log(SDR_LOG_INFO, "Client disconnection from %s:%d\n",
+                        ipstr, ntohs(item->client.sin_port));
                 TAILQ_REMOVE(&Client_list, item, entries);
                 free(item);
                 break;
@@ -680,8 +679,8 @@ void do_accept(evutil_socket_t listener, short event, void *arg)
     memcpy(&item->client, &ss, sizeof(ss));
 
     inet_ntop(AF_INET, (void *)&item->client.sin_addr, ipstr, sizeof(ipstr));
-    sdr_log(SDR_LOG_INFO, "RX%d: client connection from %s:%d\n",
-            receiver, ipstr, ntohs(item->client.sin_port));
+    sdr_log(SDR_LOG_INFO, "Client connection from %s:%d\n",
+            ipstr, ntohs(item->client.sin_port));
 
     struct bufferevent *bev;
     evutil_make_socket_nonblocking(fd);
@@ -1127,40 +1126,17 @@ void spectrum_readcb(struct bufferevent *bev, void *ctx)
         fprintf(stderr, "Spectrum message: %s\n", (const char*)(message+1));
         switch ((unsigned char)message[0])
         {
-        case SETFPS:
-        {
-            int samp, fps;
-
-            sscanf((const char*)(message+1), "%d,%d", &samp, &fps);
-            sdr_log(SDR_LOG_INFO, "Spectrum fps set to = '%d'  Samples = '%d'\n", fps, samp);
-            sem_wait(&spec_bufevent_semaphore);
-            //            if (slave)
-            //            {
-            //                current_item->samples = samp;
-            //                current_item->fps = fps;
-            //            }
-            //            else
-            //            {
-            item->samples = samp;
-            item->fps = fps;
-            //            }
-            //        initAnalyzer(0, item->samples, fps, 512);
-            sem_post(&spec_bufevent_semaphore);
-        }
-            break;
-
-        case GETSPECTRUM:
-        {
-            printf("Spec: %s\n", (const char*)(message+1));
-            int samples = atoi((const char*)(message+1));
-            char *client_samples = malloc(BUFFER_HEADER_SIZE + samples);
-            sem_wait(&spectrum_semaphore);
-            // spectrumBuffer is updated by spectrum_timer thread every 20ms
-            client_set_samples(client_samples, spectrumBuffer, samples);
-            sem_post(&spectrum_semaphore);
-            bufferevent_write(bev, client_samples, BUFFER_HEADER_SIZE + samples);
-            free(client_samples);
-        }
+            case SETFPS:
+            {
+                int samp, fps;
+                
+                sscanf((const char*)(message+1), "%d,%d", &samp, &fps);
+                sdr_log(SDR_LOG_INFO, "Spectrum fps set to = '%d'  Samples = '%d'\n", fps, samp);
+                sem_wait(&spec_bufevent_semaphore);
+                item->samples = samp;
+                item->fps = fps;
+                sem_post(&spec_bufevent_semaphore);
+            }
             break;
         }
     }
@@ -1183,8 +1159,8 @@ void spectrum_errorcb(struct bufferevent *bev, short error, void *ctx)
             {
                 char ipstr[16];
                 inet_ntop(AF_INET, (void *)&item->client.sin_addr, ipstr, sizeof(ipstr));
-                sdr_log(SDR_LOG_INFO, "RX%d: spectrum client disconnection from %s:%d\n",
-                        receiver, ipstr, ntohs(item->client.sin_port));
+                sdr_log(SDR_LOG_INFO, "Spectrum client disconnection from %s:%d\n",
+                        ipstr, ntohs(item->client.sin_port));
                 TAILQ_REMOVE(&Spectrum_client_list, item, entries);
                 hw_stopIQ();
                 free(item);
@@ -1243,8 +1219,8 @@ void do_accept_spectrum(evutil_socket_t listener, short event, void *arg)
     memcpy(&item->client, &ss, sizeof(ss));
 
     inet_ntop(AF_INET, (void *)&item->client.sin_addr, ipstr, sizeof(ipstr));
-    sdr_log(SDR_LOG_INFO, "RX%d: spectrum client connection from %s:%d\n",
-            receiver, ipstr, ntohs(item->client.sin_port));
+    sdr_log(SDR_LOG_INFO, "Spectrum client connection from %s:%d\n",
+            ipstr, ntohs(item->client.sin_port));
 
     struct bufferevent *bev;
     evutil_make_socket_nonblocking(fd);
@@ -1437,8 +1413,8 @@ void audio_errorcb(struct bufferevent *bev, short error, void *ctx)
             {
                 char ipstr[16];
                 inet_ntop(AF_INET, (void *)&item->client.sin_addr, ipstr, sizeof(ipstr));
-                sdr_log(SDR_LOG_INFO, "RX%d: audio client disconnection from %s:%d\n",
-                        receiver, ipstr, ntohs(item->client.sin_port));
+                sdr_log(SDR_LOG_INFO, "Audio client disconnection from %s:%d\n",
+                        ipstr, ntohs(item->client.sin_port));
                 TAILQ_REMOVE(&Audio_client_list, item, entries);
                 free(item);
                 break;
@@ -1496,8 +1472,8 @@ void do_accept_audio(evutil_socket_t listener, short event, void *arg)
     memcpy(&item->client, &ss, sizeof(ss));
 
     inet_ntop(AF_INET, (void *)&item->client.sin_addr, ipstr, sizeof(ipstr));
-    sdr_log(SDR_LOG_INFO, "RX%d: audio client connection from %s:%d\n",
-            receiver, ipstr, ntohs(item->client.sin_port));
+    sdr_log(SDR_LOG_INFO, "Audio client connection from %s:%d\n",
+            ipstr, ntohs(item->client.sin_port));
 
     struct bufferevent *bev;
     evutil_make_socket_nonblocking(fd);
@@ -1709,8 +1685,8 @@ void mic_audio_errorcb(struct bufferevent *bev, short error, void *ctx)
             {
                 char ipstr[16];
                 inet_ntop(AF_INET, (void *)&item->client.sin_addr, ipstr, sizeof(ipstr));
-                sdr_log(SDR_LOG_INFO, "RX%d: mic audio client disconnection from %s:%d\n",
-                        receiver, ipstr, ntohs(item->client.sin_port));
+                sdr_log(SDR_LOG_INFO, "Mic audio client disconnection from %s:%d\n",
+                        ipstr, ntohs(item->client.sin_port));
                 TAILQ_REMOVE(&Mic_audio_client_list, item, entries);
                 hw_stopIQ();
                 free(item);
@@ -1769,8 +1745,8 @@ void do_accept_mic_audio(evutil_socket_t listener, short event, void *arg)
     memcpy(&item->client, &ss, sizeof(ss));
 
     inet_ntop(AF_INET, (void *)&item->client.sin_addr, ipstr, sizeof(ipstr));
-    sdr_log(SDR_LOG_INFO, "RX%d: mic audio client connection from %s:%d\n",
-            receiver, ipstr, ntohs(item->client.sin_port));
+    sdr_log(SDR_LOG_INFO, "Mic audio client connection from %s:%d\n",
+            ipstr, ntohs(item->client.sin_port));
 
     struct bufferevent *bev;
     evutil_make_socket_nonblocking(fd);
@@ -2203,7 +2179,6 @@ void readcb(struct bufferevent *bev, void *ctx)
                 int samp, fps;
 
                 sscanf((const char*)(message+1), "%d,%d", &samp, &fps);
-                sdr_log(SDR_LOG_INFO, "Spectrum fps set to = '%d'  Samples = '%d'\n", fps, samp);
                 sem_wait(&bufferevent_semaphore);
                 if (item->client_type != CONTROL)
                 {
@@ -2218,6 +2193,7 @@ void readcb(struct bufferevent *bev, void *ctx)
                 initAnalyzer(current_rx, item->samples, fps, 512);
                 initAnalyzer(current_tx, item->samples, fps, 2048);
                 sem_post(&bufferevent_semaphore);
+                sdr_log(SDR_LOG_INFO, "Spectrum fps set to = '%d'  Samples = '%d'\n", item->fps, item->samples);
             }
                 break;
 
@@ -2514,7 +2490,7 @@ void readcb(struct bufferevent *bev, void *ctx)
                 break;
 
             case SETCLIENT:
-                sdr_log(SDR_LOG_INFO, "RX%d: client is %s\n", receiver, (const char*)(message+1));
+                sdr_log(SDR_LOG_INFO, "Client is %s\n", (const char*)(message+1));
                 break;
 
             case SETRXOUTGAIN:

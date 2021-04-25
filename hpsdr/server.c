@@ -47,6 +47,8 @@ void* client_thread(void* arg);
 void* tx_IQ_thread(void* arg);
 void* txiq_send(void* arg);
 
+static char dsp_server_address[17] = "127.0.0.1";
+
 
 char* attach_receiver(int radio_id, int rx, CLIENT* client)
 {
@@ -443,10 +445,12 @@ char* parse_command(CLIENT* client, char* command)
 } // parse_command
 
 
-void create_listener_thread()
+void create_listener_thread(char *dsp_server_addr)
 {
     pthread_t thread_id;
     int rc;
+    
+    strcpy(dsp_server_address , dsp_server_addr);
 
     // create the thread to listen for TCP connections
     rc = pthread_create(&thread_id, NULL, client_thread, NULL);
@@ -480,7 +484,7 @@ void* client_thread(void* arg)
 
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_addr.s_addr = inet_addr(dsp_server_address);
     address.sin_port = htons(COMMAND_PORT);
 
     // connect
@@ -580,7 +584,7 @@ void init_receivers(int radio_id, int rx)
         iqclient[rx].iq_length = sizeof(cli_addr);
         memset(&iqclient[rx].iq_addr, 0, iqclient[rx].iq_length);
         iqclient[rx].iq_addr.sin_family = AF_INET;
-        iqclient[rx].iq_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        iqclient[rx].iq_addr.sin_addr.s_addr = inet_addr(dsp_server_address);
         iqclient[rx].iq_addr.sin_port = htons(RX_IQ_PORT_0 + rx);
         iqclient[rx].iq_port = RX_IQ_PORT_0 + rx;
 
@@ -632,8 +636,7 @@ void send_Mic_buffer(float sample)
     cli_length = sizeof(cli_addr);
     memset((char*)&cli_addr, 0, cli_length);
     cli_addr.sin_family = AF_INET;
-    cli_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-//    cli_addr.sin_addr.s_addr = iqclient[0].iq_addr.sin_addr.s_addr;
+    cli_addr.sin_addr.s_addr = inet_addr(dsp_server_address);
     cli_addr.sin_port = htons(10020);
 
     buffer.radio_id = radio_id;
@@ -776,7 +779,7 @@ void* tx_IQ_thread(void* arg)
         cli_length = sizeof(cli_addr);
         memset((char*)&cli_addr, 0, cli_length);
         cli_addr.sin_family = AF_INET;
-        cli_addr.sin_addr.s_addr = htonl(INADDR_ANY);      //iqclient[rx].iq_addr.sin_addr.s_addr;
+        cli_addr.sin_addr.s_addr = iqclient[rx].iq_addr.sin_addr.s_addr;
         cli_addr.sin_port = htons(iqclient[rx].iq_port + 30);
 
         fprintf(stderr, "connection to rx %d tx IQ on port %d\n", rx, iqclient[rx].iq_port + 30);

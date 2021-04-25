@@ -169,7 +169,7 @@ typedef struct _txiq_entry {
         TAILQ_ENTRY(_txiq_entry) entries;
 } txiq_entry;
 
-extern void create_listener_thread(void);
+extern void create_listener_thread(char*);
 extern void init_receivers(int, int);
 extern void send_IQ_buffer(int);
 extern void send_Mic_buffer(float sample);
