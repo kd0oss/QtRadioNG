@@ -21,6 +21,7 @@
 * along with this program; if not, write to the Free Software
 * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 *
+* Modification by Rick Schnicker, 2021
 */
 
 #ifndef PANADAPTER_H
@@ -54,6 +55,7 @@
 /****************** Added by KD0OSS **********************************************/
 
 class PanadapterScene;
+class TxPanadapterScene;
 
 class waterfallObject : public QWidget, public QGraphicsItem
 {
@@ -130,6 +132,7 @@ class filterObject : public QObject, public QGraphicsItem
 
 public:
     filterObject(PanadapterScene *scene, QPoint location, float fwidth, float fheight, QColor color);
+    filterObject(TxPanadapterScene *scene, QPoint location, float fwidth, float fheight, QColor color);
     void    paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget);
     QRectF  boundingRect() const;
 
@@ -149,6 +152,7 @@ class textObject : public QObject, public QGraphicsItem
 
 public:
     textObject(PanadapterScene *scene, QString text, QPoint location, QColor color);
+    textObject(TxPanadapterScene *scene, QString text, QPoint location, QColor color);
     void    paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget);
     QRectF  boundingRect() const;
 
@@ -180,6 +184,7 @@ public:
     int     itemType;
 };
 
+
 class lineObject : public QObject, public QGraphicsItem
 {
     Q_OBJECT
@@ -187,6 +192,7 @@ class lineObject : public QObject, public QGraphicsItem
 
 public:
     lineObject(PanadapterScene *scene, QPoint start, QPoint stop, QPen pen);
+    lineObject(TxPanadapterScene *scene, QPoint start, QPoint stop, QPen pen);
     void    paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget);
     QRectF  boundingRect() const;
 
@@ -196,6 +202,105 @@ public:
     float   width;
     float   height;
     int     itemType;
+};
+
+
+class TxPanadapterScene : public QGraphicsScene
+{
+    Q_OBJECT
+
+public:
+    TxPanadapterScene(QObject *parent = 0);
+
+    QMap<QString, QGraphicsItem*> sceneItems;
+
+
+    spectrumObject *spectrumPlot;
+    int  itemType;
+    bool bMox;
+};
+
+
+class TxPanadapter: public QGraphicsView
+{
+    Q_OBJECT
+public:
+    TxPanadapter();
+    TxPanadapter(QWidget*& widget);
+    virtual ~TxPanadapter();
+
+    SpectrumConnection *connection;  // KD0OSS
+    TxPanadapterScene *txpanadapterScene;  // KD0OSS
+    int splitViewBoundary; // KD0OSS
+
+//    void setObjectName(QString name);
+//    void setGeometry(QRect rect);
+//    void initialize();
+//    void setSampleRate(int r);
+//    void setFrequency(long long f);
+//    void setFilter(int low,int high);
+    void updateSpectrumFrame(spectrum);
+//    int samplerate();
+
+//    int getHigh();
+//    int getLow();
+//    void setHigh(int high);
+//    void setLow(int low);
+
+//    void setMode(QString m);
+//    void setBand(QString b);
+//    void setFilter(QString f);
+//    void setBandLimits(long long min,long long max);
+
+signals:
+    void frequencyMoved(int steps,int step);
+    void spectrumHighChanged(int high);
+    void spectrumLowChanged(int low);
+    void meterValue(float, float);
+
+protected:
+//    void resizeEvent(QResizeEvent *event);
+
+private slots:
+    void drawCursor(int vfo, bool disable);  // KD0OSS
+    void drawFilter(int vfo, bool diabale);  // KD0OSS
+    void drawdBmLines(void);  // KD0OSS
+    void drawSpectrum(void);  // KD0OSS
+    void drawFrequencyLines(void);  // KD0OSS
+    void redrawItems(void);
+
+private:
+    QString band;
+    QString mode;
+    QString filter;
+
+    float* samples;
+    char* wsamples; // KD0OSS
+    int spectrumHigh;
+    int spectrumLow;
+
+    long long band_min;
+    long long band_max;
+
+    QVector <QPoint> plot;
+
+    bool initialized; // KD0OSS
+    long sampleRate;
+    float meter1;
+    float meter2;
+    float meter3;
+    int maxMeter;
+    int meterCount;
+
+    int filterLow;
+    int filterHigh;
+    bool filterSelected;
+    int avg;
+    int size;
+    long long frequency;
+    QString strFrequency;
+    short LO_offset;
+    int zoom;
 };
 
 
@@ -371,4 +476,3 @@ private:
 
 
 #endif	/* PANADAPTER_H */
-

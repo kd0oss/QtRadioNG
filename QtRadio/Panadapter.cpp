@@ -21,6 +21,8 @@
 * along with this program; if not, write to the Free Software
 * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 *
+* Modifications by Rick Schnicker, KD0OSS 2021
+*
 */
 
 #include "Panadapter.h"
@@ -41,6 +43,19 @@ lineObject::lineObject(PanadapterScene *scene, QPoint start, QPoint stop, QPen p
     setZValue(0.0);
 }
 
+
+lineObject::lineObject(TxPanadapterScene *scene, QPoint start, QPoint stop, QPen pen)
+{
+    itemStart = start;
+    itemStop = stop;
+    itemPen = pen;
+    width = scene->width();
+    height = scene->height();
+    itemType = 0;
+    //setZValue(0.0);
+}
+
+
 void lineObject::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
 {
     painter->translate(0.5, 0.5);
@@ -48,10 +63,12 @@ void lineObject::paint(QPainter *painter, const QStyleOptionGraphicsItem *option
     painter->drawLine(itemStart, itemStop);
 }
 
+
 QRectF lineObject::boundingRect() const
 {
     return QRectF(itemStart, itemStop);
 }
+
 
 notchFilterObject::notchFilterObject(PanadapterScene *scene, int index, QPoint location, float fwidth, float fheight, QColor color)
 {
@@ -66,6 +83,7 @@ notchFilterObject::notchFilterObject(PanadapterScene *scene, int index, QPoint l
     setZValue(9.0);
 }
 
+
 void notchFilterObject::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
 {
     painter->translate(0.5, 0.5);
@@ -75,10 +93,12 @@ void notchFilterObject::paint(QPainter *painter, const QStyleOptionGraphicsItem 
     painter->fillRect(itemLocation.x(),itemLocation.y()-1,itemWidth,height,QBrush(itemColor, Qt::BDiagPattern));
 }
 
+
 QRectF notchFilterObject::boundingRect() const
 {
     return QRectF(itemLocation, QPointF(itemLocation.x()+itemWidth, height));
 }
+
 
 filterObject::filterObject(PanadapterScene *scene, QPoint location, float fwidth, float fheight, QColor color)
 {
@@ -88,9 +108,21 @@ filterObject::filterObject(PanadapterScene *scene, QPoint location, float fwidth
     width = scene->width();
     height = fheight;
     itemType = 2;
-
     setZValue(8.0);
 }
+
+
+filterObject::filterObject(TxPanadapterScene *scene, QPoint location, float fwidth, float fheight, QColor color)
+{
+    itemLocation = location;
+    itemWidth = fwidth;
+    itemColor = color;
+    width = scene->width();
+    height = fheight;
+    itemType = 2;
+  //  setZValue(8.0);
+}
+
 
 void filterObject::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
 {
@@ -100,10 +132,12 @@ void filterObject::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
     painter->fillRect(itemLocation.x(),itemLocation.y(),itemWidth,height,itemColor);
 }
 
+
 QRectF filterObject::boundingRect() const
 {
     return QRectF(itemLocation, QPointF(itemLocation.x()+itemWidth, height));
 }
+
 
 textObject::textObject(PanadapterScene *scene, QString text, QPoint location, QColor color)
 {
@@ -116,6 +150,19 @@ textObject::textObject(PanadapterScene *scene, QString text, QPoint location, QC
     setZValue(0.0);
 }
 
+
+textObject::textObject(TxPanadapterScene *scene, QString text, QPoint location, QColor color)
+{
+    itemText = text;
+    itemLocation = location;
+    itemColor = color;
+    width = scene->width();
+    height = scene->height();
+    itemType = 3;
+    //setZValue(0.0);
+}
+
+
 void textObject::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
 {
     painter->translate(0.5, 0.5);
@@ -125,10 +172,12 @@ void textObject::paint(QPainter *painter, const QStyleOptionGraphicsItem *option
     painter->drawText(itemLocation.x(),itemLocation.y(),itemText);
 }
 
+
 QRectF textObject::boundingRect() const
 {
     return QRectF(itemLocation, QPointF(50, 10));
 }
+
 
 spectrumObject::spectrumObject(int width, int height){
     plot.clear();
@@ -137,6 +186,7 @@ spectrumObject::spectrumObject(int width, int height){
     itemType = 4;
     setZValue(1.0);
 }
+
 
 void spectrumObject::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
 {
@@ -151,20 +201,337 @@ void spectrumObject::paint(QPainter *painter, const QStyleOptionGraphicsItem *op
     }
 }
 
+
 QRectF spectrumObject::boundingRect() const
 {
     return QRectF(QPointF(0.0, plotHeight/2), QPointF(plotWidth, plotHeight));
 } /** end boundingRect **/
 
+
+TxPanadapterScene::TxPanadapterScene(QObject *parent) : QGraphicsScene(parent)
+{
+    bMox = false;
+}
+
+
+TxPanadapter::TxPanadapter()
+{
+}
+
+
+TxPanadapter::TxPanadapter(QWidget*& widget)
+{
+    sampleRate=96000;
+    spectrumHigh=-40;
+    spectrumLow=-160;
+    filterLow=-3450;
+    filterHigh=-150;
+    filterSelected = false; // KD0OSS
+    avg = 0;
+    mode="LSB";
+    band_min=0LL;
+    band_max=0LL;
+
+    samples=NULL;
+    initialized = false; // KD0OSS
+    wsamples = (char*)malloc(200 * sizeof(char));
+    samples = (float*)malloc(200 * sizeof(float));
+    for (int i=0; i < 200; i++) samples[i] = -120;
+
+    txpanadapterScene = new TxPanadapterScene();
+    this->setScene(txpanadapterScene);
+    txpanadapterScene->setSceneRect(0.0, 0.0, 200.0, height());
+    txpanadapterScene->clear();
+    txpanadapterScene->sceneItems.clear();
+    txpanadapterScene->spectrumPlot = NULL;
+
+    txpanadapterScene->spectrumPlot = new spectrumObject(200, height());
+    //    this->setSceneRect(0.0, 0.0, width(), height());
+    //    this->setViewport(new QGLWidget);
+    qDebug("view width: %d", width());
+
+    QLinearGradient gradient(0, 0, 0, height());
+    gradient.setColorAt(0, Qt::black);
+    gradient.setColorAt(1, Qt::gray);
+    txpanadapterScene->setBackgroundBrush(gradient);
+    txpanadapterScene->update();
+}
+
+
+TxPanadapter::~TxPanadapter()
+{
+    if (samples != NULL) free(samples);
+    if (wsamples != NULL) free(wsamples); // KD0OSS
+}
+
+
+void TxPanadapter::redrawItems(void)
+{
+    if (!initialized || splitViewBoundary > height())
+    {
+        splitViewBoundary = (height() / 2) - 3;
+        if (!initialized) return;
+    }
+    drawFrequencyLines();
+    drawdBmLines();
+    drawCursor(1, false);
+    drawFilter(1, false);
+}
+
+
+void TxPanadapter::drawCursor(int vfo, bool disable)
+{
+    float step=(float)sampleRate/2000.0;
+    int offset=(int)((float)LO_offset/step);
+    int cursorX;
+    QPen pen;
+
+    if (!txpanadapterScene->sceneItems.isEmpty() && txpanadapterScene->sceneItems.value(QString("c%1").arg(vfo), 0))
+    {
+        txpanadapterScene->removeItem((lineObject*)txpanadapterScene->sceneItems.find(QString("c%1").arg(vfo)).value());
+        delete (lineObject*)txpanadapterScene->sceneItems.find(QString("c%1").arg(vfo)).value();
+        txpanadapterScene->sceneItems.remove(QString("c%1").arg(vfo));
+    }
+
+    if (disable) return;
+
+    float zoom_factor = 1.0f + zoom/25.0f;
+
+    if (vfo == 1)
+    {
+        cursorX = (2000/2)+offset*zoom_factor;
+        pen = QPen(QBrush(Qt::red,Qt::SolidPattern), 1);
+    }
+    qDebug("offset: %d    curs: %d", offset, cursorX);
+    lineObject *cursor = new lineObject(txpanadapterScene, QPoint(cursorX, splitViewBoundary), QPoint(cursorX,0), pen);
+    txpanadapterScene->addItem(cursor);
+    cursor->update();
+    txpanadapterScene->sceneItems.insert(QString("c%1").arg(vfo), cursor);
+}
+
+
+void TxPanadapter::drawdBmLines(void)
+{
+    static int lines;
+
+    if (!txpanadapterScene->sceneItems.isEmpty())
+    {
+        for (int i=0;i<lines;i++)
+        {
+            txpanadapterScene->removeItem(txpanadapterScene->sceneItems.find(QString("dl%1").arg(i)).value());
+            delete (lineObject*)txpanadapterScene->sceneItems.find(QString("dl%1").arg(i)).value();
+            txpanadapterScene->sceneItems.remove(QString("dl%1").arg(i));
+            txpanadapterScene->removeItem(txpanadapterScene->sceneItems.find(QString("dt%1").arg(i)).value());
+            delete (textObject*)txpanadapterScene->sceneItems.find(QString("dt%1").arg(i)).value();
+            txpanadapterScene->sceneItems.remove(QString("dt%1").arg(i));
+        }
+    }
+    lines = 0;
+    int V = spectrumHigh - spectrumLow;
+    int numSteps = V / 20;
+    for (int i = 1; i < numSteps; i++)
+    {
+        int num = spectrumHigh - i * 20;
+        int y = (int) floor((spectrumHigh - num) * (splitViewBoundary) / V);
+
+        lineObject *lineItem = new lineObject(txpanadapterScene, QPoint(0,y), QPoint(2000,y), QPen(QColor(255,255,255,128), 1,Qt::DotLine));
+        txpanadapterScene->addItem(lineItem);
+        lineItem->update();
+        txpanadapterScene->sceneItems.insert(QString("dl%1").arg(lines), lineItem);
+
+        textObject *textItem = new textObject(txpanadapterScene, QString::number(num)+" dBm", QPoint(abs(mapToScene(3,y).x())+3,y), Qt::green);
+        txpanadapterScene->addItem(textItem);
+        textItem->update();
+
+        txpanadapterScene->sceneItems.insert(QString("dt%1").arg(lines), textItem);
+        lines++;
+    }
+}
+
+
+void TxPanadapter::drawFrequencyLines(void)
+{
+    QString text;
+    static int lines;
+
+    float zoom_factor = 1.0f + zoom/25.0f;
+    float hzPerPixel = (float)sampleRate/2000.0/zoom_factor;
+    long long lineStep = 10000;
+    if (sampleRate > 1000000) lineStep = 100000;
+    else if (sampleRate > 500000) lineStep = 50000;
+    else if (sampleRate > 200000) lineStep = 20000;
+
+    if (!txpanadapterScene->sceneItems.isEmpty())
+    {
+        for (int i = 0; i < lines; i++)
+        {
+            txpanadapterScene->removeItem(txpanadapterScene->sceneItems.find(QString("fl%1").arg(i)).value());
+            delete (lineObject*)txpanadapterScene->sceneItems.find(QString("fl%1").arg(i)).value();
+            txpanadapterScene->sceneItems.remove(QString("fl%1").arg(i));
+            txpanadapterScene->removeItem(txpanadapterScene->sceneItems.find(QString("ft%1").arg(i)).value());
+            delete (textObject*)txpanadapterScene->sceneItems.find(QString("ft%1").arg(i)).value();
+            txpanadapterScene->sceneItems.remove(QString("ft%1").arg(i));
+        }
+    }
+    lines = 0;
+    for (int i = 0; i < 2000; i++)
+    {
+        long long f = frequency - ((float)sampleRate / zoom_factor / 2.0) - (float)LO_offset + (long long)(hzPerPixel * (float)i);
+        if (f > 0)
+        {
+            if ((f % lineStep) < (long long)hzPerPixel)
+            {
+                //     qDebug("height: %d", height());
+                lineObject *lineItem = new lineObject(txpanadapterScene, QPoint(i-2,splitViewBoundary), QPoint(i-2,0), QPen(QColor(255,255,255,128), 1,Qt::DotLine));
+                txpanadapterScene->addItem(lineItem);
+                lineItem->update();
+                txpanadapterScene->sceneItems.insert(QString("fl%1").arg(lines), lineItem);
+
+                text.sprintf("%lld.%02lld", f/1000000, f%1000000/10000);
+                textObject *textItem = new textObject(txpanadapterScene, text, QPoint(i-2,(splitViewBoundary)-10), Qt::lightGray);
+                txpanadapterScene->addItem(textItem);
+                textItem->update();
+                txpanadapterScene->sceneItems.insert(QString("ft%1").arg(lines), textItem);
+                lines++;
+            }
+        }
+    }
+}
+
+
+void TxPanadapter::drawFilter(int vfo, bool disable)
+{
+    int filterLeft;
+    int filterRight;
+    QColor color;
+
+    if (!txpanadapterScene->sceneItems.isEmpty() && txpanadapterScene->sceneItems.value(QString("flt%1").arg(vfo), 0))
+    {
+        txpanadapterScene->removeItem(txpanadapterScene->sceneItems.find(QString("flt%1").arg(vfo)).value());
+        delete (filterObject*)txpanadapterScene->sceneItems.find(QString("flt%1").arg(vfo)).value();
+        txpanadapterScene->sceneItems.remove(QString("flt%1").arg(vfo));
+    }
+
+    if (disable) return;
+
+    float zoom_factor = 1.0f + zoom/25.0f;
+
+    if (vfo == 1)
+    {
+        filterLeft = 2000/2 + (float)(filterLow+LO_offset)* 2000.0*zoom_factor/(float)sampleRate;
+        filterRight = 2000/2 + (float)(filterHigh+LO_offset) * 2000.0*zoom_factor/(float)sampleRate;
+        color = Qt::gray;
+        //   qDebug("FL: %d  FR: %d", filterLow, filterHigh);
+    }
+
+    filterObject *filterItem = new filterObject(txpanadapterScene, QPoint(filterLeft,0), (float)(filterRight-filterLeft), (float)splitViewBoundary, color);
+    filterItem->setCacheMode(QGraphicsItem::DeviceCoordinateCache);
+    txpanadapterScene->addItem(filterItem);
+    filterItem->update();
+    txpanadapterScene->sceneItems.insert(QString("flt%1").arg(vfo), filterItem);
+}
+
+
+void TxPanadapter::drawSpectrum(void)
+{
+    if (sampleRate == 0)
+    {
+        qDebug() << "sampleRate is 0";
+        return;
+    }
+    emit meterValue(meter2, meter3);
+//    qDebug() << "drawSpectrum";
+
+    if (txpanadapterScene->spectrumPlot != NULL)
+    {
+        txpanadapterScene->removeItem(txpanadapterScene->spectrumPlot);
+        delete txpanadapterScene->spectrumPlot;
+        txpanadapterScene->spectrumPlot = NULL;
+    }
+    txpanadapterScene->spectrumPlot = new spectrumObject(txpanadapterScene->width(), splitViewBoundary);
+    txpanadapterScene->addItem(txpanadapterScene->spectrumPlot);
+    txpanadapterScene->update();
+    txpanadapterScene->spectrumPlot->plot = plot;
+    //************************************************************
+
+    update();
+} // end drawSpectrum
+
+
+void TxPanadapter::updateSpectrumFrame(spectrum spec)
+{
+    int i;
+//    int version,subversion;
+    static int lastWidth;
+    static int lastHeight;
+    static int lastSampRate;
+
+//    version = 2;
+//    subversion = 1;
+    meter1 = spec.rx_meter;
+    meter2 = spec.fwd_pwr;
+    meter3 = spec.rev_pwr;
+
+    LO_offset = (short)spec.lo_offset;
+
+    sampleRate = spec.sample_rate;
+    size = spec.length;
+//    if (sampleRate != lastSampRate)
+//        initialized = false;
+    lastSampRate = sampleRate;
+
+    // do not rotate Panadapter display.  LO_offset rotation done in dspserver
+    for (i = 0; i < size; i++)
+    {
+   //     fprintf(stderr, "[%u]", (unsigned char)buffer[i]);
+        samples[i] = ((float)(samples[i] * avg - (spec.samples[i] & 0xFF))/(float)(avg+1)) * 1.0f;
+        wsamples[i] = spec.samples[i];
+    }
+
+    //qDebug() << "updateSpectrum: create plot points";
+    if (size != lastWidth || height() != lastHeight)
+    {
+        lastWidth = size;
+        lastHeight = height();
+        qDebug("Scene width: %d  ht: %d", size, height());
+    }
+    plot.clear();
+    for (i = 0; i < size; i++)
+    {
+        plot << QPoint(i, (int)floor(((float) spectrumHigh - samples[i])*(float)(splitViewBoundary) / (float) (spectrumHigh - spectrumLow)));
+    }
+
+    if (!initialized)
+    {
+        initialized = true;
+        if (!txpanadapterScene) return;
+        txpanadapterScene->clear();
+        txpanadapterScene->addItem(txpanadapterScene->spectrumPlot);
+        drawFrequencyLines();
+        drawCursor(1, false);
+        drawFilter(1, false);
+   //     QGraphicsView::setMouseTracking(true);
+        centerOn((QGraphicsItem*)txpanadapterScene->sceneItems.find(QString("flt%1").arg(1)).value());
+        drawdBmLines();
+   //     setZoom(0);
+    }
+
+    QTimer::singleShot(0, this, SLOT(drawSpectrum()));
+}
+
+/*****************************************************************************/
+
 PanadapterScene::PanadapterScene(QObject *parent) : QGraphicsScene(parent)
 {
     bMox = false;
 }
-/***********************************KD0OSS******************************************/
+
+/*****************************************************************************/
 
 Panadapter::Panadapter()
 {
 }
+
 
 Panadapter::Panadapter(QWidget*& widget)
 {
@@ -214,7 +581,7 @@ Panadapter::Panadapter(QWidget*& widget)
     samples = (float*)malloc(MAX_WIDTH * sizeof(float));
     for (int i=0; i < MAX_WIDTH; i++) samples[i] = -120;
 
-    // KD0OSS ****************************************************************************************
+    // ****************************************************************************************
     panadapterScene = new PanadapterScene();
     this->setScene(panadapterScene);
     panadapterScene->setSceneRect(0.0, 0.0, 2000.0, height());
@@ -250,11 +617,13 @@ Panadapter::Panadapter(QWidget*& widget)
     //*************************************************************************************************
 }
 
+
 Panadapter::~Panadapter()
 {
     if (samples != NULL) free(samples);
     if (wsamples != NULL) free(wsamples); // KD0OSS
 }
+
 
 void Panadapter::resizeEvent(QResizeEvent *event)
 {
@@ -1097,35 +1466,31 @@ void Panadapter::setFilter(QString f) {
     update();
 }
 
+
 void Panadapter::updateSpectrumFrame(spectrum spec)
 {
     int i;
-    int version,subversion;
-    int header_sampleRate;
+//    int version,subversion;
     static int lastWidth;
     static int lastHeight;
     static int lastSampRate;
 
-    version = 2;
-    subversion = 1;
-    //meter1 = ((header[5] & 0xFF) << 8) + (header[6] & 0xFF);
-    //meter2 = ((header[7] & 0xFF) << 8) + (header[8] & 0xFF);
+//    version = 2;
+//    subversion = 1;
     meter1 = spec.rx_meter;
     meter2 = spec.fwd_pwr;
     meter3 = spec.rev_pwr;
 
-    header_sampleRate = spec.sample_rate;
-
     LO_offset = (short)spec.lo_offset;
 
-    sampleRate = header_sampleRate;
+    sampleRate = spec.sample_rate;
     size = spec.length;
 //    if (sampleRate != lastSampRate)
 //        initialized = false;
     lastSampRate = sampleRate;
 
     // do not rotate Panadapter display.  LO_offset rotation done in dspserver
-    for (i=0;i<size;i++)
+    for (i = 0; i < size; i++)
     {
    //     fprintf(stderr, "[%u]", (unsigned char)buffer[i]);
         samples[i] = ((float)(samples[i] * avg - (spec.samples[i] & 0xFF))/(float)(avg+1)) * 1.0f;
@@ -1135,7 +1500,6 @@ void Panadapter::updateSpectrumFrame(spectrum spec)
     //qDebug() << "updateSpectrum: create plot points";
     if (size != lastWidth || height() != lastHeight)
     {
- //       panadapterScene->setSceneRect(0, 0, width, height());
         lastWidth = size;
         lastHeight = height();
         qDebug("Scene width: %d  ht: %d", size, height());
@@ -1157,18 +1521,17 @@ void Panadapter::updateSpectrumFrame(spectrum spec)
         drawCursor(1, false);
         drawFilter(1, false);
         drawUpdatedNotchFilter(1);
-        //        drawUpdatedNotchFilter(2);
         QGraphicsView::setMouseTracking(true);
         splitViewBoundary = panadapterScene->height()/2;
         centerOn((QGraphicsItem*)panadapterScene->sceneItems.find(QString("flt%1").arg(1)).value());
         drawdBmLines();
         setZoom(0);
-        //        QTimer::singleShot(1000,this,SLOT(redrawItems()));
     }
 
-    QTimer::singleShot(0,this,SLOT(drawSpectrum()));
-    QTimer::singleShot(0,this,SLOT(updateWaterfall()));
+    QTimer::singleShot(0, this, SLOT(drawSpectrum()));
+    QTimer::singleShot(0, this, SLOT(updateWaterfall()));
 }
+
 
 void Panadapter::setSquelch(bool state) {
     squelch=state;
@@ -1176,6 +1539,7 @@ void Panadapter::setSquelch(bool state) {
         drawSquelch();
     //    QGraphicsView::setMouseTracking(state);
 }
+
 
 void Panadapter::setSquelchVal(float val) {
     squelchVal=val;
@@ -1501,44 +1865,8 @@ void waterfallObject::updateWaterfall(char* buffer, int length, int starty)
         waterfallHigh=waterfallLow+60;
     }
 }
-/*
-void waterfallObject::updateWaterfall_2(void){
-    int x,y;
 
-    if(image.width()!=itemWidth || (image.height()/2) != itemHeight) {
-        qDebug() << "Waterfall::updateWaterfall " << size << "(" << itemWidth << ")," << itemHeight;
-        image = QImage(itemWidth, itemHeight*2, QImage::Format_RGB32);
-        cy = image.height()/2 - 1;
-        #pragma omp parallel for schedule(static)
-        for (x = 0; x < itemWidth; x++) {
-            for (y = 0; y < image.height(); y++) {
-                image.setPixel(x, y, 0xFF000000);
-            }
-        }
-    }
-    QTimer::singleShot(0,this,SLOT(updateWaterfall_4()));
-}
 
-void waterfallObject::updateWaterfall_4(void){
-    int x;
-    int average=0;
-
-    // draw the new line
-    #pragma omp parallel for schedule(static)
-    for(x=0;x<size;x++){
-        uint pixel = calculatePixel(samples[x]);
-        image.setPixel(x,cy,pixel);
-        image.setPixel(x,cy+(image.height()/2),pixel);
-        #pragma omp critical
-        average+=samples[x];
-    }
-
-    if (waterfallAutomatic) {
-        waterfallLow=(average/size)-10;
-        waterfallHigh=waterfallLow+60;
-    }
-}
-*/
 uint waterfallObject::calculatePixel(int sample)
 {
     // simple gray scale

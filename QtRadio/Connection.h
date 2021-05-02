@@ -70,8 +70,8 @@
 
 typedef struct _spectrum
 {
-    unsigned short radio_id;
-    unsigned short rx;
+    unsigned short channel;
+    unsigned short is_tx;
     unsigned short length;
     float          rx_meter;
     float          fwd_pwr;

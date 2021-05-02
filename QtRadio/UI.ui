@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1132</width>
+    <width>1135</width>
     <height>785</height>
    </rect>
   </property>
@@ -334,8 +334,8 @@
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>464</width>
-                <height>226</height>
+                <width>469</width>
+                <height>234</height>
                </rect>
               </property>
               <layout class="QHBoxLayout" name="horizontalLayout_5">
@@ -579,6 +579,64 @@
          </property>
         </spacer>
        </item>
+       <item>
+        <widget class="QWidget" name="widget_4" native="true">
+         <property name="minimumSize">
+          <size>
+           <width>35</width>
+           <height>0</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>256</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_3">
+          <property name="spacing">
+           <number>2</number>
+          </property>
+          <property name="leftMargin">
+           <number>0</number>
+          </property>
+          <property name="topMargin">
+           <number>0</number>
+          </property>
+          <property name="rightMargin">
+           <number>0</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="label_2">
+            <property name="font">
+             <font>
+              <pointsize>11</pointsize>
+             </font>
+            </property>
+            <property name="text">
+             <string>TX Spectrum:</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="TxPanadapter" name="txSpectrumView">
+            <property name="minimumSize">
+             <size>
+              <width>256</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>256</width>
+              <height>16777215</height>
+             </size>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
       </layout>
      </widget>
     </item>
@@ -589,8 +647,8 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1132</width>
-     <height>25</height>
+     <width>1135</width>
+     <height>21</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuBand">
@@ -1336,6 +1394,11 @@
    <class>Panadapter</class>
    <extends>QGraphicsView</extends>
    <header>Panadapter.h</header>
+  </customwidget>
+  <customwidget>
+   <class>TxPanadapter</class>
+   <extends>QGraphicsView</extends>
+   <header location="global">Panadapter.h</header>
   </customwidget>
  </customwidgets>
  <resources/>

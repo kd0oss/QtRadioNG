@@ -92,6 +92,9 @@ UI::UI(const QString server)
 
     widget.statusbar->showMessage("QtRadio NG branch: KD0OSS 2020");
 
+ //   TxPanadapter *txp = new TxPanadapter();
+ //   widget.txSpectrumView->setScene(txp->txpanadapterScene);
+
     // connect up all the menus
     connect(&connection, SIGNAL(isConnected(int)), this, SLOT(connected(int)));
     connect(&connection, SIGNAL(disconnected(QString)), this, SLOT(disconnected(QString)));
@@ -985,7 +988,10 @@ void UI::spectrumBuffer(spectrum spec)
   // qDebug()<<Q_FUNC_INFO << "spectrumBuffer";
 
     sampleRate = spec.sample_rate;
-    widget.spectrumView->updateSpectrumFrame(spec);
+    if (txNow)
+        widget.txSpectrumView->updateSpectrumFrame(spec);
+    else
+        widget.spectrumView->updateSpectrumFrame(spec);
     spectrumConnection.freeBuffers(spec);
 } // end spectrumBuffer
 
