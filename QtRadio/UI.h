@@ -101,6 +101,7 @@ public:
     SpectrumConnection spectrumConnection;
     AudioConnection audioConnection;
     MicAudioConnection micAudioConnection;
+    TxPanadapter *txp;
     Mode mode;
     int currentChannel;
 

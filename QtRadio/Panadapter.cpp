@@ -216,11 +216,13 @@ TxPanadapterScene::TxPanadapterScene(QObject *parent) : QGraphicsScene(parent)
 
 TxPanadapter::TxPanadapter()
 {
-}
+//}
 
 
-TxPanadapter::TxPanadapter(QWidget*& widget)
-{
+//TxPanadapter::TxPanadapter(QWidget*& widget)
+//{
+//    QGraphicsView::setParent(widget);
+
     sampleRate=96000;
     spectrumHigh=-40;
     spectrumLow=-160;
@@ -231,26 +233,30 @@ TxPanadapter::TxPanadapter(QWidget*& widget)
     mode="LSB";
     band_min=0LL;
     band_max=0LL;
+    splitViewBoundary = 0;
+    zoom = 0;
+    sampleZoom = false;
+
 
     samples=NULL;
     initialized = false; // KD0OSS
-    wsamples = (char*)malloc(200 * sizeof(char));
-    samples = (float*)malloc(200 * sizeof(float));
-    for (int i=0; i < 200; i++) samples[i] = -120;
+    wsamples = (char*)malloc(2000 * sizeof(char));
+    samples = (float*)malloc(2000 * sizeof(float));
+    for (int i=0; i < 2000; i++) samples[i] = -120;
 
     txpanadapterScene = new TxPanadapterScene();
     this->setScene(txpanadapterScene);
-    txpanadapterScene->setSceneRect(0.0, 0.0, 200.0, height());
+//    txpanadapterScene->setSceneRect(0.0, 0.0, 200.0, height());
     txpanadapterScene->clear();
     txpanadapterScene->sceneItems.clear();
     txpanadapterScene->spectrumPlot = NULL;
 
-    txpanadapterScene->spectrumPlot = new spectrumObject(200, height());
-    //    this->setSceneRect(0.0, 0.0, width(), height());
+//    txpanadapterScene->spectrumPlot = new spectrumObject(200, height());
+//    this->setSceneRect(0.0, 0.0, 200, height());
     //    this->setViewport(new QGLWidget);
-    qDebug("view width: %d", width());
+    qDebug("Tx view width: %d", width());
 
-    QLinearGradient gradient(0, 0, 0, height());
+    QLinearGradient gradient(0, 0, 0, this->viewport()->height());
     gradient.setColorAt(0, Qt::black);
     gradient.setColorAt(1, Qt::gray);
     txpanadapterScene->setBackgroundBrush(gradient);
@@ -382,13 +388,13 @@ void TxPanadapter::drawFrequencyLines(void)
             if ((f % lineStep) < (long long)hzPerPixel)
             {
                 //     qDebug("height: %d", height());
-                lineObject *lineItem = new lineObject(txpanadapterScene, QPoint(i-2,splitViewBoundary), QPoint(i-2,0), QPen(QColor(255,255,255,128), 1,Qt::DotLine));
+                lineObject *lineItem = new lineObject(txpanadapterScene, QPoint(i-2, splitViewBoundary), QPoint(i-2,0), QPen(QColor(255,255,255,128), 1,Qt::DotLine));
                 txpanadapterScene->addItem(lineItem);
                 lineItem->update();
                 txpanadapterScene->sceneItems.insert(QString("fl%1").arg(lines), lineItem);
 
                 text.sprintf("%lld.%02lld", f/1000000, f%1000000/10000);
-                textObject *textItem = new textObject(txpanadapterScene, text, QPoint(i-2,(splitViewBoundary)-10), Qt::lightGray);
+                textObject *textItem = new textObject(txpanadapterScene, text, QPoint(i-2, (splitViewBoundary)-10), Qt::lightGray);
                 txpanadapterScene->addItem(textItem);
                 textItem->update();
                 txpanadapterScene->sceneItems.insert(QString("ft%1").arg(lines), textItem);
@@ -489,11 +495,11 @@ void TxPanadapter::updateSpectrumFrame(spectrum spec)
     }
 
     //qDebug() << "updateSpectrum: create plot points";
-    if (size != lastWidth || height() != lastHeight)
+    if (size != lastWidth || this->viewport()->height() != lastHeight)
     {
         lastWidth = size;
-        lastHeight = height();
-        qDebug("Scene width: %d  ht: %d", size, height());
+        lastHeight = this->viewport()->height();
+        qDebug("Scene width: %d  ht: %d", size, this->viewport()->height());
     }
     plot.clear();
     for (i = 0; i < size; i++)
@@ -504,9 +510,11 @@ void TxPanadapter::updateSpectrumFrame(spectrum spec)
     if (!initialized)
     {
         initialized = true;
-        if (!txpanadapterScene) return;
         txpanadapterScene->clear();
+        txpanadapterScene->setSceneRect(0.0, 0.0, 2000.0, this->viewport()->height());
+        txpanadapterScene->spectrumPlot = new spectrumObject(2000, this->viewport()->height());
         txpanadapterScene->addItem(txpanadapterScene->spectrumPlot);
+        setMatrix(QMatrix((0 * 0.01)+1, 0.0, 0.0, 1.0, 1.0, 1.0));
         drawFrequencyLines();
         drawCursor(1, false);
         drawFilter(1, false);

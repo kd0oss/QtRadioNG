@@ -334,8 +334,8 @@
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>469</width>
-                <height>234</height>
+                <width>461</width>
+                <height>217</height>
                </rect>
               </property>
               <layout class="QHBoxLayout" name="horizontalLayout_5">
@@ -619,7 +619,7 @@
            </widget>
           </item>
           <item>
-           <widget class="TxPanadapter" name="txSpectrumView">
+           <widget class="QGraphicsView" name="txSpectrumView">
             <property name="minimumSize">
              <size>
               <width>256</width>
@@ -648,7 +648,7 @@
      <x>0</x>
      <y>0</y>
      <width>1135</width>
-     <height>21</height>
+     <height>30</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuBand">
@@ -1392,11 +1392,6 @@
   </customwidget>
   <customwidget>
    <class>Panadapter</class>
-   <extends>QGraphicsView</extends>
-   <header>Panadapter.h</header>
-  </customwidget>
-  <customwidget>
-   <class>TxPanadapter</class>
    <extends>QGraphicsView</extends>
    <header location="global">Panadapter.h</header>
   </customwidget>
