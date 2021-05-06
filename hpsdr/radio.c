@@ -845,6 +845,9 @@ int create_manifest()
     for (int i=0;i<devices;i++)
     {
         d = &discovered[i];
+        char str[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &(d->info.network.address.sin_addr), str, INET_ADDRSTRLEN);
+        if (strcmp(str, "127.0.0.1") == 0) continue;
         sprintf(line, "<radio=%d>\n", i);
         xml = (char*)realloc((char*)xml, strlen(xml)+strlen(line)+1);
         strcat(xml, line);
@@ -893,8 +896,6 @@ int create_manifest()
                 d->info.network.mac_address[4], d->info.network.mac_address[5]);
         xml = (char*)realloc((char*)xml, strlen(xml)+strlen(line)+1);
         strcat(xml, line);
-        char str[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &(d->info.network.address.sin_addr), str, INET_ADDRSTRLEN);
         sprintf(line, "<ip_address>%s</ip_address>\n", str);
         xml = (char*)realloc((char*)xml, strlen(xml)+strlen(line)+1);
         strcat(xml, line);

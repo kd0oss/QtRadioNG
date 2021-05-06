@@ -235,7 +235,7 @@ TxPanadapter::TxPanadapter()
     band_max=0LL;
     splitViewBoundary = 0;
     zoom = 0;
-    sampleZoom = false;
+  //  sampleZoom = false;
 
 
     samples=NULL;

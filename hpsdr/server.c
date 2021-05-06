@@ -449,7 +449,7 @@ void create_listener_thread(char *dsp_server_addr)
 {
     pthread_t thread_id;
     int rc;
-    
+
     strcpy(dsp_server_address , dsp_server_addr);
 
     // create the thread to listen for TCP connections

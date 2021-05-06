@@ -49,7 +49,7 @@
 #endif
 #include "protocols.h"
 
-bool enable_protocol_1 = false;
+bool enable_protocol_1 = true;
 bool enable_protocol_2 = true;
 bool autostart = true;
 
