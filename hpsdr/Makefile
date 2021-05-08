@@ -5,6 +5,8 @@ LIBS = -lm -lpthread
 
 default: hpsdr
 
+all: hpsdr
+
 hpsdr: discovered.o discovery.o new_discovery.o new_protocol.o old_discovery.o old_protocol.o radio.o receiver.o server.o transmitter.o main.o
 	$(CC) $(CFLAGS) -o hpsdr discovered.o discovery.o new_discovery.o new_protocol.o old_discovery.o old_protocol.o radio.o receiver.o server.o transmitter.o main.o $(LIBS)
 

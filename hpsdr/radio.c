@@ -677,10 +677,10 @@ void start_receiver(int radio_id, int rx)
     //
     // Sanity check: in old protocol, all receivers must have the same sample rate
     //
-    if ((protocol == ORIGINAL_PROTOCOL) && (RECEIVERS == 2) && (receiver[0]->sample_rate != receiver[1]->sample_rate))
-    {
-        receiver[1]->sample_rate = receiver[0]->sample_rate;
-    }
+///////   if ((protocol == ORIGINAL_PROTOCOL) && (RECEIVERS == 2) && (receiver[0]->sample_rate != receiver[1]->sample_rate))
+///////    {
+///////        receiver[1]->sample_rate = receiver[0]->sample_rate;
+///////    }
 
     active_receiver = receiver[rx];
     receivers++;
@@ -1056,7 +1056,6 @@ int main_start(char *dsp_server_address)
 
     sprintf(name, "org.kd0oss.hpsdr_new.pid%d", getpid());
     activatepihpsdr();
-    //    init_receivers();
     if (devices > 0)
     {
         create_manifest();
@@ -1064,11 +1063,6 @@ int main_start(char *dsp_server_address)
         if (devices == 1)
         {
             radio = &discovered[0];
-            if (radio->status == STATE_AVAILABLE)
-            {
-         //       start_rec(0);
-         //       if (!start_cb((void*)d)) return status;
-            }
         }
     }
 
@@ -1084,6 +1078,6 @@ int main_start(char *dsp_server_address)
     fprintf(stderr,"exiting ...\n");
     if (discovered_xml != NULL)
         free(discovered_xml);
-    //main_delete();
+    main_delete(0);
     return status;
 } // end main_start

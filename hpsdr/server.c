@@ -46,6 +46,7 @@ void* listener_thread(void* arg);
 void* client_thread(void* arg);
 void* tx_IQ_thread(void* arg);
 void* txiq_send(void* arg);
+void  init_transmitter(unsigned int, int);
 
 static char dsp_server_address[17] = "127.0.0.1";
 
@@ -72,8 +73,6 @@ char* attach_receiver(int radio_id, int rx, CLIENT* client)
     client->receiver_state = RECEIVER_ATTACHED;
     client->radio_id = radio_id;
     client->receiver = rx;
-    sem_init(&txiq_semaphore, 0, 1);
-    TAILQ_INIT(&txiq_buffer);
     init_receivers(radio_id, rx);
     receiver[rx]->client = client;
 
@@ -125,7 +124,9 @@ char* attach_transmitter(CLIENT* client)
 
     sprintf(resp, "%s", OK);
     attached_xmits++;
-
+    sem_init(&txiq_semaphore, 0, 1);
+    TAILQ_INIT(&txiq_buffer);
+    init_transmitter(client->radio_id, client->receiver);
     return resp;
 } // end attach_transmitter
 
@@ -152,6 +153,7 @@ char* parse_command(CLIENT* client, char* command)
             radio_id = (short int)command[2];
             radio = &discovered[radio_id];
             start_radio(radio_id);
+            fprintf(stderr, "Receiver %d attached.\n", rx);
             return attach_receiver(radio_id, rx, client);
         }
     }
@@ -515,6 +517,11 @@ void* client_thread(void* arg)
         {
             break;
         }
+        if (command[0] == 0)
+        {
+            fprintf(stderr, "Command byte 0\n");
+   //         continue;
+        }
         command[bytes_read] = 0;
         response = parse_command(client, command);
         if (send_manifest)
@@ -557,6 +564,7 @@ void* client_thread(void* arg)
 #else
     closesocket(client->socket);
 #endif
+    main_delete(0);
 
     fprintf(stderr, "client disconnected: %s:%d\n\n\n", inet_ntoa(client->iq_addr.sin_addr), ntohs(client->iq_addr.sin_port));
 
@@ -567,9 +575,6 @@ void* client_thread(void* arg)
 
 void init_receivers(int radio_id, int rx)
 {
-    pthread_t thread_id;
-    int rc;
-
     start_receiver(radio_id, rx);
 
 //    for (int i=0;i<active_receivers;i++)
@@ -587,25 +592,29 @@ void init_receivers(int radio_id, int rx)
         iqclient[rx].iq_addr.sin_addr.s_addr = inet_addr(dsp_server_address);
         iqclient[rx].iq_addr.sin_port = htons(RX_IQ_PORT_0 + rx);
         iqclient[rx].iq_port = RX_IQ_PORT_0 + rx;
-
-        if (iqclient[rx].isTx || rx == 0)
-        {
-            rc = pthread_create(&txiq_id, NULL, txiq_send, NULL);
-            if (rc < 0)
-            {
-                perror("pthread_create txiq_send thread failed");
-                exit(1);
-            }
-            rc = pthread_create(&thread_id, NULL, tx_IQ_thread, (void*)rx);
-            if (rc < 0)
-            {
-                perror("pthread_create mic_IQ_thread failed");
-                exit(1);
-            }
-            printf("Created socket for mic IQ port: %d\n", iqclient[rx].iq_port + 30);
-        }
     }
 } // end init_receivers
+
+
+void init_transmitter(unsigned int radio_id, int rx)
+{
+    pthread_t thread_id;
+    int rc;
+
+    rc = pthread_create(&txiq_id, NULL, txiq_send, NULL);
+    if (rc < 0)
+    {
+        perror("pthread_create txiq_send thread failed");
+        exit(1);
+    }
+    rc = pthread_create(&thread_id, NULL, tx_IQ_thread, (void*)rx);
+    if (rc < 0)
+    {
+        perror("pthread_create mic_IQ_thread failed");
+        exit(1);
+    }
+    printf("Created socket for mic IQ port: %d\n", iqclient[rx].iq_port + 30);
+} // end init_transmitter
 
 
 void send_Mic_buffer(float sample)
@@ -770,6 +779,7 @@ void* tx_IQ_thread(void* arg)
     int old_state, old_type;
     int bytes_read;
     BUFFER buffer;
+    char buf[2];
 
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &old_state);
     pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &old_type);
@@ -784,7 +794,7 @@ void* tx_IQ_thread(void* arg)
 
         fprintf(stderr, "connection to rx %d tx IQ on port %d\n", rx, iqclient[rx].iq_port + 30);
     }
-    sendto(iqclient[rx].socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr*)&cli_addr, cli_length);
+    sendto(iqclient[rx].socket, (char*)&buf, sizeof(buf), 0, (struct sockaddr*)&cli_addr, cli_length);
 
     while (1)
     {

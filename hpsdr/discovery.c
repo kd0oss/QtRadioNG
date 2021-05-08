@@ -86,7 +86,7 @@ void discovery()
         fclose(fp);
         ipaddr_tcp[IPADDR_LEN-1]=0;
         // remove possible trailing newline char in ipaddr_tcp
-        int len=strnlen(ipaddr_tcp,IPADDR_LEN);
+        int len=strnlen(ipaddr_tcp, IPADDR_LEN);
         while (--len >= 0)
         {
             if (ipaddr_tcp[len] != '\n') break;

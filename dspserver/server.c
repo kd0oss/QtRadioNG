@@ -1879,8 +1879,8 @@ void readcb(struct bufferevent *bev, void *ctx)
             if (item->client_type == CONTROL)
             {
                 // if privilged client, forward the message to the hardware
-                if (message[1] == 243) // ATTACH
-                    make_connection(0, 0);
+                if (message[1] == ATTACH)
+                    make_connection(channels[message[2]].radio_id, channels[message[2]].receiver, channels[message[2]].transmitter);
                 else
                     hwSendStarCommand(message);
                 /////                answer_question(message, role, bev);
@@ -2161,6 +2161,8 @@ void readcb(struct bufferevent *bev, void *ctx)
 
             case SETTXEQPRO:
             {
+                if (current_tx < 0) break;
+
                 double freq[11] = {0.0, 32.0, 63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0};
                 double gain[11];
 
@@ -2191,7 +2193,8 @@ void readcb(struct bufferevent *bev, void *ctx)
                     item->fps = fps;
                 }
                 initAnalyzer(current_rx, item->samples, fps, 512);
-                initAnalyzer(current_tx, item->samples, fps, 2048);
+                if (current_tx >= 0)
+                    initAnalyzer(current_tx, item->samples, fps, 2048);
                 sem_post(&bufferevent_semaphore);
                 sdr_log(SDR_LOG_INFO, "Spectrum fps set to = '%d'  Samples = '%d'\n", item->fps, item->samples);
             }
@@ -2486,7 +2489,8 @@ void readcb(struct bufferevent *bev, void *ctx)
 
             case SETWINDOW:
                 SetRXABandpassWindow(current_rx, atoi((const char*)(message+1)));
-                SetTXABandpassWindow(current_tx, atoi((const char*)(message+1)));
+                if (current_tx > -1)
+                    SetTXABandpassWindow(current_tx, atoi((const char*)(message+1)));
                 break;
 
             case SETCLIENT:
@@ -2500,6 +2504,9 @@ void readcb(struct bufferevent *bev, void *ctx)
             case SETMICGAIN:
             {
                 double gain;
+
+                if (current_tx == -1) break;
+
                 if (sscanf((const char*)(message+1), "%lf", (double*)&gain) > 1)
                     goto badcommand;
 
@@ -2528,6 +2535,8 @@ void readcb(struct bufferevent *bev, void *ctx)
                 char user[20];
                 char pass[20];
 
+                if (current_tx == -1) break;
+
                 if (sscanf((const char*)(message+1), "%lf %s %s", (double*)&level, user, pass) > 3)
                     goto badcommand;
 
@@ -2541,13 +2550,16 @@ void readcb(struct bufferevent *bev, void *ctx)
                 break;
 
             case SETTXBPASSWIN:
-                SetTXABandpassWindow(current_tx, atoi((const char*)(message+1)));
+                if (current_tx > -1)
+                    SetTXABandpassWindow(current_tx, atoi((const char*)(message+1)));
                 break;
 
             case MOX:
             {
                 char user[20];
                 char pass[20];
+
+                if (current_tx == -1) break;
 
                 if (sscanf((const char*)(message+1), "%d %s %s", &mox, user, pass) > 3)
                     goto badcommand;

@@ -218,7 +218,7 @@ void* iq_thread(void* channel)
         int j, i;
         int scale=sampleRate/48000;
         //i=((buffer.length/2)/scale)*2;
-        i = 1024;
+        i = buffer.length;
         double dataout[2048];
 
         if (bUseNB)
@@ -416,12 +416,12 @@ void* keepalive_thread(void* arg)
 } // end keepalive_thread
 
 
-int make_connection(short int radio_id, short int receiver)
+int make_connection(short int radio_id, short int receiver, short int transmitter)
 {
     char *token, *saveptr;
     char command[64], response[HW_RESPONSE_SIZE];
     int result;
-    char buffer[64];
+//    char buffer[64]="";
 
 
     result = 1;
@@ -445,10 +445,14 @@ int make_connection(short int radio_id, short int receiver)
                 fprintf(stderr, "connect: sampleRate=%d\n", sampleRate);
                 setSpeed(sampleRate);
 
-                sprintf(command, "%c%c", ATTACH, TX);
-                send_command(command, 3, response);
-// FIXME:  Not a good place for this.
-                recvfrom(audio_socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr*)&audio_addr, (socklen_t *)&audio_length);
+                // FIXME:  Not a good place for this.
+                if (transmitter > 0)
+                {
+                    fprintf(stderr, "ATTACH TX\n");
+                    sprintf(command, "*%c%c", ATTACH, TX);
+                    hwSendStarCommand(command);
+                    recvfrom(audio_socket, (char*)&command, 2, 0, (struct sockaddr*)&audio_addr, (socklen_t *)&audio_length);
+                }
             }
             else
             {

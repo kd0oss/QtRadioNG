@@ -241,7 +241,7 @@ void hwRestoreState();
 *
 * @return
 */
-int make_connection(short int, short int);
+int make_connection(short int, short int, short int);
 void setSpeed(int s);
 
 extern int hwSetSampleRate(long);

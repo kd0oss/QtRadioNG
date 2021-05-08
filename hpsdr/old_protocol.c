@@ -220,8 +220,8 @@ static void metis_start_stop(int command);
 static void metis_send_buffer(unsigned char* buffer,int length);
 static void metis_restart();
 
-static void open_tcp_socket(int);
-static void open_udp_socket(int);
+static void open_tcp_socket();
+static void open_udp_socket();
 static int how_many_receivers();
 
 #define COMMON_MERCURY_FREQUENCY 0x80
@@ -338,14 +338,14 @@ void old_protocol_init(int rate)
     else
 #endif
     {
-        printf("old_protocol starting receive thread: buffer_size=%d output_buffer_size=%d\n",buffer_size,output_buffer_size);
+        printf("old_protocol starting receive thread: buffer_size=%d output_buffer_size=%d\n", buffer_size, output_buffer_size);
         if (radio->use_tcp)
         {
-            open_tcp_socket(radio_id);
+            open_tcp_socket();
         }
         else
         {
-            open_udp_socket(radio_id);
+            open_udp_socket();
         }
 
         pthread_create(&(receive_thread_id), NULL, &receive_thread, NULL);
@@ -436,10 +436,10 @@ static gpointer ozy_ep6_rx_thread(gpointer arg) {
 }
 #endif
 
-static void open_udp_socket(int radio_id) {
+static void open_udp_socket() {
     int tmp;
 
-    DISCOVERED *radio = &discovered[radio_id];
+//    DISCOVERED *radio = &discovered[radio_id];
 
     if (data_socket >= 0) {
         tmp=data_socket;
@@ -494,10 +494,10 @@ static void open_udp_socket(int radio_id) {
     printf("%s: UDP socket established: %d for %s:%d\n",__FUNCTION__,data_socket,inet_ntoa(data_addr.sin_addr),ntohs(data_addr.sin_port));
 }
 
-static void open_tcp_socket(int radio_id) {
+static void open_tcp_socket() {
     int tmp;
 
-    DISCOVERED *radio = &discovered[radio_id];
+ //   DISCOVERED *radio = &discovered[radio_id];
 
     if (tcp_socket >= 0) {
         tmp=tcp_socket;
@@ -552,9 +552,10 @@ void *receive_thread(void *arg)
     //metis_restart();
 
     length=sizeof(addr);
-    while(running) {
-
-        switch (device) {
+    while(running)
+    {
+        switch (device)
+        {
 #ifdef USBOZY
         case DEVICE_OZY:
             // should not happen
@@ -1314,6 +1315,7 @@ static void process_ozy_byte(int b) {
             // RX without DIVERSITY. Feed samples to RX1 and RX2
             //
             if (nreceiver == rx1channel) {
+             //   fprintf(stderr, "IQ samples: %f\n", right_sample_double);
                 add_iq_samples(receiver[0], left_sample_double,right_sample_double);
             } else if (nreceiver == rx2channel && receivers > 1) {
                 add_iq_samples(receiver[1], left_sample_double,right_sample_double);
@@ -2094,10 +2096,10 @@ static int metis_write(unsigned char ep,unsigned char* buffer,int length) {
     return length;
 }
 
-static void metis_restart(int radio_id) {
+static void metis_restart() {
     int i;
 
-    DISCOVERED *radio = &discovered[radio_id];
+//    DISCOVERED *radio = &discovered[radio_id];
 
     printf("%s\n",__FUNCTION__);
     //
@@ -2106,7 +2108,7 @@ static void metis_restart(int radio_id) {
     // has closed the socket. Note that the UDP socket, once
     // opened is never closed.
     //
-    if (radio->use_tcp && tcp_socket < 1) open_tcp_socket(radio_id);
+    if (radio->use_tcp && tcp_socket < 1) open_tcp_socket();
 
     // reset metis frame
     metis_offset=8;

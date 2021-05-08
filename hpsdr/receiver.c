@@ -127,8 +127,6 @@ RECEIVER *create_receiver(int id, int buffer_size, int alexRxAntenna, int alexAt
 
     fprintf(stderr,"create_receiver: id=%d output_samples=%d\n", rx->id, rx->output_samples);
 
-    // setup wdsp for this receiver
-
     fprintf(stderr,"create_receiver: id=%d after restore adc=%d\n", rx->id, rx->adc);
 
     return rx;

@@ -679,6 +679,7 @@ void UI::connected(int channel)
     command.clear();
     command.append((char)STARCOMMAND);
     command.append((char)ATTACH);
+    command.append((char)channel);
     connection.sendCommand(command);
 
     // send initial settings
@@ -988,9 +989,9 @@ void UI::spectrumBuffer(spectrum spec)
   // qDebug()<<Q_FUNC_INFO << "spectrumBuffer";
 
     sampleRate = spec.sample_rate;
-    if (txNow)
-        txp->updateSpectrumFrame(spec);
-    else
+//    if (txNow)
+  //      txp->updateSpectrumFrame(spec);
+//    else
         widget.spectrumView->updateSpectrumFrame(spec);
     spectrumConnection.freeBuffers(spec);
 } // end spectrumBuffer
