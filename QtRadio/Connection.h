@@ -67,6 +67,7 @@
 #define READ_ANSWER           6
 #define READ_MANIFEST         77
 #define READ_SPECTRUM         8
+#define READ_WIDEBAND         9
 
 typedef struct _spectrum
 {
@@ -80,6 +81,7 @@ typedef struct _spectrum
     float          lo_offset;
     char           *samples;
 } spectrum;
+
 
 enum COMMAND_SET {
     CSFIRST = 0,
@@ -120,24 +122,75 @@ enum COMMAND_SET {
     SETSQUELCHSTATE,
     SETTXAMCARLEV,
     GETSPECTRUM,
-    SETAGC,
+    SETRXAGCMODE,
     SETNBVAL,
     SETMICGAIN,
-    SETFIXEDAGC,
     ENABLERXEQ,
     ENABLETXEQ,
     SETRXEQPRO,
     SETTXEQPRO,
+    SETNOTCHFILTER,
+    ENABLENOTCHFILTER,
+    EDITNOTCHFILTER,
+    DELNOTCHFILTER,
+    SETRXAGCSLOPE,
+    SETRXAGCATTACK,
+    SETRXAGCDECAY,
+    SETRXAGCHANG,
+    SETRXAGCHANGLEVEL,
+    GETRXAGCHANGLEVEL,
+    GETRXAGCHANGTHRESH,
+    SETRXAGCHANGTHRESH,
+    GETRXAGCTHRESH,
+    SETRXAGCTHRESH,
+    GETRXAGCTOP,
+    SETRXAGCTOP,
+    SETRXAGCFIXED,
+    SETRXANFTAPS,
+    SETRXANFDELAY,
+    SETRXANFGAIN,
+    SETRXANFLEAKAGE,
+    SETRXANFVALS,
+    SETRXANFPOS,
+    SETRXANRTAPS,
+    SETRXANRDELAY,
+    SETRXANRGAIN,
+    SETRXANRLEAKAGE,
+    SETRXANRPOS,
+    SETRXEMNRRUN,
+    SETRXEMNRGAINMETHOD,
+    SETRXEMNRNPEMETHOD,
+    SETRXEMNRPOS,
+    SETRXCBLRUN,
+    SETTXLEVELERST,
+    SETTXLEVELERATTACK,
+    SETTXLEVELERDECAY,
+    SETTXLEVELERTOP,
+    SETTXBPASSFREQS,
+    SETRXBPASSFREQS,
+    SETTXOSCTRLRUN,
+    SETTXALCST,
+    SETTXALCATTACK,
+    SETTXALCDECAY,
+    SETTXALCMAXGAIN,
 
     STOPXCVR = 242,
     STARTXCVR = 243,
     ATTACH = 247,
+    DETACH = 249,
     SETSAMPLERATE = 244,
     SETRECORD = 245,
     SETFREQ = 246,
     STARTIQ = 250,
+    STOPIQ = 252,
     MOX = 254,
     STARHARDWARE = 255
+};
+
+enum BANDSCOPE {
+    STARTBANDSCOPE = 1,
+    STOPBANDSCOPE,
+    UPDATEBANDSCOPE
 };
 
 typedef struct _channel
@@ -145,12 +198,16 @@ typedef struct _channel
     short int radio_id;
     char      radio_type[25];
     short int receiver;
+    short int recv_index;
     short int transmitter;
+    short int trans_index;
+    bool      bandscope_capable;
     bool      enabled;
 } CHANNEL;
 
 class ServerConnection : public QObject {
     Q_OBJECT
+
 public:
     ServerConnection();
     virtual ~ServerConnection();
@@ -187,8 +244,7 @@ signals:
     void isConnected(int);
     void disconnected(QString message);
     void header(char* header);
-    void audioBuffer(char* header,char* buffer);
-    void bandscopeBuffer(char* header,char* buffer);
+    void audioBuffer(char* header, char* buffer);
     void printStatusBar(QString message);
     void slaveSetFreq(long long f);
     void slaveSetMode(int m);
@@ -241,16 +297,16 @@ public:
     void    connect(QString host, int receiver);
     void    sendCommand(QByteArray command);
     void    freeBuffers(spectrum);
+    QString server;
+    int     port;
 
 private:
     QTcpSocket  *tcpSocket;
-    QString      server;
-    int          port;
     QMutex       mutex;
     int          state;
     char        *hdr;
     char        *buffer;
-    short        length;   // int causes errors in converting 2 char bytes to integer
+    unsigned short length;   // int causes errors in converting 2 char bytes to integer
     int          bytes;
 
 public slots:
@@ -264,6 +320,43 @@ signals:
     void isConnected();
     void disconnected(QString message);
     void spectrumBuffer(spectrum);
+};
+
+
+//*****************************************************************************************
+class WidebandConnection : public QObject {
+    Q_OBJECT
+
+public:
+    WidebandConnection();
+    virtual ~WidebandConnection();
+    void    connect(QString host, int receiver);
+    void    sendCommand(QByteArray command);
+    void    freeBuffers(spectrum);
+
+private:
+    QTcpSocket  *tcpSocket;
+    QString      server;
+    int          port;
+    QMutex       mutex;
+    int          state;
+    char        *hdr;
+    char        *buffer;
+    unsigned short length;   // int causes errors in converting 2 char bytes to integer
+    int          bytes;
+
+public slots:
+    void connected();
+    void disconnected();
+    void disconnect();
+    void socketError(QAbstractSocket::SocketError socketError);
+    void widebandSocketData();
+
+signals:
+    void isConnected();
+    void disconnected(QString message);
+    void bsConnected();
+    void bandscopeBuffer(spectrum);
 };
 
 

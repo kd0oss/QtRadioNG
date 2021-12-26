@@ -17,17 +17,17 @@ long long frequency = 0LL;
 
 RECEIVER *create_receiver(int id, int buffer_size, int alexRxAntenna, int alexAttenuation)
 {
-    fprintf(stderr,"create_receiver: id=%d buffer_size=%d\n", id, buffer_size);
+    fprintf(stderr,"create_receiver: id=%d device=%d buffer_size=%d\n", id, radio->device, buffer_size);
     fflush(stderr);
 
-    RECEIVER *rx=(RECEIVER*)malloc(sizeof(RECEIVER));
-    rx->id=id;
+    RECEIVER *rx = (RECEIVER*)malloc(sizeof(RECEIVER));
+    rx->id = id;
     pthread_mutex_init(&rx->mutex, NULL);
 
     switch (id)
     {
     case 0:
-        rx->adc=0;
+        rx->adc = 0;
         break;
     default:
         switch (protocol)
@@ -39,29 +39,30 @@ RECEIVER *create_receiver(int id, int buffer_size, int alexRxAntenna, int alexAt
             case DEVICE_HERMES:
             case DEVICE_HERMES_LITE:
             case DEVICE_HERMES_LITE2:
-                rx->adc=0;
+                rx->adc = 0;
                 break;
             default:
-                rx->adc=1;
+                rx->adc = 1;
                 break;
             }
             break;
         default:
-            switch (device)
+            switch (radio->device)
             {
             case NEW_DEVICE_ATLAS:
             case NEW_DEVICE_HERMES:
-                rx->adc=0;
+            case NEW_DEVICE_HERMES2:
+                rx->adc = 0;
                 break;
             default:
-                rx->adc=1;
+                rx->adc = 1;
                 break;
             }
             break;
         }
     }
 
-    fprintf(stderr,"create_receiver: id=%d default adc=%d\n",rx->id, rx->adc);
+    fprintf(stderr,"create_receiver: id=%d default adc=%d\n", rx->id, rx->adc);
     frequency = 14010000LL;
     vfo[rx->id].frequency = frequency;
     vfo[rx->id].lo = 0LL;
@@ -69,17 +70,17 @@ RECEIVER *create_receiver(int id, int buffer_size, int alexRxAntenna, int alexAt
     vfo[rx->id].ctun_frequency = frequency;
     vfo[rx->id].offset = 0;
 
-    rx->sample_rate=48000;
-    rx->buffer_size=buffer_size;
-    rx->update_timer_id=-1;
+    rx->sample_rate = 48000;
+    rx->buffer_size = buffer_size;
+    rx->update_timer_id = -1;
 
-    rx->samples=0;
-    rx->displaying=0;
-    rx->rf_gain=50.0;
+    rx->samples = 0;
+    rx->displaying = 0;
+    rx->rf_gain = 50.0;
 
-    rx->dither=0;
-    rx->random=0;
-    rx->preamp=0;
+    rx->dither = 0;
+    rx->random = 0;
+    rx->preamp = 0;
 
 //    BAND *b=band_get_band(vfo[rx->id].band);
     rx->alex_antenna=alexRxAntenna;
@@ -91,43 +92,39 @@ RECEIVER *create_receiver(int id, int buffer_size, int alexRxAntenna, int alexAt
 //    rx->agc_hang_threshold=0.0;
 
 //    rx->playback_handle=NULL;
-    rx->local_audio=0;
+    rx->local_audio = 0;
 //    g_mutex_init(&rx->local_audio_mutex);
-    rx->local_audio_buffer=NULL;
-    rx->local_audio_buffer_size=2048;
+    rx->local_audio_buffer = NULL;
+    rx->local_audio_buffer_size = 2048;
 //    rx->audio_name=NULL;
-    rx->mute_when_not_active=0;
+    rx->mute_when_not_active = 0;
 //    rx->audio_channel=STEREO;
 //    rx->audio_device=-1;
 
-    rx->low_latency=0;
+    rx->low_latency = 0;
 
-    rx->squelch_enable=0;
-    rx->squelch=0;
+    rx->squelch_enable = 0;
+    rx->squelch = 0;
 
-    rx->filter_high=525;
-    rx->filter_low=275;
+    rx->filter_high = 525;
+    rx->filter_low = 275;
 
-    rx->deviation=2500;
+    rx->deviation = 2500;
 
-    rx->mute_radio=0;
-
-    /////////receiver_restore_state(rx);
+    rx->mute_radio = 0;
 
     // allocate buffers
-    rx->iq_input_buffer=(double*)malloc((2*rx->buffer_size) * sizeof(double));
-    rx->audio_buffer_size=480;
+    rx->iq_input_buffer = (double*)malloc((2*rx->buffer_size) * sizeof(double));
+    rx->audio_buffer_size = 480;
 //    rx->audio_sequence=0L;
 
-    fprintf(stderr,"create_receiver (after restore): rx=%p id=%d audio_buffer_size=%d local_audio=%d\n", rx, rx->id, rx->audio_buffer_size, rx->local_audio);
+    fprintf(stderr,"create_receiver: rx=%p id=%d audio_buffer_size=%d local_audio=%d\n", rx, rx->id, rx->audio_buffer_size, rx->local_audio);
     //rx->audio_buffer=g_new(guchar,rx->audio_buffer_size);
-    int scale=rx->sample_rate/48000;
-    rx->output_samples=rx->buffer_size/scale;
+    int scale = rx->sample_rate/48000;
+    rx->output_samples = rx->buffer_size/scale;
 //    rx->audio_output_buffer=(double*)malloc((2*rx->output_samples) * sizeof(double));
 
     fprintf(stderr,"create_receiver: id=%d output_samples=%d\n", rx->id, rx->output_samples);
-
-    fprintf(stderr,"create_receiver: id=%d after restore adc=%d\n", rx->id, rx->adc);
 
     return rx;
 } // end create_receiver
@@ -157,8 +154,6 @@ void add_iq_samples(RECEIVER *rx, double i_sample, double q_sample)
 //  printf("%d   %f  %f\n", rx->samples, i_sample, q_sample);
   if (rx->samples >= rx->buffer_size)
   {
-/////////////    full_rx_buffer(rx);
- //    dump_udp_buffer((char*)rx->iq_input_buffer);
       send_IQ_buffer(rx->id);
       rx->samples=0;
   }
@@ -176,7 +171,6 @@ void add_div_iq_samples(RECEIVER *rx, double i0, double q0, double i1, double q1
   rx->samples=rx->samples+1;
   if (rx->samples>=rx->buffer_size)
   {
- ///////////   full_rx_buffer(rx);
     send_IQ_buffer(rx->id);
     rx->samples=0;
   }

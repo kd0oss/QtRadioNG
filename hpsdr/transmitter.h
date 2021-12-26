@@ -53,6 +53,9 @@ typedef struct _transmitter {
     int local_microphone;
     char *microphone_name;
 
+//    int linein_gain;
+//    double mic_gain;
+
     int out_of_band;
     int out_of_band_timer_id;
 

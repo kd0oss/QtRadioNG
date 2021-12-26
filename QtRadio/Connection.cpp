@@ -706,7 +706,7 @@ void ServerConnection::processBuffer()
                 if (nextHeader[0] == BANDSCOPE_BUFFER)
                 {
                     //qDebug() << "socketData: bandscope";
-                    emit bandscopeBuffer(nextHeader, nextBuffer);
+ //                   emit bandscopeBuffer(nextHeader, nextBuffer);
                 }
                 else
                 {
@@ -773,6 +773,7 @@ void ServerConnection::createChannels(int servers)
     char radio_type[25];
     int  index = 0;
     int  last_tx_ch = -1;
+    int  last_trans_index = -1;
     int  radio_id = 0;
     int  num_chs = 0;
     int  num_rcvrs = 0;
@@ -806,11 +807,14 @@ void ServerConnection::createChannels(int servers)
                 line[index] = 0;
                 index = 0;
                 fprintf(stderr, "%s\n", line);
-                if (strstr(line, "radio "))
+                if (strstr(line, "radio ") && !strstr(line, "/radio"))
                 {
                     sscanf(line, "%*s %d", &radio_id);
                     channels[active_channels].receiver = -1;
+                    channels[active_channels].recv_index = -1;
                     channels[active_channels].transmitter = -1;
+                    channels[active_channels].trans_index = -1;
+                    channels[active_channels].bandscope_capable = false;
                     channels[active_channels].enabled = false;
                 }
                 else
@@ -824,26 +828,40 @@ void ServerConnection::createChannels(int servers)
                             sscanf(line, "%*s %d %*s", &num_rcvrs);
                         }
                         else
-                            if (strstr(line, "supported_transmitters"))
+                            if (strstr(line, "bandscope"))
                             {
-                                int r = 0;
-                                sscanf(line, "%*s %d %*s", &r);
-                                for (int x=0;x<num_rcvrs;x++)
-                                {
-                                    channels[active_channels].receiver = num_chs++;;
-                                    if (r-- > 0)
-                                    {
-                                        channels[active_channels].transmitter = num_chs++;;
-                                        last_tx_ch = num_chs - 1;
-                                    }
-                                    else
-                                        channels[active_channels].transmitter = last_tx_ch;;
-                                    channels[active_channels].radio_id = channels[active_channels].radio_id;
-                                    strcpy(channels[active_channels].radio_type, radio_type);
-                                    channels[active_channels].enabled = false;
-                                    active_channels++;
-                                }
+                                int tmp=0;
+                                sscanf(line, "%*s %d %*s", &tmp);
+                                if (tmp == 1)
+                                    channels[active_channels].bandscope_capable = true;
                             }
+                            else
+                                if (strstr(line, "supported_transmitters"))
+                                {
+                                    int r = 0;
+                                    sscanf(line, "%*s %d %*s", &r);
+                                    for (int x=0;x<num_rcvrs;x++)
+                                    {
+                                        channels[active_channels].receiver = num_chs++;
+                                        channels[active_channels].recv_index++;
+                                        if (r-- > 0)
+                                        {
+                                            channels[active_channels].transmitter = num_chs++;
+                                            channels[active_channels].trans_index++;
+                                            last_tx_ch = num_chs - 1;
+                                            last_trans_index = channels[active_channels].trans_index;
+                                        }
+                                        else
+                                        {
+                                            channels[active_channels].transmitter = last_tx_ch;
+                                            channels[active_channels].trans_index = last_trans_index;
+                                        }
+                                        channels[active_channels].radio_id = channels[active_channels].radio_id;
+                                        strcpy(channels[active_channels].radio_type, radio_type);
+                                        channels[active_channels].enabled = false;
+                                        active_channels++;
+                                    }
+                                }
             }
         }
         free(manifest);
@@ -881,7 +899,7 @@ void ServerConnection::activateRadio()
         sample_rate = rd->sample_rate[0];
 
         emit isConnected(selected_channel);
-        emit hardware(QString("%1").arg(channels[selected_channel].radio_type));
+        emit hardware(QString("%1 %2").arg(channels[selected_channel].radio_type).arg(channels[selected_channel].bandscope_capable));
         emit setFPS();
     }
     delete rd;
@@ -930,7 +948,7 @@ void SpectrumConnection::connect(QString h, int p)
     state = READ_HEADER;
     // cleanup dirty value eventually left from previous usage
     bytes = 0;
-    qDebug() << "Spectrum connection::connect: connectToHost: " << server << ":" << port;
+    qDebug() << "Spectrum connectToHost: " << server << ":" << port;
     tcpSocket->connectToHost(server, port);
 } // end connect
 
@@ -1047,6 +1065,7 @@ void SpectrumConnection::spectrumSocketData()
                 //     if ((length < 0) || (length > 4096))
                 if (length != 2000)
                 {
+                    fprintf(stderr, "Spec Len: %d\n", length);
                     state = READ_HEADER;
                     bytes = 0;
                 }
@@ -1069,7 +1088,6 @@ void SpectrumConnection::spectrumSocketData()
                  emit spectrumBuffer(spec);
             }
             break;
-
         default:
             fprintf (stderr, "FATAL: WRONG STATUS !!!!!\n");
         }
@@ -1101,6 +1119,230 @@ void SpectrumConnection::sendCommand(QByteArray command)
 
 
 void SpectrumConnection::freeBuffers(spectrum spec)
+{
+    if (spec.samples != NULL) free(spec.samples);
+} // end freeBuffers
+
+
+/*************************************************************************************************************
+ * ****************************************************************************************************
+ * ***********************************************************************************************************/
+
+WidebandConnection::WidebandConnection()
+{
+    qDebug() << "Wideband connection::Connection";
+    tcpSocket = NULL;
+    state = READ_HEADER;
+    bytes = 0;
+}
+
+
+void WidebandConnection::connect(QString h, int p)
+{
+    server = h;
+    port = p;
+
+    // cleanup previous object, if any
+    if (tcpSocket)
+    {
+        delete tcpSocket;
+    }
+
+    tcpSocket = new QTcpSocket(this);
+
+    QObject::connect(tcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
+                     this, SLOT(socketError(QAbstractSocket::SocketError)));
+
+    QObject::connect(tcpSocket, SIGNAL(connected()),
+                     this, SLOT(connected()));
+
+    QObject::connect(tcpSocket, SIGNAL(disconnected()),
+                     this, SLOT(disconnected()));
+
+    QObject::connect(tcpSocket, SIGNAL(readyRead()),
+                     this, SLOT(widebandSocketData()));
+
+    // set the initial state
+    state = READ_HEADER;
+    // cleanup dirty value eventually left from previous usage
+    bytes = 0;
+    qDebug() << "Wideband connectToHost: " << server << ":" << port;
+    tcpSocket->connectToHost(server, port);
+} // end connect
+
+
+void WidebandConnection::disconnected()
+{
+    qDebug() << "Wideband connection::disconnected: emits: " << "Remote disconnected";
+    emit disconnected("Remote disconnected");
+
+    if (tcpSocket != NULL)
+    {
+        QObject::disconnect(tcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
+                            this, SLOT(socketError(QAbstractSocket::SocketError)));
+
+        QObject::disconnect(tcpSocket, SIGNAL(connected()),
+                            this, SLOT(connected()));
+
+        QObject::disconnect(tcpSocket, SIGNAL(disconnected()),
+                            this, SLOT(disconnected()));
+
+        QObject::disconnect(tcpSocket, SIGNAL(readyRead()),
+                            this, SLOT(widebandSocketData()));
+    }
+} // end disconnected
+
+
+void WidebandConnection::disconnect()
+{
+    qDebug() << "Wideband connection::disconnect Line " << __LINE__;
+
+    if (tcpSocket != NULL)
+    {
+        tcpSocket->close();
+        // object deletion moved in connect method
+        // tcpSocket=NULL;
+
+    }
+} // end disconnnect
+
+
+void WidebandConnection::socketError(QAbstractSocket::SocketError socketError)
+{
+    switch (socketError)
+    {
+    case QAbstractSocket::RemoteHostClosedError:
+        qDebug() << "Remote closed connection";
+        break;
+    case QAbstractSocket::HostNotFoundError:
+        qDebug() << "Host not found";
+        break;
+    case QAbstractSocket::ConnectionRefusedError:
+        qDebug() << "Remote host refused connection";
+        break;
+    default:
+        qDebug() << "Socket Error: " << tcpSocket->errorString();
+    }
+
+    emit disconnected(tcpSocket->errorString());
+    // memory leakeage !!
+    // tcpSocket=NULL;
+} // end socketError
+
+
+void WidebandConnection::connected()
+{
+    QByteArray command;
+
+    emit bsConnected();
+    qDebug() << "Wideband connection::Connected" << tcpSocket->isValid();
+}
+
+
+WidebandConnection::~WidebandConnection()
+{
+
+}
+
+
+void WidebandConnection::widebandSocketData()
+{
+    int     toRead;
+    int     bytesRead=0;
+    int     thisRead=0;
+    static  spectrum spec;
+    int     header_size=sizeof(spectrum);
+
+    if (bytes < 0)
+    {
+        fprintf(stderr,"QtRadio: FATAL: INVALID byte counter: %d\n", bytes);
+        //tcpSocket->close();
+        return;
+    }
+
+    toRead = tcpSocket->bytesAvailable();
+    if (toRead <= 0)
+    {
+        return;
+    }
+
+    while (bytesRead < toRead)
+    {
+        switch (state)
+        {
+        case READ_HEADER:
+            //fprintf (stderr, "READ_HEADER: hdr size: %d bytes: %d\n", header_size, bytes);
+            thisRead = tcpSocket->read((char*)&spec+bytes, header_size - bytes);
+            if (thisRead < 0)
+            {
+                fprintf(stderr, "QtRadio: FATAL: READ_HEADER: error in read: %d\n", thisRead);
+                tcpSocket->close();
+                return;
+            }
+            bytes += thisRead;
+            if (bytes == header_size)
+            {
+                length = spec.length;
+                if ((length < 512) || (length > 1920))
+       //         if (length != 512)
+                {
+                    fprintf(stderr, "Wb spec Len: %u\n", (int)length);
+                    state = READ_HEADER;
+                    bytes = 0;
+                }
+                else
+                {
+                    spec.samples = (char*)malloc(length);
+                    bytes = 0;
+                    state = READ_WIDEBAND;
+                }
+            }
+            break;
+
+        case READ_WIDEBAND:
+            thisRead = tcpSocket->read(&spec.samples[bytes], length - bytes);
+            bytes += thisRead;
+            if (bytes == length)
+            {
+                 bytes = 0;
+                 state = READ_HEADER;
+                 emit bandscopeBuffer(spec);
+            }
+            break;
+
+        default:
+            fprintf (stderr, "FATAL: WRONG STATUS !!!!!\n");
+        }
+        bytesRead += thisRead;
+    }
+} // end widebandSocketData
+
+
+void WidebandConnection::sendCommand(QByteArray command)
+{
+    int  i;
+    char buffer[SEND_BUFFER_SIZE];
+    int  bytesWritten;
+
+    for (i=0; i < SEND_BUFFER_SIZE; i++)
+        buffer[i] = 0;
+
+    if (tcpSocket != NULL && tcpSocket->isValid() && tcpSocket->isWritable())
+    {
+        mutex.lock();
+        strcpy(buffer, command.constData());
+        bytesWritten = tcpSocket->write(buffer, SEND_BUFFER_SIZE);
+        if (bytesWritten != SEND_BUFFER_SIZE)
+            qDebug() << "wideband sendCommand: write error";
+        else
+            qDebug() << "wideband sendCommand: successful";
+        //tcpSocket->flush();
+        mutex.unlock();
+    }
+} // end sendCommand
+
+
+void WidebandConnection::freeBuffers(spectrum spec)
 {
     if (spec.samples != NULL) free(spec.samples);
 } // end freeBuffers

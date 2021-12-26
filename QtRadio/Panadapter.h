@@ -238,7 +238,7 @@ public:
 //    void initialize();
 //    void setSampleRate(int r);
 //    void setFrequency(long long f);
-//    void setFilter(int low,int high);
+    void setFilter(int low,int high);
     void updateSpectrumFrame(spectrum);
 //    int samplerate();
 
@@ -263,7 +263,7 @@ protected:
 
 private slots:
     void drawCursor(int vfo, bool disable);  // KD0OSS
-    void drawFilter(int vfo, bool diabale);  // KD0OSS
+    void drawFilter(int vfo, bool disable);  // KD0OSS
     void drawdBmLines(void);  // KD0OSS
     void drawSpectrum(void);  // KD0OSS
     void drawFrequencyLines(void);  // KD0OSS
@@ -390,14 +390,14 @@ protected:
 
 public slots:
     void setAvg(int value);
-    void addNotchFilter(int index);    // KD0OSS
+    int  addNotchFilter(int index);    // KD0OSS
     void enableNotchFilter(bool enable);   // KD0OSS
     void enableNotchFilter(int index, bool enable);   // KD0OSS
     void updateWaterfall(void);
 
 private slots:
     void drawCursor(int vfo, bool disable);  // KD0OSS
-    void drawFilter(int vfo, bool diabale);  // KD0OSS
+    void drawFilter(int vfo, bool disable);  // KD0OSS
     void drawNotchFilter(int vfo, int index, bool disable);  // KD0OSS
     void drawdBmLines(void);  // KD0OSS
     void drawFrequencyLines(void);  // KD0OSS

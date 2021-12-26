@@ -106,7 +106,7 @@ extern DISCOVERED *radio;
 extern int region;
 
 // specify how many receivers: for PURESIGNAL need two extra
-#define RECEIVERS 2
+#define RECEIVERS 7
 #ifdef PURESIGNAL
 #define MAX_RECEIVERS (RECEIVERS+2)
 #define PS_TX_FEEDBACK (RECEIVERS)
@@ -135,7 +135,7 @@ extern TRANSMITTER *transmitter;
 enum {
   VFO_A=0,
   VFO_B,
-  MAX_VFOS
+  MAX_VFOS=9
 };
 
 struct _vfo {
@@ -279,4 +279,6 @@ extern void random_cb(bool);
 extern void preamp_cb(bool);
 extern void mic_boost_cb(bool);
 extern void set_tx_power(int pow);
+extern void linein_gain_cb(int gain);
+extern void add_wideband_sample(WIDEBAND *w, int16_t sample);
 #endif // RADIO_H

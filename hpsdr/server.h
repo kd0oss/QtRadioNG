@@ -137,6 +137,7 @@ void* client_thread(void* arg);
 #define TX_IQ_PORT_1 10011
 #define RX_AUDIO_PORT 10020
 #define MIC_AUDIO_PORT 10030
+#define BANDSCOPE_PORT 10040
 
 typedef struct _buffer {
     unsigned short chunk;
@@ -153,6 +154,14 @@ typedef struct _bufferl {
     unsigned short length;
     double data[2048];
 } BUFFERL;
+
+typedef struct _bufferwb {
+    unsigned short chunk;
+    unsigned short radio_id;
+    unsigned short receiver;
+    unsigned short length;
+    int16_t data[16384];
+} BUFFERWB;
 
 typedef struct _mic_buffer
 {
@@ -172,6 +181,7 @@ typedef struct _txiq_entry {
 extern void create_listener_thread(char*);
 extern void init_receivers(int, int);
 extern void send_IQ_buffer(int);
+extern void send_WB_IQ_buffer(int);
 extern void send_Mic_buffer(float sample);
 
 #endif // SERVER_H

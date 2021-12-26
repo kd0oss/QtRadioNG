@@ -32,7 +32,7 @@
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>0</number>
+      <number>4</number>
      </property>
      <widget class="QWidget" name="Server">
       <attribute name="title">
@@ -257,6 +257,18 @@
          <height>181</height>
         </rect>
        </property>
+       <property name="showDropIndicator" stdset="0">
+        <bool>false</bool>
+       </property>
+       <property name="dragDropOverwriteMode">
+        <bool>false</bool>
+       </property>
+       <property name="alternatingRowColors">
+        <bool>true</bool>
+       </property>
+       <attribute name="horizontalHeaderDefaultSectionSize">
+        <number>119</number>
+       </attribute>
        <column>
         <property name="text">
          <string>Title</string>
@@ -266,15 +278,24 @@
         <property name="text">
          <string>Min Frequency</string>
         </property>
+        <property name="textAlignment">
+         <set>AlignCenter</set>
+        </property>
        </column>
        <column>
         <property name="text">
          <string>Max Frequency</string>
         </property>
+        <property name="textAlignment">
+         <set>AlignCenter</set>
+        </property>
        </column>
        <column>
         <property name="text">
          <string>IF Frequency</string>
+        </property>
+        <property name="textAlignment">
+         <set>AlignCenter</set>
         </property>
        </column>
       </widget>
@@ -286,9 +307,9 @@
       <widget class="QComboBox" name="audioDeviceComboBox">
        <property name="geometry">
         <rect>
-         <x>87</x>
-         <y>20</y>
-         <width>208</width>
+         <x>90</x>
+         <y>26</y>
+         <width>521</width>
          <height>27</height>
         </rect>
        </property>
@@ -310,7 +331,7 @@
        <property name="geometry">
         <rect>
          <x>30</x>
-         <y>150</y>
+         <y>70</y>
          <width>71</width>
          <height>17</height>
         </rect>
@@ -322,8 +343,8 @@
       <widget class="QComboBox" name="encodingComboBox">
        <property name="geometry">
         <rect>
-         <x>143</x>
-         <y>140</y>
+         <x>98</x>
+         <y>67</y>
          <width>151</width>
          <height>27</height>
         </rect>
@@ -332,8 +353,8 @@
       <widget class="QLabel" name="label_28">
        <property name="geometry">
         <rect>
-         <x>310</x>
-         <y>30</y>
+         <x>30</x>
+         <y>136</y>
          <width>41</width>
          <height>17</height>
         </rect>
@@ -345,9 +366,9 @@
       <widget class="QComboBox" name="MicComboBox">
        <property name="geometry">
         <rect>
-         <x>340</x>
-         <y>20</y>
-         <width>208</width>
+         <x>60</x>
+         <y>130</y>
+         <width>551</width>
          <height>27</height>
         </rect>
        </property>
@@ -355,8 +376,8 @@
       <widget class="QLabel" name="label_32">
        <property name="geometry">
         <rect>
-         <x>310</x>
-         <y>150</y>
+         <x>30</x>
+         <y>180</y>
          <width>71</width>
          <height>17</height>
         </rect>
@@ -368,8 +389,8 @@
       <widget class="QComboBox" name="MicEncodingComboBox">
        <property name="geometry">
         <rect>
-         <x>398</x>
-         <y>140</y>
+         <x>101</x>
+         <y>176</y>
          <width>151</width>
          <height>27</height>
         </rect>
@@ -378,8 +399,8 @@
       <widget class="QSpinBox" name="spinBox_cwPitch">
        <property name="geometry">
         <rect>
-         <x>215</x>
-         <y>224</y>
+         <x>95</x>
+         <y>312</y>
          <width>59</width>
          <height>27</height>
         </rect>
@@ -400,8 +421,8 @@
       <widget class="QLabel" name="label_cwPitch">
        <property name="geometry">
         <rect>
-         <x>150</x>
-         <y>230</y>
+         <x>30</x>
+         <y>316</y>
          <width>69</width>
          <height>19</height>
         </rect>
@@ -741,7 +762,7 @@
        <item>
         <widget class="QTabWidget" name="tabWidget_2">
          <property name="currentIndex">
-          <number>0</number>
+          <number>2</number>
          </property>
          <widget class="QWidget" name="options">
           <attribute name="title">
@@ -842,7 +863,7 @@
             <property name="geometry">
              <rect>
               <x>7</x>
-              <y>30</y>
+              <y>34</y>
               <width>70</width>
               <height>15</height>
              </rect>
@@ -855,7 +876,7 @@
             <property name="geometry">
              <rect>
               <x>80</x>
-              <y>25</y>
+              <y>30</y>
               <width>54</width>
               <height>24</height>
              </rect>
@@ -979,9 +1000,9 @@
             <property name="geometry">
              <rect>
               <x>16</x>
-              <y>144</y>
+              <y>143</y>
               <width>37</width>
-              <height>15</height>
+              <height>18</height>
              </rect>
             </property>
             <property name="text">
@@ -1053,7 +1074,7 @@
             <property name="geometry">
              <rect>
               <x>10</x>
-              <y>30</y>
+              <y>29</y>
               <width>82</width>
               <height>15</height>
              </rect>
@@ -1066,7 +1087,7 @@
             <property name="geometry">
              <rect>
               <x>10</x>
-              <y>59</y>
+              <y>58</y>
               <width>82</width>
               <height>15</height>
              </rect>
@@ -1662,9 +1683,9 @@
             <property name="geometry">
              <rect>
               <x>10</x>
-              <y>165</y>
+              <y>163</y>
               <width>81</width>
-              <height>16</height>
+              <height>18</height>
              </rect>
             </property>
             <property name="text">
@@ -1688,9 +1709,9 @@
             <property name="geometry">
              <rect>
               <x>10</x>
-              <y>225</y>
+              <y>223</y>
               <width>111</width>
-              <height>16</height>
+              <height>18</height>
              </rect>
             </property>
             <property name="text">
@@ -1710,7 +1731,7 @@
              <number>20</number>
             </property>
            </widget>
-           <widget class="QSpinBox" name="rxAgcMaxGainSpinBox">
+           <widget class="QDoubleSpinBox" name="rxAgcMaxGainSpinBox">
             <property name="geometry">
              <rect>
               <x>120</x>
@@ -1719,19 +1740,13 @@
               <height>23</height>
              </rect>
             </property>
-            <property name="minimum">
-             <number>-20</number>
-            </property>
-            <property name="maximum">
-             <number>120</number>
-            </property>
-            <property name="value">
-             <number>75</number>
+            <property name="decimals">
+             <number>1</number>
             </property>
            </widget>
            <widget class="QSpinBox" name="rxAgcDecaySpinBox">
             <property name="enabled">
-             <bool>false</bool>
+             <bool>true</bool>
             </property>
             <property name="geometry">
              <rect>
@@ -1750,7 +1765,7 @@
            </widget>
            <widget class="QSpinBox" name="rxAgcHangSpinBox">
             <property name="enabled">
-             <bool>false</bool>
+             <bool>true</bool>
             </property>
             <property name="geometry">
              <rect>
@@ -1801,7 +1816,7 @@
            </widget>
            <widget class="QSpinBox" name="rxAgcAttackSpinBox">
             <property name="enabled">
-             <bool>false</bool>
+             <bool>true</bool>
             </property>
             <property name="geometry">
              <rect>
@@ -1848,26 +1863,13 @@
             <property name="geometry">
              <rect>
               <x>50</x>
-              <y>30</y>
+              <y>50</y>
               <width>85</width>
               <height>21</height>
              </rect>
             </property>
             <property name="text">
              <string>Enabled</string>
-            </property>
-           </widget>
-           <widget class="QLabel" name="label_48">
-            <property name="geometry">
-             <rect>
-              <x>20</x>
-              <y>60</y>
-              <width>91</width>
-              <height>16</height>
-             </rect>
-            </property>
-            <property name="text">
-             <string>Max Gain (dB):</string>
             </property>
            </widget>
            <widget class="QLabel" name="label_49">
@@ -1900,29 +1902,13 @@
             <property name="geometry">
              <rect>
               <x>20</x>
-              <y>150</y>
+              <y>148</y>
               <width>81</width>
-              <height>16</height>
+              <height>18</height>
              </rect>
             </property>
             <property name="text">
              <string>Hang (ms):</string>
-            </property>
-           </widget>
-           <widget class="QSpinBox" name="levelerMaxGainSpinBox">
-            <property name="geometry">
-             <rect>
-              <x>120</x>
-              <y>55</y>
-              <width>56</width>
-              <height>23</height>
-             </rect>
-            </property>
-            <property name="maximum">
-             <number>20</number>
-            </property>
-            <property name="value">
-             <number>5</number>
             </property>
            </widget>
            <widget class="QSpinBox" name="levelerAttackSpinBox">
@@ -2014,25 +2000,6 @@
              <number>2</number>
             </property>
            </widget>
-           <widget class="QSpinBox" name="alcHangSpinBox">
-            <property name="geometry">
-             <rect>
-              <x>110</x>
-              <y>140</y>
-              <width>56</width>
-              <height>23</height>
-             </rect>
-            </property>
-            <property name="minimum">
-             <number>10</number>
-            </property>
-            <property name="maximum">
-             <number>5000</number>
-            </property>
-            <property name="value">
-             <number>500</number>
-            </property>
-           </widget>
            <widget class="QLabel" name="label_52">
             <property name="geometry">
              <rect>
@@ -2051,12 +2018,12 @@
              <rect>
               <x>10</x>
               <y>145</y>
-              <width>81</width>
+              <width>99</width>
               <height>16</height>
              </rect>
             </property>
             <property name="text">
-             <string>Hang (ms):</string>
+             <string>Max Gain (dB):</string>
             </property>
            </widget>
            <widget class="QLabel" name="label_54">
@@ -2089,6 +2056,28 @@
             </property>
             <property name="value">
              <number>10</number>
+            </property>
+           </widget>
+           <widget class="QDoubleSpinBox" name="alcMaxGainSpinBox">
+            <property name="geometry">
+             <rect>
+              <x>110</x>
+              <y>137</y>
+              <width>65</width>
+              <height>33</height>
+             </rect>
+            </property>
+            <property name="frame">
+             <bool>false</bool>
+            </property>
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="maximum">
+             <double>50.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.100000000000000</double>
             </property>
            </widget>
           </widget>

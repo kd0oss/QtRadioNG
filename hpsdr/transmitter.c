@@ -43,8 +43,8 @@
 #define min(x,y) (x<y?x:y)
 #define max(x,y) (x<y?y:x)
 
-int tx_filter_low=150;
-int tx_filter_high=2850;
+int tx_filter_low = 150;
+int tx_filter_high = 2850;
 static double *cw_shape_buffer48 = NULL;
 static double *cw_shape_buffer192 = NULL;
 static int cw_shape = 0;
@@ -54,86 +54,86 @@ TRANSMITTER *create_transmitter(int id, int buffer_size)
 {
     int rc;
 
-    TRANSMITTER *tx=(TRANSMITTER*)malloc(sizeof(TRANSMITTER));
-    tx->id=id;
-    tx->dac=0;
-    tx->buffer_size=buffer_size;
+    TRANSMITTER *tx = (TRANSMITTER*)malloc(sizeof(TRANSMITTER));
+    tx->id = id;
+    tx->dac = 0;
+    tx->buffer_size = buffer_size;
 
     switch (protocol)
     {
     case ORIGINAL_PROTOCOL:
-        tx->mic_sample_rate=48000;
-        tx->mic_dsp_rate=48000;
-        tx->iq_output_rate=48000;
+        tx->mic_sample_rate = 48000;
+        tx->mic_dsp_rate = 48000;
+        tx->iq_output_rate = 48000;
         break;
     case NEW_PROTOCOL:
-        tx->mic_sample_rate=48000;
-        tx->mic_dsp_rate=96000;
-        tx->iq_output_rate=192000;
+        tx->mic_sample_rate = 48000;
+        tx->mic_dsp_rate = 96000;
+        tx->iq_output_rate = 192000;
         break;
 
     }
     int ratio = tx->iq_output_rate / tx->mic_sample_rate;
     tx->output_samples = tx->buffer_size * ratio;
 
-    tx->displaying=0;
+    tx->displaying = 0;
 
-    tx->alex_antenna=ALEX_TX_ANTENNA_1;
+    tx->alex_antenna = ALEX_TX_ANTENNA_1;
 
     fprintf(stderr,"create_transmitter: id=%d buffer_size=%d mic_sample_rate=%d mic_dsp_rate=%d iq_output_rate=%d output_samples=%d\n",tx->id, tx->buffer_size, tx->mic_sample_rate, tx->mic_dsp_rate, tx->iq_output_rate, tx->output_samples);
 
-    tx->filter_low=tx_filter_low;
-    tx->filter_high=tx_filter_high;
-    tx->use_rx_filter=false;
+    tx->filter_low = tx_filter_low;
+    tx->filter_high = tx_filter_high;
+    tx->use_rx_filter = false;
 
-    tx->out_of_band=0;
+    tx->out_of_band = 0;
 
-    tx->low_latency=0;
+    tx->low_latency = 0;
 
-    tx->twotone=0;
-    tx->puresignal=0;
-    tx->feedback=0;
-    tx->auto_on=0;
-    tx->single_on=0;
+    tx->twotone = 0;
+    tx->puresignal = 0;
+    tx->feedback = 0;
+    tx->auto_on = 0;
+    tx->single_on = 0;
 
-    tx->attenuation=0;
-    tx->ctcss=11;
-    tx->ctcss_enabled=false;
+    tx->attenuation = 0;
+    tx->ctcss = 11;
+    tx->ctcss_enabled = false;
 
-    tx->deviation=2500;
-    tx->am_carrier_level=0.5;
+    tx->deviation = 2500;
+    tx->am_carrier_level = 0.5;
 
-    tx->drive=50;
-    tx->tune_percent=10;
-    tx->tune_use_drive=0;
+    tx->drive = 50;
+    tx->tune_percent = 10;
+    tx->tune_use_drive = 0;
 
-    tx->compressor=0;
-    tx->compressor_level=0.0;
+    tx->compressor = 0;
+    tx->compressor_level = 0.0;
 
-    tx->local_microphone=0;
-    tx->microphone_name=NULL;
+    tx->local_microphone = 0;
+    tx->microphone_name = NULL;
 
-    tx->xit_enabled=false;
-    tx->xit=0LL;
+    tx->xit_enabled = false;
+    tx->xit = 0LL;
 
     // allocate buffers
     fprintf(stderr, "transmitter: allocate buffers: mic_input_buffer=%d iq_output_buffer=%d\n", tx->buffer_size, tx->output_samples);
 
     tx->mic_input_buffer = (double*)malloc((2*tx->buffer_size) * sizeof(double));
     tx->iq_output_buffer = (double*)malloc((2*tx->output_samples) * sizeof(double));
-    tx->samples=0;
+    tx->samples = 0;
 
     if (cw_shape_buffer48) free(cw_shape_buffer48);
     if (cw_shape_buffer192) free(cw_shape_buffer192);
     //
     // We need this one both for old and new protocol, since
     // is is also used to shape the audio samples
-    cw_shape_buffer48=(double*)malloc(tx->buffer_size * sizeof(double));
+    cw_shape_buffer48 = (double*)malloc(tx->buffer_size * sizeof(double));
     if (protocol == NEW_PROTOCOL)
     {
         // We need this buffer for the new protocol only, where it is only
         // used to shape the TX envelope
-        cw_shape_buffer192=(double*)malloc(tx->output_samples * sizeof(double));
+        cw_shape_buffer192 = (double*)malloc(tx->output_samples * sizeof(double));
     }
     fprintf(stderr, "transmitter: allocate buffers: mic_input_buffer=%p iq_output_buffer=%p\n", tx->mic_input_buffer, tx->iq_output_buffer);
 
@@ -143,35 +143,35 @@ TRANSMITTER *create_transmitter(int id, int buffer_size)
 
 static double compute_power(double p)
 {
-    double interval=10.0;
+    double interval = 10.0;
     switch (pa_power)
     {
     case PA_1W:
-        interval=100.0; // mW
+        interval = 100.0; // mW
         break;
     case PA_10W:
-        interval=1.0; // W
+        interval = 1.0; // W
         break;
     case PA_30W:
-        interval=3.0; // W
+        interval = 3.0; // W
         break;
     case PA_50W:
-        interval=5.0; // W
+        interval = 5.0; // W
         break;
     case PA_100W:
-        interval=10.0; // W
+        interval = 10.0; // W
         break;
     case PA_200W:
-        interval=20.0; // W
+        interval = 20.0; // W
         break;
     case PA_500W:
-        interval=50.0; // W
+        interval = 50.0; // W
         break;
     }
     int i=0;
     if (p > (double)pa_trim[10])
     {
-        i=9;
+        i = 9;
     }
     else
     {
@@ -248,24 +248,24 @@ void updateTx(TRANSMITTER *tx)
 #ifdef PURESIGNAL
         }
 #endif
-        double constant1=3.3;
-        double constant2=0.095;
-        int fwd_cal_offset=6;
+        double constant1 = 3.3;
+        double constant2 = 0.095;
+        int fwd_cal_offset = 6;
 
         int fwd_power;
         int rev_power;
         int ex_power;
         double v1;
 
-        fwd_power=alex_forward_power;
-        rev_power=alex_reverse_power;
+        fwd_power = alex_forward_power;
+        rev_power = alex_reverse_power;
         if (device == DEVICE_HERMES_LITE || device == DEVICE_HERMES_LITE2)
         {
-            ex_power=0;
+            ex_power = 0;
         }
         else
         {
-            ex_power=exciter_power;
+            ex_power = exciter_power;
         }
         switch (protocol)
         {
@@ -273,130 +273,130 @@ void updateTx(TRANSMITTER *tx)
             switch (device)
             {
             case DEVICE_METIS:
-                constant1=3.3;
-                constant2=0.09;
+                constant1 = 3.3;
+                constant2 = 0.09;
                 break;
             case DEVICE_HERMES:
             case DEVICE_STEMLAB:
-                constant1=3.3;
-                constant2=0.095;
+                constant1 = 3.3;
+                constant2 = 0.095;
                 break;
             case DEVICE_ANGELIA:
-                constant1=3.3;
-                constant2=0.095;
+                constant1 = 3.3;
+                constant2 = 0.095;
                 break;
             case DEVICE_ORION:
-                constant1=5.0;
-                constant2=0.108;
-                fwd_cal_offset=4;
+                constant1 = 5.0;
+                constant2 = 0.108;
+                fwd_cal_offset = 4;
                 break;
             case DEVICE_ORION2:
-                constant1=5.0;
-                constant2=0.08;
-                fwd_cal_offset=18;
+                constant1 = 5.0;
+                constant2 = 0.08;
+                fwd_cal_offset = 18;
                 break;
             case DEVICE_HERMES_LITE:
             case DEVICE_HERMES_LITE2:
                 // possible reversed depending polarity of current sense transformer
-                if (rev_power>fwd_power)
+                if (rev_power > fwd_power)
                 {
-                    fwd_power=alex_reverse_power;
-                    rev_power=alex_forward_power;
+                    fwd_power = alex_reverse_power;
+                    rev_power = alex_forward_power;
                 }
-                constant1=3.3;
-                constant2=1.4;
-                fwd_cal_offset=6;
+                constant1 = 3.3;
+                constant2 = 1.4;
+                fwd_cal_offset = 6;
                 break;
             }
 
             if (fwd_power == 0)
             {
-                fwd_power=ex_power;
+                fwd_power = ex_power;
             }
-            fwd_power=fwd_power-fwd_cal_offset;
-            v1=((double)fwd_power/4095.0)*constant1;
-            transmitter->fwd=(v1*v1)/constant2;
+            fwd_power = fwd_power-fwd_cal_offset;
+            v1 = ((double)fwd_power/4095.0)*constant1;
+            transmitter->fwd = (v1*v1)/constant2;
 
             if (device == DEVICE_HERMES_LITE || device == DEVICE_HERMES_LITE2)
             {
-                transmitter->exciter=0.0;
+                transmitter->exciter = 0.0;
             }
             else
             {
-                ex_power=ex_power-fwd_cal_offset;
-                v1=((double)ex_power/4095.0)*constant1;
-                transmitter->exciter=(v1*v1)/constant2;
+                ex_power = ex_power-fwd_cal_offset;
+                v1 = ((double)ex_power/4095.0)*constant1;
+                transmitter->exciter = (v1*v1)/constant2;
             }
 
-            transmitter->rev=0.0;
+            transmitter->rev = 0.0;
             if (fwd_power != 0)
             {
-                v1=((double)rev_power/4095.0)*constant1;
-                transmitter->rev=(v1*v1)/constant2;
+                v1 = ((double)rev_power/4095.0)*constant1;
+                transmitter->rev = (v1*v1)/constant2;
             }
             break;
         case NEW_PROTOCOL:
             switch (device)
             {
             case NEW_DEVICE_ATLAS:
-                constant1=3.3;
-                constant2=0.09;
+                constant1 = 3.3;
+                constant2 = 0.09;
                 break;
             case NEW_DEVICE_HERMES:
-                constant1=3.3;
-                constant2=0.09;
+                constant1 = 3.3;
+                constant2 = 0.09;
                 break;
             case NEW_DEVICE_HERMES2:
-                constant1=3.3;
-                constant2=0.095;
+                constant1 = 3.3;
+                constant2 = 0.095;
                 break;
             case NEW_DEVICE_ANGELIA:
-                constant1=3.3;
-                constant2=0.095;
+                constant1 = 3.3;
+                constant2 = 0.095;
                 break;
             case NEW_DEVICE_ORION:
-                constant1=5.0;
-                constant2=0.108;
-                fwd_cal_offset=4;
+                constant1 = 5.0;
+                constant2 = 0.108;
+                fwd_cal_offset = 4;
                 break;
             case NEW_DEVICE_ORION2:
-                constant1=5.0;
-                constant2=0.08;
-                fwd_cal_offset=18;
+                constant1 = 5.0;
+                constant2 = 0.08;
+                fwd_cal_offset = 18;
                 break;
             case NEW_DEVICE_HERMES_LITE:
             case NEW_DEVICE_HERMES_LITE2:
-                constant1=3.3;
-                constant2=0.09;
+                constant1 = 3.3;
+                constant2 = 0.09;
                 break;
             }
 
-            fwd_power=alex_forward_power;
-            if (fwd_power==0)
+            fwd_power = alex_forward_power;
+            if (fwd_power == 0)
             {
-                fwd_power=exciter_power;
+                fwd_power = exciter_power;
             }
-            fwd_power=fwd_power-fwd_cal_offset;
-            v1=((double)fwd_power/4095.0)*constant1;
-            transmitter->fwd=(v1*v1)/constant2;
+            fwd_power = fwd_power-fwd_cal_offset;
+            v1 = ((double)fwd_power/4095.0)*constant1;
+            transmitter->fwd = (v1*v1)/constant2;
 
-            ex_power=exciter_power;
-            ex_power=ex_power-fwd_cal_offset;
-            v1=((double)ex_power/4095.0)*constant1;
-            transmitter->exciter=(v1*v1)/constant2;
+            ex_power = exciter_power;
+            ex_power = ex_power-fwd_cal_offset;
+            v1 = ((double)ex_power/4095.0)*constant1;
+            transmitter->exciter = (v1*v1)/constant2;
 
-            transmitter->rev=0.0;
-            if (alex_forward_power!=0)
+            transmitter->rev = 0.0;
+            if (alex_forward_power != 0)
             {
-                rev_power=alex_reverse_power;
-                v1=((double)rev_power/4095.0)*constant1;
-                transmitter->rev=(v1*v1)/constant2;
+                rev_power = alex_reverse_power;
+                v1 = ((double)rev_power/4095.0)*constant1;
+                transmitter->rev = (v1*v1)/constant2;
             }
             break;
         }
 
-        double fwd=compute_power(transmitter->fwd);
-        double rev=compute_power(transmitter->rev);
+        double fwd = compute_power(transmitter->fwd);
+        double rev = compute_power(transmitter->rev);
 
        // fprintf(stderr, "transmitter: meter_update: fwd:%f->%f rev:%f->%f ex_fwd=%d alex_fwd=%d alex_rev=%d\n",transmitter->fwd,fwd,transmitter->rev,rev,exciter_power,alex_forward_power,alex_reverse_power);
 

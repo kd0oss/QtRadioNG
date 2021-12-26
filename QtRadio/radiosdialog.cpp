@@ -8,6 +8,7 @@ RadiosDialog::RadiosDialog(QWidget *parent): QDialog(parent), ui(new Ui::RadiosD
     servers = 0;
     selected_channel = -1;
     active_channels = 0;
+
     for (int i=0;i<4;i++)
     {
         manifest_xml[i].clear();
@@ -61,7 +62,10 @@ void RadiosDialog::fillRadioTable()
             newItem->setTextAlignment(Qt::AlignRight|Qt::AlignVCenter);
             ui->radioListTable->setItem(row, 2, newItem);
 //            value = getXcvrProperty(i, x, "supported_transmitters");
-            newItem = new QTableWidgetItem(QString("%1").arg(channel[i].transmitter));
+            if (channel[i].transmitter >= 0)
+                newItem = new QTableWidgetItem(QString("%1").arg(channel[i].transmitter));
+            else
+                newItem = new QTableWidgetItem("NA");
             newItem->setTextAlignment(Qt::AlignRight|Qt::AlignVCenter);
             ui->radioListTable->setItem(row, 3, newItem);
             newItem = new QTableWidgetItem(QString("%1").arg(channel[i].enabled));

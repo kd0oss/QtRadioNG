@@ -1,7 +1,13 @@
 #ifndef HERMESFRAME_H
 #define HERMESFRAME_H
 
+//#include <QtCore>
+//#if QT_VERSION >= 0x050000
+//#include <QtWidgets/QFrame>
+//#else
 #include <QFrame>
+#include <QSettings>
+//#endif
 #include "UI.h"
 
 enum HCOMMAND_SET {
@@ -40,7 +46,7 @@ enum HCOMMAND_SET {
 };
 
 namespace Ui {
-class HermesFrame;
+    class HermesFrame;
 }
 
 class HermesFrame : public QFrame
@@ -50,11 +56,13 @@ class HermesFrame : public QFrame
 public:
     explicit HermesFrame(UI *pUI, QWidget *parent = 0);
     ~HermesFrame();
+    void initialize(void);
 
 private:
     Ui::HermesFrame *ui;
     bool tuning;
     UI *pui;
+    QSettings *settings;
 
     void getSerial(void);
 
@@ -72,9 +80,10 @@ private slots:
     void setAttenuation(bool);
     void setOCOutputs(void);
     void attSliderChanged(void);
+    void tuneClicked(void);
 
 signals:
     void hhcommand(QByteArray);
+    void pttTuneChange(int caller, bool ptt);//0 = MOX, 1 = Tune, 2 = VOX, 3 = Extern H'ware};
 };
-
 #endif // HERMESFRAME_H

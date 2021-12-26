@@ -7,7 +7,7 @@
 
 Meter::Meter(QString title, short mtype)
 {
-    image=new QImage(150,56,QImage::Format_ARGB32);
+    image=new QImage(150, 105, QImage::Format_ARGB32);
     image->fill(0xFFFFFFFF);
 
     type = mtype;
@@ -181,17 +181,20 @@ QImage Meter::getImage(float meter1, float meter2)
         calculateNeedle((int)(meter1), 0, 75);
         painter.drawLine(dxmin, dymin, dxmax, dymax);
         painter.setPen(Qt::black);
-        strDbm.sprintf("%1.1f SWR  %2.1f W", (meter1 + meter2)/(meter1 - meter2), meter1);
+        strDbm.sprintf("%2.1f SWR  %4.1f W", (meter1 + meter2)/(meter1 - meter2), meter1);
+        QRectF r1(image->width()-133, image->height()-15, 105, 20);
+        painter.drawText(r1, Qt::AlignRight, strDbm);
     }
     else
     {
         calculateNeedle((int)meter1, 0, 75);
         painter.drawLine(dxmin, dymin, dxmax, dymax);
         painter.setPen(Qt::black);
+        painter.setBackground(QBrush(QColor(Qt::white)));
         strDbm.sprintf("%d dBm", (int)meter1);
+        QRectF r1(image->width()-150, image->height()-15, 105, 20);
+        painter.drawText(r1, Qt::AlignRight, strDbm);
     }
-    QRectF r1(image->width()-123, image->height()-15, 115, 20);
-    painter.drawText(r1, Qt::AlignRight, strDbm);
 
     return qImage;
 }

@@ -28,29 +28,38 @@ class Bandscope : public QFrame
     Q_OBJECT
 
 public:
-    explicit Bandscope(QWidget *parent = 0);
+    explicit Bandscope(SpectrumConnection *pConn, QWidget *parent = 0);
     ~Bandscope();
 
+    bool isConnected;
     void closeEvent(QCloseEvent* event);
-    void connect(QString host);
+    void resizeEvent(QResizeEvent *event);
+    void connect();
     void disconnect();
 
 public slots:
-    void bandscopeBuffer(char* header,char* buffer);
+    void bandscopeBuffer(spectrum);
     void connected();
-    void disconnected(QString message);
+    void disconnected();
     void updateBandscope();
 
 protected:
     void paintEvent(QPaintEvent*);
 
+signals:
+    void closeBandScope();
+
 private:
     Ui::Bandscope *ui;
 
-    SpectrumConnection connection;
+    WidebandConnection *connection;
+
+    //SpectrumConnection *connection;
 
     int bandscopeHigh;
     int bandscopeLow;
+    QString host;
+    int     port;
     QVector <QPoint> plot;
 };
 

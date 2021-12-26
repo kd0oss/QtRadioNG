@@ -33,6 +33,7 @@ extern "C" {
 #endif
 #include <stdbool.h>
 
+
 #define SYNC 0x7F
 #define HW_BUFFER_SIZE 512
 
@@ -82,6 +83,14 @@ typedef struct _bufferl {
     double data[2048];
 } BUFFERL;
 
+typedef struct _bufferwb {
+    unsigned short chunk;
+    unsigned short radio_id;
+    unsigned short receiver;
+    unsigned short length;
+    int16_t data[16384];
+} BUFFERWB;
+
 typedef enum {
     RECEIVER_DETACHED, RECEIVER_ATTACHED
 } RECEIVER_STATE;
@@ -113,7 +122,9 @@ typedef struct _channel
     short int radio_id;
     char      radio_type[25];
     short int receiver;
+    short int recv_index;
     short int transmitter;
+    short int trans_index;
     bool      enabled;
 } CHANNEL;
 
@@ -259,17 +270,18 @@ void hw_set_harware_control(char);
 
 int set_frequency();
 
+void setStopIQIssued(int val);
+int  getStopIQIssued(void);
 void hw_set_local_audio(int state);
 void hw_set_port_audio(int state);
 void hw_set_debug(int state);
 int  hwSetTxMode(int mode);
 int  hwSetMox(int state);
 void hw_send(unsigned char* data, int length, int rd);
-int  hwSendStarCommand(char *command);
+int  hwSendStarCommand(char *command, int);
 void hw_set_src_ratio(void);
-void hw_startIQ(void);
+void hw_startIQ(int);
 void hw_stopIQ(void);
-void iq_monitor(double *iqdata, int length);
 
 extern int audio_socket;
 extern struct sockaddr_in audio_addr, server_audio_addr;

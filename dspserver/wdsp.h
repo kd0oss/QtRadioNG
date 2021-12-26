@@ -63,7 +63,7 @@ enum rxaMeterType {
 
 extern void SetRXAMode (int channel, int mode);
 extern void SetRXABandpassRun (int channel, int run);
-extern void SetRXABandpassFreqs (int channel, double low, double high);
+//extern void SetRXABandpassFreqs (int channel, double low, double high);
 extern void RXASetPassband (int channel, double f_low, double f_high);
 extern void SetRXAFMSQRun (int channel, int run);
 extern void SetRXAFMSQThreshold (int channel, double threshold);
@@ -78,6 +78,11 @@ extern double GetRXAMeter (int channel, int mt);
 extern void SetRXAPanelBinaural(int channel, int bin);
 extern void SetRXAPanelPan (int channel, double pan);
 extern void RXANBPSetFreqs (int channel, double low, double high);
+extern void RXANBPSetRun (int channel, int run);
+extern void RXANBPSetNotchesRun (int channel, int run);
+extern int RXANBPAddNotch (int channel, int notch, double fcenter, double fwidth, int active);
+extern int RXANBPEditNotch (int channel, int notch, double fcenter, double fwidth, int active);
+extern int RXANBPDeleteNotch (int channel, int notch);
 extern void SetRXASNBAOutputBandwidth (int channel, double low, double high);
 
 extern void RXAGetaSipF1(int channel, float* out, int size);
@@ -195,6 +200,7 @@ extern double GetTXAMeter (int channel, int mt);
 extern void SetTXAALCSt (int channel, int state);
 extern void SetTXAALCAttack (int channel, int attack);
 extern void SetTXAALCDecay (int channel, int decay);
+extern void SetTXAALCMaxGain (int channel, double maxgain);
 extern void SetTXAALCHang (int channel, int hang);
 
 extern void SetTXALevelerSt (int channel, int state);

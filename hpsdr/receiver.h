@@ -67,6 +67,23 @@ typedef struct _receiver {
 } RECEIVER;
 
 
+typedef struct _wideband {
+  int channel; // WDSP channel
+  int adc;
+  int buffer_size;
+  int fft_size;
+
+  int samples;
+  int pixels;
+
+  double hz_per_pixel;
+
+  long long sequence;
+  int16_t *input_buffer;
+  float *pixel_samples;
+} WIDEBAND;
+
+
 //extern RECEIVER *create_pure_signal_receiver(int id, int buffer_size,int sample_rate,int pixels);
 extern RECEIVER *create_receiver(int id, int buffer_size, int alexRxAntenna, int alexAttenuation);
 extern void add_iq_samples(RECEIVER *rx, double i_sample,double q_sample);

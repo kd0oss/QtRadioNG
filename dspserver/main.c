@@ -238,7 +238,7 @@ int main(int argc, char* argv[])
     // the tx_thread reads the Mic_audio_stream queue, makes the sample rate adaption
     // process the data into WDSP in order to get the modulation process done,
     // and sends back to the hardware server process (via hw_send() )
-    tx_init();
+ //   tx_init();
 
     while (1)
     {

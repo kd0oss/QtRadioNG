@@ -97,6 +97,7 @@ public:
     void rigctlSetMode(int newmode);
     void rigctlSetFilter(int newfilter);
     void rigSetPTT(int enabled);
+    bool rigGetPTT(void);
     ServerConnection connection;
     SpectrumConnection spectrumConnection;
     AudioConnection audioConnection;
@@ -104,6 +105,7 @@ public:
     TxPanadapter *txp;
     Mode mode;
     int currentChannel;
+    double currentPwr;
 
 signals:
     void initialize_audio(int length);
@@ -224,21 +226,21 @@ public slots:
     void receiverChanged(int rx);
 
     void agcSlopeChanged(int);
-    void agcMaxGainChanged(int);
+    void agcMaxGainChanged(double);
     void agcAttackChanged(int);
     void agcDecayChanged(int);
     void agcHangChanged(int);
-    void agcFixedGainChanged(int);
+    void agcFixedGainChanged(double);
     void agcHangThreshChanged(int);
     void levelerStateChanged(int);
-    void levelerMaxGainChanged(int);
+ //   void levelerMaxGainChanged(double);
     void levelerAttackChanged(int);
     void levelerDecayChanged(int);
-    void levelerHangChanged(int);
-    void alcStateChanged(int);
-    void alcAttackChanged(int);
-    void alcDecayChanged(int);
-    void alcHangChanged(int);
+    void levelerTopChanged(double);
+    void TXalcStateChanged(int);
+    void TXalcAttackChanged(int);
+    void TXalcDecayChanged(int);
+    void TXalcMaxGainChanged(double);
 
     void AGCTLevelChanged(int level);
     void enableRxEq(bool);
@@ -247,7 +249,7 @@ public slots:
     void nrValuesChanged(int,int,double,double);
     void anfValuesChanged(int,int,double,double);
     void nbThresholdChanged(double);
-    void sdromThresholdChanged(double);
+ //   void sdromThresholdChanged(double);
     void windowTypeChanged(int);
     void statusMessage(QString);
     void removeNotchFilter(void);
@@ -295,6 +297,7 @@ private slots:
     void hardwareSet(QString);
     void sendHardwareCommand(QByteArray);
     void setCurrentChannel(int);
+    void closeBandScope(void);
 
 private:
     void printWindowTitle(QString message);
@@ -348,7 +351,7 @@ private:
 
     Xvtr xvtr;
 
-    void *hf;
+  //  void *hf;
 
     int agc;
     int cwPitch;

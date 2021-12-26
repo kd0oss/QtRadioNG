@@ -91,9 +91,11 @@ UI::UI(const QString server)
     meter = -121;
 
     widget.statusbar->showMessage("QtRadio NG branch: KD0OSS 2020");
+    widget.actionBandscope->setEnabled(false);
 
     txp = new TxPanadapter();
     widget.txSpectrumView->setScene(txp->txpanadapterScene);
+    connect(txp, SIGNAL(meterValue(float,float)), this, SLOT(getMeterValue(float,float)));
 
     // connect up all the menus
     connect(&connection, SIGNAL(isConnected(int)), this, SLOT(connected(int)));
@@ -237,24 +239,24 @@ UI::UI(const QString server)
     connect(&configure, SIGNAL(nrValuesChanged(int,int,double,double)), this, SLOT(nrValuesChanged(int,int,double,double)));
     connect(&configure, SIGNAL(anfValuesChanged(int,int,double,double)), this, SLOT(anfValuesChanged(int,int,double,double)));
     connect(&configure, SIGNAL(nbThresholdChanged(double)), this, SLOT(nbThresholdChanged(double)));
-    connect(&configure, SIGNAL(sdromThresholdChanged(double)), this, SLOT(sdromThresholdChanged(double)));
+//    connect(&configure, SIGNAL(sdromThresholdChanged(double)), this, SLOT(sdromThresholdChanged(double)));
     connect(&configure, SIGNAL(windowTypeChanged(int)), this, SLOT(windowTypeChanged(int)));
     connect(&configure, SIGNAL(agcAttackChanged(int)), this, SLOT(agcAttackChanged(int)));
     connect(&configure, SIGNAL(agcMaxGainChanged(int)), this, SLOT(agcMaxGainChanged(int)));
     connect(&configure, SIGNAL(agcSlopeChanged(int)), this, SLOT(agcSlopeChanged(int)));
     connect(&configure, SIGNAL(agcDecayChanged(int)), this, SLOT(agcDecayChanged(int)));
     connect(&configure, SIGNAL(agcHangChanged(int)), this, SLOT(agcHangChanged(int)));
-    connect(&configure, SIGNAL(agcFixedGainChanged(int)), this, SLOT(agcFixedGainChanged(int)));
+    connect(&configure, SIGNAL(agcFixedGainChanged(double)), this, SLOT(agcFixedGainChanged(double)));
     connect(&configure, SIGNAL(agcHangThreshChanged(int)), this, SLOT(agcHangThreshChanged(int)));
     connect(&configure, SIGNAL(levelerStateChanged(int)), this, SLOT(levelerStateChanged(int)));
-    connect(&configure, SIGNAL(levelerMaxGainChanged(int)), this, SLOT(levelerMaxGainChanged(int)));
+//    connect(&configure, SIGNAL(levelerMaxGainChanged(double)), this, SLOT(levelerMaxGainChanged(double)));
     connect(&configure, SIGNAL(levelerAttackChanged(int)), this, SLOT(levelerAttackChanged(int)));
     connect(&configure, SIGNAL(levelerDecayChanged(int)), this, SLOT(levelerDecayChanged(int)));
     connect(&configure, SIGNAL(levelerHangChanged(int)), this, SLOT(levelerHangChanged(int)));
     connect(&configure, SIGNAL(alcStateChanged(int)), this, SLOT(alcStateChanged(int)));
     connect(&configure, SIGNAL(alcAttackChanged(int)), this, SLOT(alcAttackChanged(int)));
     connect(&configure, SIGNAL(alcDecayChanged(int)), this, SLOT(alcDecayChanged(int)));
-    connect(&configure, SIGNAL(alcHangChanged(int)), this, SLOT(alcHangChanged(int)));
+    connect(&configure, SIGNAL(alcMaxGainChanged(int)), this, SLOT(alcHangChanged(int)));
     connect(&configure, SIGNAL(addXVTR(QString,long long,long long,long long,long long,int,int)), this, SLOT(addXVTR(QString,long long,long long,long long,long long,int,int)));
     connect(&configure, SIGNAL(deleteXVTR(int)), this, SLOT(deleteXVTR(int)));
     connect(&configure, SIGNAL(spinBox_cwPitchChanged(int)), this, SLOT(cwPitchChanged(int)));
@@ -318,6 +320,7 @@ UI::~UI()
 {
     connection.disconnect();
     equalizer->deleteLater();
+    bandscope->deleteLater();
     saveSettings();
 } // end destructor
 
@@ -620,6 +623,16 @@ void UI::actionDisconnectNow()
 
 void UI::actionDisconnect()
 {
+    QByteArray command;
+
+    if (bandscope != NULL)
+        bandscope->close();
+
+    command.clear();
+    command.append((char)STARCOMMAND);
+    command.append((char)DETACH);
+    command.append((char)currentChannel);
+    connection.sendCommand(command);
 
     qDebug() << "actionDisconnect() QuickIP=" << QuickIP;
     if (QuickIP.length() > 6)
@@ -761,7 +774,7 @@ void UI::connected(int channel)
     connection.sendCommand(command);
 
     command.clear();
-    command.append((char)SETAGC);
+    command.append((char)SETRXAGCMODE);
     command.append(agc);
     connection.sendCommand(command);
 
@@ -818,9 +831,25 @@ void UI::connected(int channel)
     windowTypeChanged(configure.getWindowType());
 
     printWindowTitle("Remote connected");
-/*
+
     qDebug("Sending advanced setup commands.");
 
+    command.clear();
+    command.append((char)SETTXALCATTACK);
+    command.append(QString("%1").arg(configure.getALCAttackValue()));
+    connection.sendCommand(command);
+
+    command.clear();
+    command.append((char)SETTXALCDECAY);
+    command.append(QString("%1").arg(configure.getALCDecayValue()));
+    connection.sendCommand(command);
+
+    command.clear();
+    command.append((char)SETTXALCMAXGAIN);
+    command.append(QString("%1").arg(configure.getALCMaxGainValue()));
+    connection.sendCommand(command);
+
+/*
     command.clear();
     QTextStream(&command) << "setrxagcmaxgain " << configure.getRxAGCMaxGainValue();
     connection.sendCommand(command);
@@ -910,6 +939,8 @@ void UI::disconnected(QString message)
     chkTX = false;
     loffset = 0;
 
+    widget.actionBandscope->setEnabled(false);
+
     spectrumConnection.disconnect();
     audioConnection.disconnect();
     micAudioConnection.disconnect();
@@ -986,12 +1017,12 @@ void UI::updateSpectrum()
 
 void UI::spectrumBuffer(spectrum spec)
 {
-  // qDebug()<<Q_FUNC_INFO << "spectrumBuffer";
+   //qDebug()<<Q_FUNC_INFO << "spectrumBuffer";
 
     sampleRate = spec.sample_rate;
-//    if (txNow)
-  //      txp->updateSpectrumFrame(spec);
-//    else
+    if (txNow)
+        txp->updateSpectrumFrame(spec);
+    else
         widget.spectrumView->updateSpectrumFrame(spec);
     spectrumConnection.freeBuffers(spec);
 } // end spectrumBuffer
@@ -1766,6 +1797,7 @@ void UI::filterChanged(int previousFilter,int newFilter)
     command.append(QString("%1,%2").arg(low).arg(high));
     connection.sendCommand(command);
     widget.spectrumView->setFilter(low, high);
+    txp->setFilter(low, high);
     widget.spectrumView->setFilter(filters.getText());
     //    widget.waterfallView->setFilter(low,high);
     band.setFilter(newFilter);
@@ -1959,7 +1991,7 @@ void UI::actionFixed()
     agc = AGC_FIXED;
 
     command.clear();
-    command.append((char)SETAGC);
+    command.append((char)SETRXAGCMODE);
     command.append((char)agc);
     connection.sendCommand(command);
     AGCTLevelChanged(widget.agcTLevelSlider->value());
@@ -1991,7 +2023,7 @@ void UI::actionSlow()
     agc = AGC_SLOW;
 
     command.clear();
-    command.append((char)SETAGC);
+    command.append((char)SETRXAGCMODE);
     command.append((char)agc);
     connection.sendCommand(command);
 } // end actionSlow
@@ -2023,7 +2055,7 @@ void UI::actionMedium()
     agc = AGC_MEDIUM;
 
     command.clear();
-    command.append((char)SETAGC);
+    command.append((char)SETRXAGCMODE);
     command.append((char)agc);
     connection.sendCommand(command);
 } // end actionMedium
@@ -2054,7 +2086,7 @@ void UI::actionFast()
     agc = AGC_FAST;
 
     command.clear();
-    command.append((char)SETAGC);
+    command.append((char)SETRXAGCMODE);
     command.append((char)agc);
     connection.sendCommand(command);
 }  // end actionFast
@@ -2084,7 +2116,7 @@ void UI::actionLong()
     }
     agc = AGC_LONG;
     command.clear();
-    command.append((char)SETAGC);
+    command.append((char)SETRXAGCMODE);
     command.append((char)agc);
     connection.sendCommand(command);
 } // end actionLong
@@ -2114,10 +2146,11 @@ void UI::actionBandscope()
     if (widget.actionBandscope->isChecked())
     {
         if (bandscope == NULL)
-            bandscope = new Bandscope();
+            bandscope = new Bandscope(&spectrumConnection);
+        connect(bandscope, SIGNAL(closeBandScope()), this, SLOT(closeBandScope()));
         bandscope->setWindowTitle("QtRadio Bandscope");
         bandscope->show();
-        bandscope->connect(configure.getHost());
+        bandscope->connect();
     }
     else
     {
@@ -2127,6 +2160,13 @@ void UI::actionBandscope()
             bandscope->disconnect();
         }
     }
+}
+
+
+void UI::closeBandScope(void)
+{
+    qDebug() << "Disable BandScope.";
+    widget.actionBandscope->setChecked(false);
 }
 
 
@@ -2202,15 +2242,6 @@ void UI::nbThresholdChanged(double threshold)
     command.append((char)SETNBVAL);
     command.append(QString("%1").arg(threshold));
     connection.sendCommand(command);
-}
-
-
-void UI::sdromThresholdChanged(double threshold)
-{
-    QString command;
-    command.clear();
-    QTextStream(&command) << "SetSDROMVals " << threshold;
-    //connection.sendCommand(command);
 }
 
 
@@ -2576,13 +2607,10 @@ void UI::pttChange(int caller, bool ptt)
 {
     QByteArray command;
     static int workingMode;
-    static double currentPwr;
+//    static double currentPwr;
 
-    tuning = caller;
-    if (tuning == 1)
-        emit tuningEnable(true);
-    else
-        emit tuningEnable(false);
+    if (caller == 1)
+        emit tuningEnable(ptt);
 
     if (configure.getTxAllowed())
     {
@@ -2595,8 +2623,8 @@ void UI::pttChange(int caller, bool ptt)
             if (caller == 1)
             { //We have clicked the tune button so switch to AM and set carrier level
      //////           currentPwr = (double)widget.ctlFrame->getTxPwr();
+                workingMode = mode.getMode(); //Save the current mode for restoration when we finish tuning
                 actionAM();
-                //   workingMode = mode.getMode(); //Save the current mode for restoration when we finish tuning
                 // Set the AM carrier level to match the tune power slider value in a scale 0 to 1.0
                 if ((dspversion >= 20120201)  && canTX && chkTX)
                 {
@@ -2610,7 +2638,7 @@ void UI::pttChange(int caller, bool ptt)
                     command.append((char)SETTXAMCARLEV);
     //////                command.append(QString("%1").arg(widget.ctlFrame->getTunePwr()));
                 }
-                connection.sendCommand(command);
+    //////            connection.sendCommand(command);
                 //Mute the receiver audio and freeze the spectrum and waterfall display
                 connection.setMuted(true);
                 //Key the radio
@@ -2730,6 +2758,9 @@ void UI::pttChange(int caller, bool ptt)
             connection.setMuted(false);
             widget.vfoFrame->pttChange(ptt); //Set band select buttons etc. to Rx state on VFO
             disconnect(audioinput, SIGNAL(mic_update_level(qreal)),widget.ctlFrame, SLOT(update_mic_level(qreal)));
+            spectrum spec;
+            spec.length = 0;
+            txp->updateSpectrumFrame(spec);
         }
     }
     else
@@ -2790,7 +2821,7 @@ void UI::actionSquelch()
 
 void UI::actionSquelchReset()
 {
-    squelchValue=-100;
+    squelchValue = -100;
     if (squelch)
     {
         QByteArray command;
@@ -2805,7 +2836,7 @@ void UI::actionSquelchReset()
 
 void UI::squelchValueChanged(int val)
 {
-    squelchValue=squelchValue+val;
+    squelchValue = squelchValue+val;
     if (squelch)
     {
         QByteArray command;
@@ -2912,6 +2943,12 @@ void UI::rigSetPTT(int enabled)
 }
 
 
+bool UI::rigGetPTT(void)
+{
+    return txNow;
+} // end rigGetPTT
+
+
 void UI::windowTypeChanged(int type)
 {
     QByteArray command;
@@ -2954,7 +2991,7 @@ void UI::AGCTLevelChanged(int level)
 {
     QByteArray command;
     command.clear();
-    command.append((char)SETFIXEDAGC);
+    command.append((char)SETRXAGCFIXED);
     command.append(QString("%1").arg(level));
     qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
     widget.agcTLevelLabel->setText(QString("%1").arg(level));
@@ -2997,7 +3034,8 @@ void UI::addNotchFilter(void)
         return;
     }
     widget.tnfButton->setChecked(true);
-    widget.spectrumView->addNotchFilter(notchFilterIndex++);
+    if (widget.spectrumView->addNotchFilter(notchFilterIndex++) < 0)
+        notchFilterIndex--;;
 }
 
 
@@ -3041,20 +3079,24 @@ void UI::agcSlopeChanged(int value)
 {
     if (!newDspServerCheck()) return;
 
-    QString command;
-    command.clear(); QTextStream(&command) << "setrxagcslope " << value;
-    //connection.sendCommand(command);
+    QByteArray command;
+    command.clear();
+    command.append((char)SETRXAGCSLOPE);
+    command.append(QString("%1").arg(value));
+    connection.sendCommand(command);
     qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
 }
 
 
-void UI::agcMaxGainChanged(int value)
+void UI::agcMaxGainChanged(double value)
 {
     if (!newDspServerCheck()) return;
 
-    QString command;
-    command.clear(); QTextStream(&command) << "setrxagcmaxgain " << value;
-    //connection.sendCommand(command);
+    QByteArray command;
+    command.clear();
+    command.append((char)SETRXAGCTOP);
+    command.append(QString("%1").arg(value));
+    connection.sendCommand(command);
     qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
 }
 
@@ -3063,9 +3105,11 @@ void UI::agcAttackChanged(int value)
 {
     if (!newDspServerCheck()) return;
 
-    QString command;
-    command.clear(); QTextStream(&command) << "setrxagcattack " << value;
-    //connection.sendCommand(command);
+    QByteArray command;
+    command.clear();
+    command.append((char)SETRXAGCATTACK);
+    command.append(QString("%1").arg(value));
+    connection.sendCommand(command);
     qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
 }
 
@@ -3074,9 +3118,11 @@ void UI::agcDecayChanged(int value)
 {
     if (!newDspServerCheck()) return;
 
-    QString command;
-    command.clear(); QTextStream(&command) << "setrxagcdecay " << value;
-    //connection.sendCommand(command);
+    QByteArray command;
+    command.clear();
+    command.append((char)SETRXAGCDECAY);
+    command.append(QString("%1").arg(value));
+    connection.sendCommand(command);
     qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
 }
 
@@ -3085,9 +3131,11 @@ void UI::agcHangChanged(int value)
 {
     if (!newDspServerCheck()) return;
 
-    QString command;
-    command.clear(); QTextStream(&command) << "setrxagchang " << value;
-    //connection.sendCommand(command);
+    QByteArray command;
+    command.clear();
+    command.append((char)SETRXAGCHANG);
+    command.append(QString("%1").arg(value));
+    connection.sendCommand(command);
     qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
 }
 
@@ -3096,20 +3144,24 @@ void UI::agcHangThreshChanged(int value)
 {
     if (!newDspServerCheck()) return;
 
-    QString command;
-    command.clear(); QTextStream(&command) << "setrxagchangthreshold " << value;
-    //connection.sendCommand(command);
+    QByteArray command;
+    command.clear();
+    command.append((char)SETRXAGCHANGTHRESH);
+    command.append(QString("%1").arg(value));
+    connection.sendCommand(command);
     qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
 }
 
 
-void UI::agcFixedGainChanged(int value)
+void UI::agcFixedGainChanged(double value)
 {
     if (!newDspServerCheck()) return;
 
-    QString command;
-    command.clear(); QTextStream(&command) << "setfixedagc " << value;
-    //connection.sendCommand(command);
+    QByteArray command;
+    command.clear();
+    command.append((char)SETRXAGCFIXED);
+    command.append(QString("%1").arg(value));
+    connection.sendCommand(command);
     qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
 }
 
@@ -3118,20 +3170,11 @@ void UI::levelerStateChanged(int value)
 {
     if (!newDspServerCheck()) return;
 
-    QString command;
-    command.clear(); QTextStream(&command) << "settxlevelerstate " << value;
-    //connection.sendCommand(command);
-    qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
-}
-
-
-void UI::levelerMaxGainChanged(int value)
-{
-    if (!newDspServerCheck()) return;
-
-    QString command;
-    command.clear(); QTextStream(&command) << "settxlevelermaxgain " << value;
-    //connection.sendCommand(command);
+    QByteArray command;
+    command.clear();
+    command.append((char)SETTXLEVELERST);
+    command.append(QString("%1").arg(value));
+    connection.sendCommand(command);
     qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
 }
 
@@ -3140,9 +3183,11 @@ void UI::levelerAttackChanged(int value)
 {
     if (!newDspServerCheck()) return;
 
-    QString command;
-//    command.clear(); QTextStream(&command) << "settxlevelerattack " << value;
-//    //connection.sendCommand(command);
+    QByteArray command;
+    command.clear();
+    command.append((char)SETTXLEVELERATTACK);
+    command.append(QString("%1").arg(value));
+    connection.sendCommand(command);
     qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
 }
 
@@ -3151,78 +3196,99 @@ void UI::levelerDecayChanged(int value)
 {
     if (!newDspServerCheck()) return;
 
-    QString command;
-    command.clear(); QTextStream(&command) << "settxlevelerdecay " << value;
-    //connection.sendCommand(command);
+    QByteArray command;
+    command.clear();
+    command.append((char)SETTXLEVELERDECAY);
+    command.append(QString("%1").arg(value));
+    connection.sendCommand(command);
     qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
 }
 
 
-void UI::levelerHangChanged(int value)
+void UI::levelerTopChanged(double value)
 {
     if (!newDspServerCheck()) return;
 
-    QString command;
-    command.clear(); QTextStream(&command) << "settxlevelerhang " << value;
-    //connection.sendCommand(command);
+    QByteArray command;
+    command.clear();
+    command.append((char)SETTXLEVELERTOP);
+    command.append(QString("%1").arg(value));
+    connection.sendCommand(command);
     qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
 }
 
 
-void UI::alcStateChanged(int value)
+void UI::TXalcStateChanged(int value)
 {
     if (!newDspServerCheck()) return;
 
-    QString command;
-    command.clear(); QTextStream(&command) << "settxalcstate " << value;
-    //connection.sendCommand(command);
+    QByteArray command;
+    command.clear();
+    command.append((char)SETTXALCST);
+    command.append(QString("%1").arg(value));
+    connection.sendCommand(command);
     qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
 }
 
 
-void UI::alcDecayChanged(int value)
+void UI::TXalcMaxGainChanged(double value)
 {
     if (!newDspServerCheck()) return;
 
-    QString command;
-    command.clear(); QTextStream(&command) << "settxalcdecay " << value;
-    //connection.sendCommand(command);
+    QByteArray command;
+    command.clear();
+    command.append((char)SETTXALCMAXGAIN);
+    command.append(QString("%1").arg(value));
+    connection.sendCommand(command);
     qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
 }
 
 
-void UI::alcAttackChanged(int value)
+void UI::TXalcDecayChanged(int value)
 {
     if (!newDspServerCheck()) return;
 
-    QString command;
-    command.clear(); QTextStream(&command) << "settxalcattack " << value;
-    //connection.sendCommand(command);
+    QByteArray command;
+    command.clear();
+    command.append((char)SETTXALCDECAY);
+    command.append(QString("%1").arg(value));
+    connection.sendCommand(command);
     qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
 }
 
 
-void UI::alcHangChanged(int value)
+void UI::TXalcAttackChanged(int value)
 {
     if (!newDspServerCheck()) return;
 
-    QString command;
-    command.clear(); QTextStream(&command) << "settxalchang " << value;
-    //connection.sendCommand(command);
+    QByteArray command;
+    command.clear();
+    command.append((char)SETTXALCATTACK);
+    command.append(QString("%1").arg(value));
+    connection.sendCommand(command);
     qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
 }
 
 
 void UI::hardwareSet(QString hardware)
 {
-    if (hardware == "hermes")
+    QStringList hwList = hardware.split(" ");
+
+    if (hwList.length() < 2) return;
+    if (hwList.at(0) == "hermes")
     {
-        hf = (void*)new HermesFrame(this);
+        HermesFrame *hf = new HermesFrame(this);
         widget.RadioScrollAreaWidgetContents->layout()->addWidget((HermesFrame*)hf);
         hww = (QWidget*)hf;
         hardwareType = "hermes";
         connect((HermesFrame*)hf, SIGNAL(hhcommand(QByteArray)), this, SLOT(sendHardwareCommand(QByteArray)));
+        connect((HermesFrame*)hf, SIGNAL(pttTuneChange(int,bool)), this, SLOT(pttChange(int,bool)));
+        hf->initialize();
     }
+    if (hwList.at(1) == "1")
+        widget.actionBandscope->setEnabled(true);
+    else
+        widget.actionBandscope->setEnabled(false);
 } // end hardwareSet
 
 

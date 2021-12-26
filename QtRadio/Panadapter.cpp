@@ -233,30 +233,32 @@ TxPanadapter::TxPanadapter()
     mode="LSB";
     band_min=0LL;
     band_max=0LL;
-    splitViewBoundary = 0;
     zoom = 0;
   //  sampleZoom = false;
 
 
     samples=NULL;
     initialized = false; // KD0OSS
-    wsamples = (char*)malloc(2000 * sizeof(char));
-    samples = (float*)malloc(2000 * sizeof(float));
-    for (int i=0; i < 2000; i++) samples[i] = -120;
+    wsamples = (char*)malloc(254 * sizeof(char));
+    samples = (float*)malloc(254 * sizeof(float));
+    for (int i=0; i < 254; i++) samples[i] = -120;
 
     txpanadapterScene = new TxPanadapterScene();
     this->setScene(txpanadapterScene);
-//    txpanadapterScene->setSceneRect(0.0, 0.0, 200.0, height());
+ //   txpanadapterScene->setSceneRect(0.0, 0.0, 254.0, 195.0);
+  //  this->setFixedSize(250+2 * this->frameWidth(), 195+2 * this->frameWidth());
+ //   this->fitInView(0, 0, 254, 190);
     txpanadapterScene->clear();
     txpanadapterScene->sceneItems.clear();
     txpanadapterScene->spectrumPlot = NULL;
+    splitViewBoundary = height()/1.8f;
 
 //    txpanadapterScene->spectrumPlot = new spectrumObject(200, height());
 //    this->setSceneRect(0.0, 0.0, 200, height());
     //    this->setViewport(new QGLWidget);
-    qDebug("Tx view width: %d", width());
+    qDebug("Tx view height: %d", height());
 
-    QLinearGradient gradient(0, 0, 0, this->viewport()->height());
+    QLinearGradient gradient(0, 0, 0, 193);
     gradient.setColorAt(0, Qt::black);
     gradient.setColorAt(1, Qt::gray);
     txpanadapterScene->setBackgroundBrush(gradient);
@@ -271,14 +273,25 @@ TxPanadapter::~TxPanadapter()
 }
 
 
+void TxPanadapter::setFilter(int low, int high)
+{
+    qDebug() << "TxPanadapter::setFilter " << low << "," << high;
+    filterLow=low;
+    filterHigh=high;
+    if (!initialized)   // KD0OSS
+        return;
+ //   drawFilter(1, false);   // KD0OSS
+}
+
+
 void TxPanadapter::redrawItems(void)
 {
-    if (!initialized || splitViewBoundary > height())
-    {
-        splitViewBoundary = (height() / 2) - 3;
-        if (!initialized) return;
-    }
-    drawFrequencyLines();
+//    if (!initialized || splitViewBoundary > height())
+//    {
+//        splitViewBoundary = (height() / 2) - 3;
+//        if (!initialized) return;
+//    }
+//    drawFrequencyLines();
     drawdBmLines();
     drawCursor(1, false);
     drawFilter(1, false);
@@ -287,7 +300,7 @@ void TxPanadapter::redrawItems(void)
 
 void TxPanadapter::drawCursor(int vfo, bool disable)
 {
-    float step=(float)sampleRate/2000.0;
+    float step=(float)sampleRate/256.0;
     int offset=(int)((float)LO_offset/step);
     int cursorX;
     QPen pen;
@@ -305,11 +318,11 @@ void TxPanadapter::drawCursor(int vfo, bool disable)
 
     if (vfo == 1)
     {
-        cursorX = (2000/2)+offset*zoom_factor;
+        cursorX = (256/2)+offset*zoom_factor;
         pen = QPen(QBrush(Qt::red,Qt::SolidPattern), 1);
     }
     qDebug("offset: %d    curs: %d", offset, cursorX);
-    lineObject *cursor = new lineObject(txpanadapterScene, QPoint(cursorX, splitViewBoundary), QPoint(cursorX,0), pen);
+    lineObject *cursor = new lineObject(txpanadapterScene, QPoint(cursorX, splitViewBoundary), QPoint(cursorX, 0), pen);
     txpanadapterScene->addItem(cursor);
     cursor->update();
     txpanadapterScene->sceneItems.insert(QString("c%1").arg(vfo), cursor);
@@ -335,17 +348,18 @@ void TxPanadapter::drawdBmLines(void)
     lines = 0;
     int V = spectrumHigh - spectrumLow;
     int numSteps = V / 20;
-    for (int i = 1; i < numSteps; i++)
+    for (int i = 1; i < numSteps-1; i++)
     {
         int num = spectrumHigh - i * 20;
-        int y = (int) floor((spectrumHigh - num) * (splitViewBoundary) / V);
+        int y = (int) floor((spectrumHigh - num) * (splitViewBoundary+40) / V);
+        if (y > 193) y = 193;
 
-        lineObject *lineItem = new lineObject(txpanadapterScene, QPoint(0,y), QPoint(2000,y), QPen(QColor(255,255,255,128), 1,Qt::DotLine));
+        lineObject *lineItem = new lineObject(txpanadapterScene, QPoint(0,y), QPoint(254,y), QPen(QColor(255,255,255,128), 1,Qt::DotLine));
         txpanadapterScene->addItem(lineItem);
         lineItem->update();
         txpanadapterScene->sceneItems.insert(QString("dl%1").arg(lines), lineItem);
 
-        textObject *textItem = new textObject(txpanadapterScene, QString::number(num)+" dBm", QPoint(abs(mapToScene(3,y).x())+3,y), Qt::green);
+        textObject *textItem = new textObject(txpanadapterScene, QString::number(num)+" dBm", QPoint(3,y), Qt::green);
         txpanadapterScene->addItem(textItem);
         textItem->update();
 
@@ -380,7 +394,7 @@ void TxPanadapter::drawFrequencyLines(void)
         }
     }
     lines = 0;
-    for (int i = 0; i < 2000; i++)
+    for (int i = 0; i < 256; i++)
     {
         long long f = frequency - ((float)sampleRate / zoom_factor / 2.0) - (float)LO_offset + (long long)(hzPerPixel * (float)i);
         if (f > 0)
@@ -424,10 +438,10 @@ void TxPanadapter::drawFilter(int vfo, bool disable)
 
     if (vfo == 1)
     {
-        filterLeft = 2000/2 + (float)(filterLow+LO_offset)* 2000.0*zoom_factor/(float)sampleRate;
-        filterRight = 2000/2 + (float)(filterHigh+LO_offset) * 2000.0*zoom_factor/(float)sampleRate;
+        filterLeft = (254 / 2) + (float)filterLow/25;
+        filterRight = (254 / 2) + (float)filterHigh/25;
         color = Qt::gray;
-        //   qDebug("FL: %d  FR: %d", filterLow, filterHigh);
+        qDebug("FL: %d  FR: %d", filterLeft, filterRight);
     }
 
     filterObject *filterItem = new filterObject(txpanadapterScene, QPoint(filterLeft,0), (float)(filterRight-filterLeft), (float)splitViewBoundary, color);
@@ -454,7 +468,7 @@ void TxPanadapter::drawSpectrum(void)
         delete txpanadapterScene->spectrumPlot;
         txpanadapterScene->spectrumPlot = NULL;
     }
-    txpanadapterScene->spectrumPlot = new spectrumObject(txpanadapterScene->width(), splitViewBoundary);
+    txpanadapterScene->spectrumPlot = new spectrumObject(254, 193);
     txpanadapterScene->addItem(txpanadapterScene->spectrumPlot);
     txpanadapterScene->update();
     txpanadapterScene->spectrumPlot->plot = plot;
@@ -474,6 +488,15 @@ void TxPanadapter::updateSpectrumFrame(spectrum spec)
 
 //    version = 2;
 //    subversion = 1;
+    if (spec.length == 0)
+    {
+        this->scene()->clear();
+        txpanadapterScene->spectrumPlot = NULL;
+        txpanadapterScene->update();
+        update();
+        initialized = false;
+        return;
+    }
     meter1 = spec.rx_meter;
     meter2 = spec.fwd_pwr;
     meter3 = spec.rev_pwr;
@@ -481,25 +504,26 @@ void TxPanadapter::updateSpectrumFrame(spectrum spec)
     LO_offset = (short)spec.lo_offset;
 
     sampleRate = spec.sample_rate;
-    size = spec.length;
+size = 254;//    size = spec.length;
 //    if (sampleRate != lastSampRate)
 //        initialized = false;
     lastSampRate = sampleRate;
 
     // do not rotate Panadapter display.  LO_offset rotation done in dspserver
-    for (i = 0; i < size; i++)
+    for (i = 873; i < 1127; i++)
+//    for (i = 0; i < size; i++)
     {
    //     fprintf(stderr, "[%u]", (unsigned char)buffer[i]);
-        samples[i] = ((float)(samples[i] * avg - (spec.samples[i] & 0xFF))/(float)(avg+1)) * 1.0f;
-        wsamples[i] = spec.samples[i];
+        samples[i-873] = ((float)(samples[i-873] * avg - (spec.samples[i] & 0xFF))/(float)(avg+1)) * 0.5f;
+        wsamples[i-873] = spec.samples[i];
     }
 
     //qDebug() << "updateSpectrum: create plot points";
-    if (size != lastWidth || this->viewport()->height() != lastHeight)
+    if (size != lastWidth || height() != lastHeight)
     {
         lastWidth = size;
-        lastHeight = this->viewport()->height();
-        qDebug("Scene width: %d  ht: %d", size, this->viewport()->height());
+        lastHeight = height();
+        qDebug("TX scene width: %d  ht: %d", size, height());
     }
     plot.clear();
     for (i = 0; i < size; i++)
@@ -511,16 +535,19 @@ void TxPanadapter::updateSpectrumFrame(spectrum spec)
     {
         initialized = true;
         txpanadapterScene->clear();
-        txpanadapterScene->setSceneRect(0.0, 0.0, 2000.0, this->viewport()->height());
-        txpanadapterScene->spectrumPlot = new spectrumObject(2000, this->viewport()->height());
-        txpanadapterScene->addItem(txpanadapterScene->spectrumPlot);
-        setMatrix(QMatrix((0 * 0.01)+1, 0.0, 0.0, 1.0, 1.0, 1.0));
-        drawFrequencyLines();
-        drawCursor(1, false);
-        drawFilter(1, false);
-   //     QGraphicsView::setMouseTracking(true);
-        centerOn((QGraphicsItem*)txpanadapterScene->sceneItems.find(QString("flt%1").arg(1)).value());
+        txpanadapterScene->sceneItems.clear();
+ //       txpanadapterScene->setSceneRect(0.0, 0.0, 200.0, this->viewport()->height());
+   //     txpanadapterScene->spectrumPlot = new spectrumObject(200, this->viewport()->height());
+        txpanadapterScene->spectrumPlot = new spectrumObject(254, 193);
+ //       drawFrequencyLines();
         drawdBmLines();
+        drawCursor(1, false);
+  //      drawFilter(1, false);
+   //     QGraphicsView::setMouseTracking(true);
+     //   centerOn((QGraphicsItem*)txpanadapterScene->sceneItems.find(QString("flt%1").arg(1)).value());
+        txpanadapterScene->addItem(txpanadapterScene->spectrumPlot);
+        setMatrix(QMatrix((0 * 0.01)+1, 0.0, 0.0, 0.1, 1.0, 1.0));
+        update();
    //     setZoom(0);
     }
 
@@ -1557,9 +1584,10 @@ void Panadapter::setSquelchVal(float val) {
     //qDebug()<<"Panadapter::setSquelchVal"<<val<<"squelchY="<<squelchY;
 }
 
-void Panadapter::addNotchFilter(int index)   // KD0OSS
+int Panadapter::addNotchFilter(int index)   // KD0OSS
 {
-    QString command;
+    QByteArray command;
+    QString line;
 
     notchFilterIndex = index;
     notchFilterVFO[notchFilterIndex] = 1;
@@ -1568,7 +1596,7 @@ void Panadapter::addNotchFilter(int index)   // KD0OSS
     {
         if (i == notchFilterIndex) continue;
         if (abs(notchFilterFO[notchFilterIndex] - notchFilterFO[i]) <= 100)
-            return;
+            return -1;
     }
     notchFilterBW[notchFilterIndex] = 400.0;
     notchFilterDepth[notchFilterIndex] = 1;
@@ -1577,17 +1605,16 @@ void Panadapter::addNotchFilter(int index)   // KD0OSS
     drawNotchFilter(1, notchFilterIndex, false);
 
     double audio_freq = abs((notchFilterFO[notchFilterIndex]/* - frequency*/)); // Convert to audio frequency in Hz
+    line.sprintf("%lf %lf", audio_freq, notchFilterBW[notchFilterIndex]);
     command.clear();
-    QTextStream(&command) << "setnotchfilter " << 0 << " " << index << " " << notchFilterBW[notchFilterIndex] << " " << audio_freq;
-//    connection->sendCommand(command);
-    qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
+    command.append((char)SETNOTCHFILTER);
+    command.append((char)index+1);
+    command.append(line);
+    //QTextStream(&command) << SETNOTCHFILTER << " " << 0 << " " << index << " " << notchFilterBW[notchFilterIndex] << " " << audio_freq;
+    connection->sendCommand(command);
 
-    command.clear();
-    QTextStream(&command) << "setnotchfilter " << 1 << " " << index << " " << notchFilterBW[notchFilterIndex] << " " << audio_freq;
-//    connection->sendCommand(command);
-    qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
-
-    enableNotchFilter(notchFilterIndex, true);
+    enableNotchFilter(true);
+    return 0;
 }
 
 void Panadapter::updateNotchFilter(void)
@@ -1597,7 +1624,8 @@ void Panadapter::updateNotchFilter(void)
 
 void Panadapter::updateNotchFilter(int index)   // KD0OSS
 {
-    QString command;
+    QByteArray command;
+    QString line;
     double audio_freq;
 
     updateNfTimer->stop();
@@ -1615,15 +1643,12 @@ void Panadapter::updateNotchFilter(int index)   // KD0OSS
                 else
                     enableNotchFilter(i, true);
                 audio_freq = abs((notchFilterFO[i]/* - frequency*/)); // Convert to audio frequency in Hz
+                line.sprintf("%lf %lf", audio_freq, notchFilterBW[i]);
                 command.clear();
-                QTextStream(&command) << "editnotchfilter " << 0 << " " << i << " " << notchFilterBW[i] << " " << audio_freq;
-    //            connection->sendCommand(command);
-                qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
-
-                command.clear();
-                QTextStream(&command) << "editnotchfilter " << 1 << " " << i << " " << notchFilterBW[i] << " " << audio_freq;
-    //            connection->sendCommand(command);
-                qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
+                command.append((char)EDITNOTCHFILTER);
+                command.append((char)i+1);
+                command.append(line);
+                connection->sendCommand(command);
             }
         }
     }
@@ -1639,35 +1664,37 @@ void Panadapter::updateNotchFilter(int index)   // KD0OSS
 
         enableNotchFilter(index, true);
         audio_freq = abs((notchFilterFO[index]/* - frequency*/)); // Convert to audio frequency in Hz
+        line.sprintf("%lf %lf", audio_freq, notchFilterBW[index]);
         command.clear();
-        QTextStream(&command) << "editnotchfilter " << 0 << " " << index << " " << notchFilterBW[index] << " " << audio_freq;
- //       connection->sendCommand(command);
-        qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
-
-        command.clear();
-        QTextStream(&command) << "editnotchfilter " << 1 << " " << index << " " << notchFilterBW[index] << " " << audio_freq;
- //       connection->sendCommand(command);
-        qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
+        command.append((char)EDITNOTCHFILTER);
+        command.append((char)index+1);
+        command.append(line);
+   //     QTextStream(&command) << "editnotchfilter " << 0 << " " << index << " " << notchFilterBW[index] << " " << audio_freq;
+        connection->sendCommand(command);
     }
 }
 
 // Enable/Disable all active notch filters
 void Panadapter::enableNotchFilter(bool enable)   // KD0OSS
 {
-    QString command;
+    QByteArray command;
 
-    for (int index=0;index<9;index++)
+//    for (int index=0;index<9;index++)
     {
-        if (notchFilterBand[index] != band && enable) continue;
+//        if (notchFilterBand[index] != band && enable) continue;
         command.clear();
-        QTextStream(&command) << "enablenotchfilter " << 0 << " " << index << " " << enable;
-  //      connection->sendCommand(command);
-        qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
+        command.append((char)ENABLENOTCHFILTER);
+        command.append((char)enable);
+        connection->sendCommand(command);
+      //  command.clear();
+      //  QTextStream(&command) << ENABLENOTCHFILTER << " " << 0 << " " << index << " " << enable;
+      //  connection->sendCommand(command);
+      //  qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
 
         command.clear();
-        QTextStream(&command) << "enablenotchfilter " << 1 << " " << index << " " << enable;
+  //      QTextStream(&command) << ENABLENOTCHFILTER << " " << 1 << " " << index << " " << enable;
   //      connection->sendCommand(command);
-        qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
+  //      qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
     }
     //emit enableNotchFilterSig(enable);
 }
@@ -1693,21 +1720,32 @@ void Panadapter::enableNotchFilter(int index, bool enable)   // KD0OSS
 // Delete filter selected with mouse pointer
 void Panadapter::deleteNotchFilter(void)   // KD0OSS
 {
+    QByteArray command;
+
     drawNotchFilter(1, notchFilterSelected, true);
-    enableNotchFilter(notchFilterSelected, false);
+//    enableNotchFilter(notchFilterSelected, false);
     notchFilterBand[notchFilterSelected] = "na";
     notchFilterEnabled[notchFilterSelected] = false;
+    command.clear();
+    command.append((char)DELNOTCHFILTER);
+    command.append((char)notchFilterSelected);
+    connection->sendCommand(command);
     emit removeNotchFilter();
 }
 
 void Panadapter::deleteAllNotchFilters(void)   // KD0OSS
 {
+    QByteArray command;
+
     for (int index=0;index<9;index++)
     {
         drawNotchFilter(1, index, true);
-        enableNotchFilter(index, false);
+//        enableNotchFilter(index, false);
         notchFilterEnabled[index] = false;
         notchFilterBand[index] = "na";
+        command.append((char)DELNOTCHFILTER);
+        command.append((char)index);
+        connection->sendCommand(command);
         emit removeNotchFilter();
     }
 }

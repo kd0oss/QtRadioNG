@@ -10,9 +10,78 @@ HermesFrame::HermesFrame(UI *pUI, QWidget *parent) : QFrame(parent), ui(new Ui::
     tuning = false;
     pui = pUI;
 
-    setAttenuation(true);
-    setRxAntenna();
-    setTxRelay();
+    // Load hardware settings
+    settings = new QSettings("FreeSDR", "QtRadioII");
+    settings->beginGroup("Hermes");
+    int pwr = settings->value("tx_gain", 30).toInt();
+    ui->hhTxGainSlider->setValue(pwr);
+    pwrSliderValueChanged(pwr);
+    pui->currentPwr = pwr/1000.0f;
+    pwr = settings->value("tune_pwr", 30).toInt();
+    ui->hhTxTunePwrSlider->setValue(pwr);
+    ui->hhTxMicBoostCB->setChecked(settings->value("mic_boost_on", false).toBool());
+    adjustMicBoost(settings->value("mic_boost_on", false).toBool());
+    pwr = settings->value("tx_pwr", 30).toInt();
+    ui->hhTxPowerSlider->setValue(pwr);
+    adjustPower(pwr);
+    pwr = settings->value("tx_line_gain", 50).toInt();
+    ui->hhTxLineGainSlider->setValue(pwr);
+    ui->hhPreampCB->setChecked(settings->value("preamp_on", false).toBool());
+    enablePreamp(settings->value("preamp_on", false).toBool());
+    ui->hhDitherCB->setChecked(settings->value("dither_on", false).toBool());
+    enableDither(settings->value("dither_on", false).toBool());
+    ui->hhRandomCB->setChecked(settings->value("random_on", false).toBool());
+    enableRandom(settings->value("random_on", false).toBool());
+    switch (settings->value("rx_ant").toInt())
+    {
+    case 0:
+        ui->hhRxAnt0Radio->setChecked(true);
+        break;
+    case 1:
+        ui->hhRxAnt1Radio->setChecked(true);
+        break;
+    case 2:
+        ui->hhRxAnt2Radio->setChecked(true);
+        break;
+    default:
+        break;
+    };
+    switch (settings->value("tx_ant").toInt())
+    {
+    case 0:
+        ui->hhTxAnt0Radio->setChecked(true);
+        break;
+    case 1:
+        ui->hhTxAnt1Radio->setChecked(true);
+        break;
+    case 2:
+        ui->hhTxAnt2Radio->setChecked(true);
+        break;
+    default:
+        break;
+    };
+    switch (settings->value("attenuation").toInt())
+    {
+    case 0:
+        ui->hhRxAtt0Radio->setChecked(true);
+        break;
+    case 1:
+        ui->hhRxAtt10Radio->setChecked(true);
+        break;
+    case 2:
+        ui->hhRxAtt20Radio->setChecked(true);
+        break;
+    case 3:
+        ui->hhRxAtt30Radio->setChecked(true);
+        break;
+    default:
+        break;
+    };
+    settings->endGroup();
+
+ //   setAttenuation(true);
+ //   setRxAntenna();
+ //   setTxRelay();
 
     connect(ui->hhTxPowerSlider, SIGNAL(valueChanged(int)), this, SLOT(adjustPower(int)));
     connect(ui->hhTxMicBoostCB, SIGNAL(toggled(bool)), this, SLOT(adjustMicBoost(bool)));
@@ -34,6 +103,7 @@ HermesFrame::HermesFrame(UI *pUI, QWidget *parent) : QFrame(parent), ui(new Ui::
     connect(ui->hhIO5CB, SIGNAL(released()), this, SLOT(setOCOutputs()));
     connect(ui->hhIO6CB, SIGNAL(released()), this, SLOT(setOCOutputs()));
     connect(pUI, SIGNAL(tuningEnable(bool)), this, SLOT(tuningEnabled(bool)));
+    connect(ui->hhTxTuneButton, SIGNAL(released()), this, SLOT(tuneClicked()));
     connect(ui->hhRxAnt0Radio, SIGNAL(released()), this, SLOT(setRxAntenna()));
     connect(ui->hhRxAnt1Radio, SIGNAL(released()), this, SLOT(setRxAntenna()));
     connect(ui->hhRxAnt2Radio, SIGNAL(released()), this, SLOT(setRxAntenna()));
@@ -45,8 +115,32 @@ HermesFrame::HermesFrame(UI *pUI, QWidget *parent) : QFrame(parent), ui(new Ui::
 
 HermesFrame::~HermesFrame()
 {
+    delete settings;
     delete ui;
 } // end destructor
+
+
+void HermesFrame::initialize(void)
+{
+    setAttenuation(true);
+    setRxAntenna();
+    setTxRelay();
+} // end initialize
+
+
+void HermesFrame::tuneClicked(void)
+{
+    if (tuning)
+    {
+        tuning = 0;
+        emit pttTuneChange(1, 0);
+    }
+    else
+    {
+        tuning = 1;
+        emit pttTuneChange(1, 1);
+    }
+} // end tuneclicked
 
 
 void HermesFrame::tuningEnabled(bool enabled)
@@ -72,14 +166,17 @@ void HermesFrame::setAttenuation(bool button)
             atn = 3;
         ui->hhRxAttSlider->setValue(-atn*10);
     }
- //   else
- //       atn = -ui->hhRxAttSlider->value();
+    else
+        atn = -ui->hhRxAttSlider->value() / 10;
 
     command.clear();
     command.append((char)STARCOMMAND);
     command.append((char)SETATTENUATOR);
     command.append(QString("%1").arg(atn));
     emit hhcommand(command);
+    settings->beginGroup("Hermes");
+    settings->setValue("attenuation", atn);
+    settings->endGroup();
 } // end setAttenuation
 
 
@@ -126,6 +223,9 @@ void HermesFrame::adjustPower(int pwr)
     command.append((char)SETPOWEROUT);
     command.append((char)pwr);
     emit hhcommand(command);
+    settings->beginGroup("Hermes");
+    settings->setValue("tx_pwr", pwr);
+    settings->endGroup();
 } // end adjustPower
 
 
@@ -138,6 +238,9 @@ void HermesFrame::adjustMicBoost(bool enable)
     command.append((char)SETMICBOOST);
     command.append((char)enable);
     emit hhcommand(command);
+    settings->beginGroup("Hermes");
+    settings->setValue("mic_boost_on", enable);
+    settings->endGroup();
 } // end adjustMicBoost
 
 
@@ -150,6 +253,9 @@ void HermesFrame::enablePreamp(bool enable)
     command.append((char)SETPREAMP);
     command.append((char)enable);
     emit hhcommand(command);
+    settings->beginGroup("Hermes");
+    settings->setValue("preamp_on", enable);
+    settings->endGroup();
 } // end enablePreamp
 
 
@@ -162,6 +268,9 @@ void HermesFrame::enableDither(bool enable)
     command.append((char)SETDITHER);
     command.append((char)enable);
     emit hhcommand(command);
+    settings->beginGroup("Hermes");
+    settings->setValue("dither_on", enable);
+    settings->endGroup();
 } // end enableDither
 
 
@@ -174,6 +283,9 @@ void HermesFrame::enableRandom(bool enable)
     command.append((char)SETRANDOM);
     command.append((char)enable);
     emit hhcommand(command);
+    settings->beginGroup("Hermes");
+    settings->setValue("random_on", enable);
+    settings->endGroup();
 } // end enableRandom
 
 
@@ -193,6 +305,9 @@ void HermesFrame::setRxAntenna(void)
     command.append((char)SETRXANT);
     command.append((char)ant);
     emit hhcommand(command);
+    settings->beginGroup("Hermes");
+    settings->setValue("rx_ant", ant);
+    settings->endGroup();
 } // end setRxAntenna
 
 
@@ -212,12 +327,15 @@ void HermesFrame::setTxRelay(void)
     command.append((char)SETTXRELAY);
     command.append((char)ant);
     emit hhcommand(command);
+    settings->beginGroup("Hermes");
+    settings->setValue("tx_ant", ant);
+    settings->endGroup();
 } // end setTxRelay
 
 
 void HermesFrame::pwrSliderValueChanged(int pwr)
 {
-    if (tuning) return;
+//    if (tuning) return;
     QByteArray command;
 
     if (pui->mode.getMode() == MODE_AM || pui->mode.getMode() == MODE_SAM)
@@ -234,7 +352,11 @@ void HermesFrame::pwrSliderValueChanged(int pwr)
         command.append(QString("%1").arg(pwr/1000.0));
     }
 //    qDebug("Message: %s", QString("%1").arg(pwr/1000.0, 0, 'f', 3).toLatin1().data());
+    pui->currentPwr = pwr/1000.0f;
     emit hhcommand(command);
+    settings->beginGroup("Hermes");
+    settings->setValue("tx_gain", pwr);
+    settings->endGroup();
 } // end pwrSliderValueChanged
 
 
@@ -247,6 +369,9 @@ void HermesFrame::tunePwrSliderValueChanged(int pwr)
     command.append((char)SETTXAMCARLEV);
     command.append(QString("%1").arg(pwr/1000.0));
     emit hhcommand(command);
+    settings->beginGroup("Hermes");
+    settings->setValue("tune_pwr", pwr);
+    settings->endGroup();
 } // end tunePwrSliderValueChanged
 
 

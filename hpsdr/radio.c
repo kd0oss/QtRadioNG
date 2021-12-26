@@ -182,7 +182,7 @@ char *discovered_xml=NULL;
 
 void status_text(char *text)
 {
-    fprintf(stderr,"splash_status: %s\n",text);
+    fprintf(stderr,"splash_status: %s\n", text);
     usleep(10000);
 } // end status_text
 
@@ -199,17 +199,22 @@ int main_delete(int radio_id)
         {
         case ORIGINAL_PROTOCOL:
             old_protocol_stop();
+       //     free(radio);
             break;
         case NEW_PROTOCOL:
             new_protocol_stop();
+            free(radio->wideband->input_buffer);
+            free(radio->wideband);
+       //     free(radio);
             break;
         }
     }
+    receivers = active_receivers = 0;
     return 0; ////    _exit(0);
 } // end main_delete
 
 
-static void activatepihpsdr()
+static void activatehpsdr()
 {
     //  fprintf(stderr,"Build: %s %s\n",build_date,version);
 
@@ -222,12 +227,13 @@ static void activatepihpsdr()
 
     receivers = active_receivers;
     discovery();
-} // end activatepihpsdr
+} // end activatehpsdr
 
 
+/* Radio_id indicates array index of selected discovered device. */
 bool start_radio(int radio_id)
 {
-    int i;
+    int i = 0;
     DISCOVERED *radio = &discovered[radio_id];
     if (radio->status != STATE_AVAILABLE)
     {
@@ -510,12 +516,12 @@ bool start_radio(int radio_id)
         switch (device)
         {
         case DEVICE_ORION2:
-            ////////meter_calibration=3.0;
-            ////////display_calibration=3.36;
+            //meter_calibration=3.0;
+            //display_calibration=3.36;
             break;
         default:
-            ////////meter_calibration=-2.44;
-            ////////display_calibration=-2.1;
+            //meter_calibration=-2.44;
+            //display_calibration=-2.1;
             break;
         }
         break;
@@ -523,12 +529,12 @@ bool start_radio(int radio_id)
         switch (device)
         {
         case NEW_DEVICE_ORION2:
-            /////////meter_calibration=3.0;
-            /////////display_calibration=3.36;
+            //meter_calibration=3.0;
+            //display_calibration=3.36;
             break;
         default:
-            /////////meter_calibration=-2.44;
-            /////////display_calibration=-2.1;
+            //meter_calibration=-2.44;
+            //display_calibration=-2.1;
             break;
         }
         break;
@@ -564,6 +570,11 @@ bool start_radio(int radio_id)
         case NEW_DEVICE_HERMES_LITE:
         case NEW_DEVICE_HERMES_LITE2:
             n_adc=1;
+            radio->wideband = (WIDEBAND*)malloc(sizeof(WIDEBAND));
+            radio->wideband->buffer_size = 16384;
+            radio->wideband->adc = 0;
+            radio->wideband->input_buffer = malloc((radio->wideband->buffer_size)*sizeof(int16_t));
+            radio->wideband->sequence = 0;
             break;
         default:
             n_adc=2;
@@ -628,7 +639,6 @@ bool start_radio(int radio_id)
         if (buffer_size > 2048) buffer_size=2048;
         break;
     case NEW_PROTOCOL:
-        fprintf(stderr, "New Protocol..................\n");
         if (buffer_size > 512) buffer_size=512;
         break;
     }
@@ -650,12 +660,6 @@ bool start_radio(int radio_id)
             ////////     tx_set_ps(transmitter,transmitter->puresignal);
         }
     }
-
-    if (protocol == NEW_PROTOCOL)
-    {
-        printf("Schedule_high_priority\n");
-        schedule_high_priority();
-    }
     return true;
 } // end start_radio
 
@@ -666,12 +670,51 @@ int isTransmitting()
 } // end isTransmitting
 
 
+void radio_change_receivers(int r)
+{
+    fprintf(stderr, "radio_change_receivers: from %d to %d\n", receivers, r);
+
+    if (receivers == r) return;
+
+    //
+    // When changing the number of receivers, restart the
+    // old protocol
+    //
+    if (protocol == ORIGINAL_PROTOCOL)
+    {
+        old_protocol_stop();
+    }
+
+    switch (r)
+    {
+    case 1:
+        receivers = 1;
+        break;
+    case 2:
+        receivers = 2;
+        break;
+    }
+
+    active_receiver = receiver[0];
+
+    if (protocol == NEW_PROTOCOL)
+    {
+        schedule_high_priority();
+    }
+
+    if (protocol == ORIGINAL_PROTOCOL)
+    {
+        old_protocol_run();
+    }
+} // end radio_change_receivers
+
+
 void start_receiver(int radio_id, int rx)
 {
     DISCOVERED *radio = &discovered[radio_id];
 
     receiver[rx] = create_receiver(rx, buffer_size, 0, 0); // receiver[i]->alex_antenna, receiver[i]->alex_attenuation);
-    printf("Creating receiver %d\n", receiver[rx]->id);
+    printf("Created receiver %d\n", receiver[rx]->id);
         ////////   setSquelch(receiver[i]);
 
     //
@@ -684,13 +727,15 @@ void start_receiver(int radio_id, int rx)
 
     active_receiver = receiver[rx];
     receivers++;
+//    if (rx > 0)
+  //      receivers++;
 
-    printf("create_visual: receivers=%d RECEIVERS=%d\n", receivers, RECEIVERS);
+    printf("Starting: receivers=%d RECEIVERS=%d\n", receivers, RECEIVERS);
     if (receivers != RECEIVERS)
     {
         int r=receivers;
         /////////   receivers=RECEIVERS;
-        printf("create_visual: calling radio_change_receivers: receivers=%d r=%d\n", receivers, r);
+        printf("Starting receiver: calling radio_change_receivers: receivers=%d r=%d\n", RECEIVERS, r);
         //////////    radio_change_receivers(r);
     }
 
@@ -706,6 +751,12 @@ void start_receiver(int radio_id, int rx)
         new_protocol_init();
         break;
     }
+
+    if (protocol == NEW_PROTOCOL)
+    {
+        printf("Schedule_high_priority\n");
+        schedule_high_priority();
+    }
 } // end start_receiver
 
 
@@ -714,15 +765,9 @@ void start_transmitter(int radio_id, int tx)
     // TEMP
     if (can_transmit)
     {
-        printf("Create transmitter\n");
-        if (duplex)
-        {
-            transmitter = create_transmitter(tx, buffer_size);
-        }
-        else
-        {
-            transmitter = create_transmitter(tx, buffer_size);
-        }
+        fprintf(stderr, "Create transmitter: TX:%d  Buffer size: %d\n", tx, buffer_size);
+
+        transmitter = create_transmitter(tx, buffer_size);
 
         calcDriveLevel(pa_calibration);
 
@@ -872,6 +917,9 @@ int create_manifest()
         sprintf(line, "<status>%d</status>\n", d->status);
         xml = (char*)realloc((char*)xml, strlen(xml)+strlen(line)+1);
         strcat(xml, line);
+        sprintf(line, "<bandscope>1</bandscope>\n");
+        xml = (char*)realloc((char*)xml, strlen(xml)+strlen(line)+1);
+        strcat(xml, line);
         sprintf(line, "<supported_receivers>%d</supported_receivers>\n", d->supported_receivers);
         xml = (char*)realloc((char*)xml, strlen(xml)+strlen(line)+1);
         strcat(xml, line);
@@ -963,6 +1011,11 @@ void set_alex_tx_antenna(int v)
 void set_alex_attenuation(int rx, int v)
 {
     receiver[rx]->alex_attenuation = v;
+    adc_attenuation[0] = 0;
+    if (v == 1) {adc_attenuation[0] = 10; adc_attenuation[1] = 10;}
+    if (v == 2) {adc_attenuation[0] = 20; adc_attenuation[1] = 20;}
+    if (v == 3) {adc_attenuation[0] = 30; adc_attenuation[1] = 30;}
+    printf("Att: %d for RX: %d\n", receiver[rx]->alex_attenuation, rx);
     if (protocol == NEW_PROTOCOL)
     {
         schedule_high_priority();
@@ -1010,6 +1063,16 @@ void mic_boost_cb(bool enable)
 } // end mic_boost_cb
 
 
+void linein_gain_cb(int gain)
+{
+  linein_gain = gain;
+  if (protocol == NEW_PROTOCOL)
+  {
+    schedule_high_priority();
+  }
+} // end linein_gain_cb
+
+
 void setFrequency(int v, long long f)
 {
     ////////  int v=active_receiver->id;
@@ -1055,7 +1118,7 @@ int main_start(char *dsp_server_address)
     char name[1024];
 
     sprintf(name, "org.kd0oss.hpsdr_new.pid%d", getpid());
-    activatepihpsdr();
+    activatehpsdr();
     if (devices > 0)
     {
         create_manifest();
@@ -1081,3 +1144,16 @@ int main_start(char *dsp_server_address)
     main_delete(0);
     return status;
 } // end main_start
+
+
+void add_wideband_sample(WIDEBAND *w, int16_t sample)
+{
+    w->input_buffer[w->samples] = sample;
+    w->samples = w->samples+1;
+    if (w->samples >= 16384)
+    {
+        send_WB_IQ_buffer(w->channel);
+        w->samples = 0;
+    }
+} // end add_wideband_sample
+

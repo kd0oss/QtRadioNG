@@ -40,6 +40,7 @@
 
 class Configure : public QDialog {
     Q_OBJECT
+
 public:
     Configure();
     virtual ~Configure();
@@ -111,7 +112,7 @@ public:
     int  getRxAGCHangThreshValue(); //KD0OSS
 
     bool getLevelerEnabledValue(); //KD0OSS
-    int  getLevelerMaxGainValue(); //KD0OSS
+//    int  getLevelerMaxGainValue(); //KD0OSS
     int  getLevelerAttackValue(); //KD0OSS
     int  getLevelerDecayValue(); //KD0OSS
     int  getLevelerHangValue(); //KD0OSS
@@ -119,7 +120,7 @@ public:
     bool getALCEnabledValue(); //KD0OSS
     int  getALCAttackValue(); //KD0OSS
     int  getALCDecayValue(); //KD0OSS
-    int  getALCHangValue(); //KD0OSS
+    int  getALCMaxGainValue(); //KD0OSS
 
 signals:
     void hostChanged(QString host);
@@ -168,14 +169,14 @@ signals:
     void agcFixedGainChanged(int); //KD0OSS
     void agcHangThreshChanged(int); //KD0OSS
     void levelerStateChanged(int); //KD0OSS
-    void levelerMaxGainChanged(int); //KD0OSS
+//    void levelerMaxGainChanged(int); //KD0OSS
     void levelerAttackChanged(int); //KD0OSS
     void levelerDecayChanged(int); //KD0OSS
     void levelerHangChanged(int); //KD0OSS
     void alcStateChanged(int); //KD0OSS
     void alcAttackChanged(int); //KD0OSS
     void alcDecayChanged(int); //KD0OSS
-    void alcHangChanged(int); //KD0OSS
+    void alcMaxGainChanged(int); //KD0OSS
 
 
 public slots:
@@ -215,21 +216,21 @@ private slots:
     void onNbLeadChanged(double); //KD0OSS
     void onNbLagChanged(double); //KD0OSS */
     void onRxAgcSlopeChanged(int); //KD0OSS
-    void onRxAgcMaxGainChanged(int); //KD0OSS
+    void onRxAgcMaxGainChanged(double); //KD0OSS
     void onRxAgcAttackChanged(int); //KD0OSS
     void onRxAgcDecayChanged(int); //KD0OSS
     void onRxAgcHangChanged(int); //KD0OSS
     void onRxAgcFixedGainChanged(int); //KD0OSS
     void onRxAgcHangThreshChanged(int); //KD0OSS
     void onLevelerStateChanged(int); //KD0OSS
-    void onLevelerMaxGainChanged(int); //KD0OSS
+    //void onLevelerMaxGainChanged(int); //KD0OSS
     void onLevelerAttackChanged(int); //KD0OSS
     void onLevelerDecayChanged(int); //KD0OSS
     void onLevelerHangChanged(int); //KD0OSS
     void onAlcStateChanged(int); //KD0OSS
     void onAlcAttackChanged(int); //KD0OSS
     void onAlcDecayChanged(int); //KD0OSS
-    void onAlcHangChanged(int); //KD0OSS
+    void onAlcMaxGainChanged(double); //KD0OSS
 
     void setPTTKey(bool); //KD0OSS
 

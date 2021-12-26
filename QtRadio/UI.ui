@@ -195,7 +195,7 @@
      </widget>
     </item>
     <item>
-     <layout class="QHBoxLayout" name="horizontalLayout_4">
+     <layout class="QHBoxLayout" name="horizontalLayout_4" stretch="0,100">
       <property name="spacing">
        <number>0</number>
       </property>
@@ -211,6 +211,12 @@
          <size>
           <width>775</width>
           <height>365</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>16777215</height>
          </size>
         </property>
         <property name="frameShape">
@@ -232,7 +238,7 @@
         <property name="maximumSize">
          <size>
           <width>17</width>
-          <height>16777215</height>
+          <height>16777125</height>
          </size>
         </property>
         <property name="focusPolicy">
@@ -335,7 +341,7 @@
                 <x>0</x>
                 <y>0</y>
                 <width>461</width>
-                <height>217</height>
+                <height>215</height>
                </rect>
               </property>
               <layout class="QHBoxLayout" name="horizontalLayout_5">
@@ -366,12 +372,12 @@
         <widget class="QFrame" name="frame_2">
          <property name="minimumSize">
           <size>
-           <width>315</width>
+           <width>258</width>
            <height>0</height>
           </size>
          </property>
          <property name="frameShape">
-          <enum>QFrame::Box</enum>
+          <enum>QFrame::WinPanel</enum>
          </property>
          <property name="frameShadow">
           <enum>QFrame::Sunken</enum>
@@ -438,7 +444,7 @@
          <widget class="QPushButton" name="tnfButton">
           <property name="geometry">
            <rect>
-            <x>210</x>
+            <x>160</x>
             <y>25</y>
             <width>40</width>
             <height>28</height>
@@ -463,7 +469,7 @@
          <widget class="QPushButton" name="tnfAddButton">
           <property name="geometry">
            <rect>
-            <x>252</x>
+            <x>210</x>
             <y>25</y>
             <width>40</width>
             <height>28</height>
@@ -573,8 +579,21 @@
          </property>
          <property name="sizeHint" stdset="0">
           <size>
-           <width>40</width>
-           <height>20</height>
+           <width>3</width>
+           <height>6</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <spacer name="verticalSpacer_2">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
           </size>
          </property>
         </spacer>
@@ -589,7 +608,7 @@
          </property>
          <property name="maximumSize">
           <size>
-           <width>256</width>
+           <width>284</width>
            <height>16777215</height>
           </size>
          </property>
@@ -622,17 +641,41 @@
            <widget class="QGraphicsView" name="txSpectrumView">
             <property name="minimumSize">
              <size>
-              <width>256</width>
-              <height>0</height>
+              <width>280</width>
+              <height>205</height>
              </size>
             </property>
             <property name="maximumSize">
              <size>
-              <width>256</width>
-              <height>16777215</height>
+              <width>280</width>
+              <height>205</height>
              </size>
             </property>
+            <property name="interactive">
+             <bool>false</bool>
+            </property>
+            <property name="sceneRect">
+             <rectf>
+              <x>0.000000000000000</x>
+              <y>0.000000000000000</y>
+              <width>256.000000000000000</width>
+              <height>200.000000000000000</height>
+             </rectf>
+            </property>
            </widget>
+          </item>
+          <item>
+           <spacer name="verticalSpacer">
+            <property name="orientation">
+             <enum>Qt::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>40</height>
+             </size>
+            </property>
+           </spacer>
           </item>
          </layout>
         </widget>
@@ -648,7 +691,7 @@
      <x>0</x>
      <y>0</y>
      <width>1135</width>
-     <height>30</height>
+     <height>32</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuBand">
@@ -733,7 +776,7 @@
    </widget>
    <widget class="QMenu" name="menuReceiver">
     <property name="title">
-     <string>Receiver</string>
+     <string>Radio</string>
     </property>
     <addaction name="actionConnectToServer"/>
     <addaction name="actionDisconnectFromServer"/>

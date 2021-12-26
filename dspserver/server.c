@@ -81,9 +81,11 @@
 
 RADIO *radio[5];
 CHANNEL channels[35];
+
 short int active_channels = 0;
 short int current_channel = -1;
 short int connected_radios;
+bool      wideband_enabled = false;
 
 extern float txfwd;
 extern float txref;
@@ -99,6 +101,7 @@ static pthread_t mic_audio_client_thread_id,
                  client_thread_id,
                  audio_client_thread_id,
                  spectrum_client_thread_id,
+                 wideband_client_thread_id,
                  tx_thread_id;
 
 #define BASE_PORT 8000
@@ -110,6 +113,7 @@ static int port_ssl = BASE_PORT_SSL;
 // This must match the size declared in WDSP
 #define SAMPLE_BUFFER_SIZE 4096
 static float spectrumBuffer[SAMPLE_BUFFER_SIZE];
+float *widebandBuffer = NULL;
 static int zoom = 0;
 static int low, high;            // filter low/high
 
@@ -137,6 +141,9 @@ static unsigned char mic_buffer[MIC_ALAW_BUFFER_SIZE];
 static timer_t spectrum_timerid;
 static unsigned long spectrum_timestamp = 0;
 
+static timer_t wideband_timerid;
+static unsigned long wideband_timestamp = 0;
+
 int data_in_counter = 0;
 int iq_buffer_counter = 0;
 
@@ -156,6 +163,9 @@ TAILQ_HEAD(, _client_entry) Client_list;
 // Spectrum_client_list is the HEAD of a queue of connected spectrum clients
 TAILQ_HEAD(, _client_entry) Spectrum_client_list;
 
+// Wideband_client_list is the HEAD of a queue of connected spectrum clients
+TAILQ_HEAD(, _client_entry) Wideband_client_list;
+
 // Audio_client_list is the HEAD of a queue of connected receive audio clients
 TAILQ_HEAD(, _client_entry) Audio_client_list;
 
@@ -166,6 +176,8 @@ static int send_audio = 0;
 
 static sem_t audio_bufevent_semaphore,
              spec_bufevent_semaphore,
+             wb_bufevent_semaphore,
+             wideband_semaphore,
              bufferevent_semaphore,
              mic_semaphore,
              spectrum_semaphore;
@@ -175,8 +187,10 @@ void* spectrum_client_thread(void* arg);
 void* audio_client_thread(void* arg);
 void* tx_thread(void* arg);
 void* mic_audio_client_thread(void* arg);
+void* wideband_client_thread(void* arg);
 
 void client_set_samples(char *client_samples, float* samples,int size);
+void client_set_wb_samples(char *client_samples, float* samples,int size);
 
 void do_accept(evutil_socket_t listener, short event, void *arg);
 void readcb(struct bufferevent *bev, void *ctx);
@@ -194,7 +208,12 @@ void do_accept_mic_audio(evutil_socket_t listener, short event, void *arg);
 void mic_audio_readcb(struct bufferevent *bev, void *ctx);
 void mic_audio_writecb(struct bufferevent *bev, void *ctx);
 
+void do_accept_wideband(evutil_socket_t listener, short event, void *arg);
+void wideband_readcb(struct bufferevent *bev, void *ctx);
+void wideband_writecb(struct bufferevent *bev, void *ctx);
+
 void spectrum_timer_handler(union sigval);
+void wideband_timer_handler(union sigval);
 
 
 float getFilterSizeCalibrationOffset()
@@ -212,12 +231,12 @@ void audio_stream_init(int receiver)
 } //end audio_stream_init
 
 
-void init_analyzer(int rx, int length)
+void init_analyzer(int disp, int length)
 {
     multimeterCalibrationOffset = -41.0f;
     displayCalibrationOffset = -48.0f;
 
-    initAnalyzer(rx, 120, 15, length);
+    initAnalyzer(disp, 120, 15, length);
 } // end init_analyzer
 
 
@@ -287,7 +306,7 @@ void Mic_stream_queue_free()
 } // end Mic_stream_queue_free
 
 
-void calculate_display_average()
+void calculate_display_average(int disp)
 {
     double display_avb;
     int display_average;
@@ -296,9 +315,9 @@ void calculate_display_average()
 
     display_avb = exp(-1.0 / ((double)15 * t));
     display_average = fmax(2, (int)fmin(60, (double)15 * t));
-    SetDisplayAvBackmult(0, 0, display_avb);
-    SetDisplayNumAverage(0, 0, display_average);
-    fprintf(stderr, "avb: %f   avg: %d\n", display_avb, display_average);
+    SetDisplayAvBackmult(disp, 0, display_avb);
+    SetDisplayNumAverage(disp, 0, display_average);
+    fprintf(stderr, "Disp: %d  avb: %f   avg: %d\n", disp, display_avb, display_average);
 } // end calculate_display_average
 
 
@@ -328,16 +347,20 @@ void server_init(int receiver)
     TAILQ_INIT(&Audio_client_list);
     TAILQ_INIT(&Mic_audio_client_list);
     TAILQ_INIT(&Mic_audio);
+    TAILQ_INIT(&Wideband_client_list);
 
     sem_init(&bufferevent_semaphore, 0, 1);
     sem_init(&spec_bufevent_semaphore, 0, 1);
     sem_init(&audio_bufevent_semaphore, 0, 1);
     sem_init(&mic_semaphore, 0, 1);
     sem_init(&spectrum_semaphore, 0, 1);
+    sem_init(&wideband_semaphore, 0, 1);
+    sem_init(&wb_bufevent_semaphore, 0, 1);
 
     signal(SIGPIPE, SIG_IGN);
 
     spectrum_timer_init();
+    wideband_timer_init();
 
     port = BASE_PORT;
     port_ssl = BASE_PORT_SSL;
@@ -365,6 +388,20 @@ void server_init(int receiver)
     }
     else
         rc = pthread_detach(spectrum_client_thread_id);
+
+    rc = pthread_create(&mic_audio_client_thread_id, NULL, mic_audio_client_thread, NULL);
+    if (rc != 0)
+        fprintf(stderr, "pthread_create failed on mic_audio_client_thread: rc=%d\n", rc);
+    else
+        rc = pthread_detach(mic_audio_client_thread_id);
+
+    rc = pthread_create(&wideband_client_thread_id, NULL, wideband_client_thread, NULL);
+    if (rc != 0)
+    {
+        fprintf(stderr, "pthread_create failed on wideband_client_thread: rc=%d\n", rc);
+    }
+    else
+        rc = pthread_detach(wideband_client_thread_id);
 } // end server_init
 
 
@@ -377,12 +414,6 @@ void tx_init(void)
         fprintf(stderr, "pthread_create failed on tx_thread: rc=%d\n", rc);
     else
         rc = pthread_detach(tx_thread_id);
-
-    rc = pthread_create(&mic_audio_client_thread_id, NULL, mic_audio_client_thread, NULL);
-    if (rc != 0)
-        fprintf(stderr, "pthread_create failed on mic_audio_client_thread: rc=%d\n", rc);
-    else
-        rc = pthread_detach(mic_audio_client_thread_id);
 } // end tx_init
 
 
@@ -421,7 +452,6 @@ void spectrum_timer_handler(union sigval usv)
         GetPixels(current_rx, 0, spectrumBuffer, &flag);
         return;               // no clients
     }
-
     sem_wait(&spectrum_semaphore);
 
     if (mox && current_tx > -1)
@@ -460,7 +490,7 @@ void spectrum_timer_handler(union sigval usv)
         {
             if (item->frame_counter-- <= 1)
             {
-                //fprintf(stderr, "here\n");
+             //   fprintf(stderr, "here\n");
                 char *client_samples = malloc(sizeof(spectrum)+item->samples);
                 sem_wait(&spectrum_semaphore);
                 client_set_samples(client_samples, spectrumBuffer, item->samples);
@@ -476,6 +506,72 @@ void spectrum_timer_handler(union sigval usv)
 
     spectrum_timestamp++;
 } // end spectrum_timer_handler
+
+
+void wideband_timer_init(void)
+{
+    struct itimerspec value;
+    struct sigevent sev;
+
+    value.it_value.tv_sec = 0;
+    value.it_value.tv_nsec = SPECTRUM_TIMER_NS;
+
+    value.it_interval.tv_sec = 0;
+    value.it_interval.tv_nsec = SPECTRUM_TIMER_NS;
+
+    sev.sigev_notify = SIGEV_THREAD;
+    sev.sigev_notify_function = wideband_timer_handler;
+    sev.sigev_notify_attributes = NULL;
+
+    timer_create(CLOCK_REALTIME, &sev, &wideband_timerid);
+    timer_settime(wideband_timerid, 0, &value, NULL);
+} // end wideband_timer_init
+
+
+void wideband_timer_handler(union sigval usv)
+{            // this is called every 20 ms
+    int flag = 0;
+    client_entry *item;
+
+    if (current_rx == -1 || !wideband_enabled) return;
+
+    sem_wait(&wb_bufevent_semaphore);
+    item = TAILQ_FIRST(&Wideband_client_list);
+    sem_post(&wb_bufevent_semaphore);
+    if (item == NULL)
+    {
+        GetPixels(WIDEBAND_CHANNEL, 0, widebandBuffer, &flag);
+        return;               // no clients
+    }
+
+    sem_wait(&wideband_semaphore);
+    GetPixels(WIDEBAND_CHANNEL, 0, widebandBuffer, &flag);
+    sem_post(&wideband_semaphore);
+    if (!flag) return;
+
+    sem_wait(&wb_bufevent_semaphore);
+    TAILQ_FOREACH(item, &Wideband_client_list, entries)
+    {
+        sem_post(&wb_bufevent_semaphore);
+        if (item->fps > 0)
+        {
+            if (item->wb_frame_counter-- <= 1)
+            {
+                char *client_samples = malloc(sizeof(spectrum)+item->wb_samples);
+                sem_wait(&wideband_semaphore);
+                client_set_wb_samples(client_samples, widebandBuffer, item->wb_samples);
+                sem_post(&wideband_semaphore);
+                bufferevent_write(item->bev, client_samples, sizeof(spectrum)+item->wb_samples);
+                free(client_samples);
+                item->wb_frame_counter = (item->fps == 0) ? 50 : 50 / item->fps;
+            }
+        }
+        sem_wait(&wb_bufevent_semaphore);
+    }
+    sem_post(&wb_bufevent_semaphore);
+
+    wideband_timestamp++;
+} // end wideband_timer_handler
 
 
 void *tx_thread(void *arg)
@@ -498,7 +594,7 @@ void *tx_thread(void *arg)
     double mic_buf[TX_BUFFER_SIZE*2];
     int error;
 
-    // create a socket to send audio to the server
+    // create a socket to get mic audio from radio client.
     mic_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (mic_socket < 0)
     {
@@ -506,6 +602,11 @@ void *tx_thread(void *arg)
         exit(1);
     }
     // setsockopt(audio_socket, SOL_SOCKET, SO_REUSEADDR, &audio_on, sizeof(audio_on));
+
+    struct timeval read_timeout;
+    read_timeout.tv_sec = 0;
+    read_timeout.tv_usec = 10;
+    setsockopt(mic_socket, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
 
     memset(&mic_addr, 0, mic_length);
     mic_addr.sin_family = AF_INET;
@@ -520,17 +621,18 @@ void *tx_thread(void *arg)
 
     fprintf(stderr, "tx_init: mic audio bound to port %d socket %d\n", ntohs(mic_addr.sin_port), mic_socket);
 
-    while (1)
+    while (!getStopIQIssued())
     {
         if (mic_socket > -1)
         {
             int bytes_read = recvfrom(mic_socket, (char*)&mic_buffer, sizeof(mic_buffer), 0, (struct sockaddr*)&mic_addr, &mic_length);
             if (bytes_read < 0)
             {
-                perror("recvfrom socket failed for mic buffer");
-                exit(1);
+           //     perror("recvfrom socket failed for mic buffer");
+             //   exit(1);
             }
-     //       fprintf(stderr, "F: %2.2f  R: %2.2f\n", mic_buffer.fwd_pwr, mic_buffer.rev_pwr);
+            if (bytes_read <= 0) continue;
+         //   fprintf(stderr, "F: %2.2f  R: %2.2f\n", mic_buffer.fwd_pwr, mic_buffer.rev_pwr);
             txfwd = mic_buffer.fwd_pwr;
             txref = mic_buffer.rev_pwr;
         }
@@ -552,7 +654,7 @@ void *tx_thread(void *arg)
                 for (j=0; j < MIC_ALAW_BUFFER_SIZE; j++)
                 {
                     data_out[j*2] = data_out[j*2+1] = (float)G711A_decode(abuf[j])/32767.0;
-
+//fprintf(stderr, "%2.2f\n", data_out[j*2]);
                     mic_buf[tx_buffer_counter*2] = (double)data_out[2*j];
                     mic_buf[tx_buffer_counter*2+1] = (double)data_out[2*i+1];
                     tx_buffer_counter++;
@@ -563,7 +665,7 @@ void *tx_thread(void *arg)
                         {
                             fexchange0(current_tx, mic_buf, tx_IQ, &error);
                             if (error != 0)
-                                fprintf(stderr, "FX Error (1): %d\n", error);
+                                fprintf(stderr, "TX Error (1): %d\n", error);
 
                             Spectrum0(1, current_tx, 0, 0, tx_IQ);
                         }
@@ -572,7 +674,7 @@ void *tx_thread(void *arg)
                             {
                                 fexchange0(current_tx, mic_buf, tx_IQ, &error);
                                 if (error != 0)
-                                    fprintf(stderr, "FX Error (2): %d\n", error);
+                                    fprintf(stderr, "TX Error (2): %d\n", error);
                                 Spectrum0(1, current_tx, 0, 0, tx_IQ);
                             }
                         // send Tx IQ to server, buffer is interleaved.
@@ -588,6 +690,9 @@ void *tx_thread(void *arg)
             free(item);
         } // end else item
     } // end while
+    close(mic_socket);
+    fprintf(stderr, "tx_thread stopped.\n");
+    return NULL;
 } // end tx_thread
 
 
@@ -1123,20 +1228,52 @@ void spectrum_readcb(struct bufferevent *bev, void *ctx)
             sdr_log(SDR_LOG_ERROR, "Short read from spectrum client; shouldn't happen\n");
             return;
         }
-        fprintf(stderr, "Spectrum message: %s\n", (const char*)(message+1));
+        fprintf(stderr, "Spectrum message: %s\n", (const char*)(message+2));
         switch ((unsigned char)message[0])
         {
-            case SETFPS:
-            {
-                int samp, fps;
-                
-                sscanf((const char*)(message+1), "%d,%d", &samp, &fps);
-                sdr_log(SDR_LOG_INFO, "Spectrum fps set to = '%d'  Samples = '%d'\n", fps, samp);
-                sem_wait(&spec_bufevent_semaphore);
-                item->samples = samp;
-                item->fps = fps;
-                sem_post(&spec_bufevent_semaphore);
-            }
+        case ENABLENOTCHFILTER:
+            RXANBPSetNotchesRun(current_rx, message[1]);
+            sdr_log(SDR_LOG_INFO, "Notch filter set to: %d\n", message[1]);
+            break;
+
+        case SETNOTCHFILTER:
+        {
+            double fcenter, fwidth;
+        //    printf("%s\n", message+2);
+            sscanf((const char*)(message+2), "%lf %lf", &fcenter, &fwidth);
+            RXANBPAddNotch(current_rx, message[1]-1, fcenter, fwidth, true);
+            sdr_log(SDR_LOG_INFO, "Notch filter added: Id: %d  F: %lf   W: %lf'\n", message[1]-1, fcenter, fwidth);
+        }
+            break;
+
+        case EDITNOTCHFILTER:
+        {
+            double fcenter, fwidth;
+        //    printf("%s\n", message+2);
+            sscanf((const char*)(message+2), "%lf %lf", &fcenter, &fwidth);
+            RXANBPEditNotch(current_rx, message[1]-1, fcenter, fwidth, true);
+            sdr_log(SDR_LOG_INFO, "Notch filter updated: Id: %d  F: %lf   W: %lf'\n", message[1]-1, fcenter, fwidth);
+        }
+            break;
+
+        case DELNOTCHFILTER:
+        {
+            RXANBPDeleteNotch(current_rx, message[1]);
+            sdr_log(SDR_LOG_INFO, "Notch filter id: %d deleted.\n", message[1]);
+        }
+            break;
+
+        case SETFPS:
+        {
+            int samp, fps;
+
+            sscanf((const char*)(message+1), "%d,%d", &samp, &fps);
+            sdr_log(SDR_LOG_INFO, "Spectrum fps set to = '%d'  Samples = '%d'\n", fps, samp);
+            sem_wait(&spec_bufevent_semaphore);
+            item->samples = samp;
+            item->fps = fps;
+            sem_post(&spec_bufevent_semaphore);
+        }
             break;
         }
     }
@@ -1175,11 +1312,6 @@ void spectrum_errorcb(struct bufferevent *bev, short error, void *ctx)
 
         sem_post(&spec_bufevent_semaphore);
 
-        if (client_count <= 0)
-        {
-            sem_wait(&spec_bufevent_semaphore);
-            sem_post(&spec_bufevent_semaphore);
-        }
         bufferevent_free(bev);
     }
     else if (error & BEV_EVENT_ERROR)
@@ -1251,6 +1383,296 @@ void do_accept_spectrum(evutil_socket_t listener, short event, void *arg)
         zoom = 0;
     }
 } // emd do_accept_spectrum
+
+/*****************************************************************************************************************
+******************************************************************************************************************
+*****************************************************************************************************************/
+ 
+void* wideband_client_thread(void* arg)
+{
+    int on = 1;
+    struct event_base *base;
+    struct event *listener_event;
+    struct sockaddr_in server;
+    int    widebandSocket;
+
+    fprintf(stderr,"wideband_client_thread\n");
+
+    // setting up non-ssl open serverSocket
+    widebandSocket = socket(AF_INET,SOCK_STREAM, 0);
+    if (widebandSocket == -1)
+    {
+        perror("wideband_client socket");
+        return NULL;
+    }
+
+    evutil_make_socket_nonblocking(widebandSocket);
+    evutil_make_socket_closeonexec(widebandSocket);
+
+#ifndef WIN32
+    setsockopt(widebandSocket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+#endif
+
+    memset(&server, 0, sizeof(server));
+    server.sin_family = AF_INET;
+    server.sin_addr.s_addr = htonl(INADDR_ANY);
+    server.sin_port = htons(port+2);
+
+    if (bind(widebandSocket, (struct sockaddr *)&server, sizeof(server)) < 0)
+    {
+        perror("wideband client bind");
+        fprintf(stderr,"port = %d\n", port+2);
+        return NULL;
+    }
+
+    sdr_log(SDR_LOG_INFO, "wideband_client_thread: listening on port %d\n", port+2);
+
+    if (listen(widebandSocket, 5) == -1)
+    {
+        perror("wideband client listen");
+        exit(1);
+    }
+
+    // this is the Event base for both non-ssl and ssl servers
+    base = event_base_new();
+
+    // add the non-ssl listener to event base
+    listener_event = event_new(base, widebandSocket, EV_READ|EV_PERSIST, do_accept_wideband, (void*)base);
+    event_add(listener_event, NULL);
+
+    event_base_loop(base, 0);
+
+    return NULL;
+} // end wideband_client_thread
+
+
+void wideband_writecb(struct bufferevent *bev, void *ctx)
+{
+    struct audio_entry *item;
+    client_entry *client_item;
+    /*
+    while ((item = audio_stream_queue_remove()) != NULL)
+    {
+        sem_wait(&spec_bufevent_semaphore);
+        TAILQ_FOREACH(client_item, &Spectrum_client_list, entries)
+        {
+            sem_post(&spec_bufevent_semaphore);
+            //  if(client_item->rtp == connection_tcp)
+            {
+                bufferevent_write(client_item->bev, item->buf, item->length);
+            }
+            sem_wait(&spec_bufevent_semaphore);
+        }
+        sem_post(&spec_bufevent_semaphore);
+
+        free(item->buf);
+        free(item);
+    } */
+} // end wideband_writecb
+
+
+void wideband_readcb(struct bufferevent *bev, void *ctx)
+{
+    struct evbuffer *inbuf;
+    client_entry    *item, *current_item = NULL;
+    unsigned char    message[MSG_SIZE];
+    int              bytesRead = 0;
+
+    sem_wait(&wb_bufevent_semaphore);
+    item = TAILQ_FIRST(&Wideband_client_list);
+    sem_post(&wb_bufevent_semaphore);
+    if (item == NULL)
+    {
+        sdr_log(SDR_LOG_ERROR, "readcb called with no wideband clients");
+        return;
+    }
+
+    if (item->bev != bev)
+    {
+        sdr_log(SDR_LOG_ERROR, "readcb called with wideband non-privileged client");
+        client_entry *tmp_item;
+        /* Only allow the first client on Client_list to command
+         * dspserver as primary.  If this client is not the primary, we
+         * will first determine whether it is allowed to execute the
+         * command it is executing, and abort if it is not. */
+
+        // locate the current_item for this slave client
+        sem_wait(&wb_bufevent_semaphore);
+        for (current_item = TAILQ_FIRST(&Wideband_client_list); current_item != NULL; current_item = tmp_item)
+        {
+            tmp_item = TAILQ_NEXT(current_item, entries);
+            if (current_item->bev == bev)
+            {
+                break;
+            }
+        }
+        sem_post(&wb_bufevent_semaphore);
+        if (current_item == NULL)
+        {
+            sdr_log(SDR_LOG_ERROR, "This non-privileged client was not located");
+            return;
+        }
+    }
+
+    inbuf = bufferevent_get_input(bev);
+    while (evbuffer_get_length(inbuf) >= MSG_SIZE)
+    {
+        bytesRead = bufferevent_read(bev, message, MSG_SIZE);
+        if (bytesRead != MSG_SIZE)
+        {
+            sdr_log(SDR_LOG_ERROR, "Short read from wideband client; shouldn't happen\n");
+            return;
+        }
+        fprintf(stderr, "Wideband message: %s\n", (const char*)(message+1));
+        switch ((unsigned char)message[0])
+        {
+        case STARTBANDSCOPE:
+        {
+            int width = 0;
+            sscanf((const char*)(message+1), "%d", &width);
+            sdr_log(SDR_LOG_INFO, "Bandscope width: %u\n", width);
+            if (width < 512) break;
+            item->wb_samples = (int)width;
+            item->fps = 10;
+            widebandBuffer = malloc((item->wb_samples * 2) * sizeof(float));
+            enable_wideband(true);
+        }
+            break;
+
+        case STOPBANDSCOPE:
+        {
+            enable_wideband(false);
+            if (widebandBuffer != NULL)
+                free(widebandBuffer);
+            widebandBuffer = NULL;
+        }
+            break;
+
+        case UPDATEBANDSCOPE:
+        {
+            int width = 0;
+            sscanf((const char*)(message+1), "%d", &width);
+            sdr_log(SDR_LOG_INFO, "Bandscope width: %u\n", width);
+            if (width < 512) break;
+            if (wideband_enabled)
+            {
+                sem_wait(&wb_bufevent_semaphore);
+                item->wb_samples = (int)width;
+                if (widebandBuffer != NULL) free(widebandBuffer);
+                widebandBuffer = malloc((item->wb_samples * 2) * sizeof(float));
+                widebandInitAnalyzer(WIDEBAND_CHANNEL, width);
+                sem_post(&wb_bufevent_semaphore);
+            }
+        }
+            break;
+        }
+    }
+} // end wideband_readcb
+
+
+void wideband_errorcb(struct bufferevent *bev, short error, void *ctx)
+{
+    client_entry *item;
+    int client_count = 0;
+
+    if ((error & BEV_EVENT_EOF) || (error & BEV_EVENT_ERROR))
+    {
+        /* connection has been closed, or error has occured, do any clean up here */
+        /* ... */
+        sem_wait(&wb_bufevent_semaphore);
+        for (item = TAILQ_FIRST(&Wideband_client_list); item != NULL; item = TAILQ_NEXT(item, entries))
+        {
+            if (item->bev == bev)
+            {
+                char ipstr[16];
+                inet_ntop(AF_INET, (void *)&item->client.sin_addr, ipstr, sizeof(ipstr));
+                sdr_log(SDR_LOG_INFO, "Wideband client disconnection from %s:%d\n",
+                        ipstr, ntohs(item->client.sin_port));
+                TAILQ_REMOVE(&Wideband_client_list, item, entries);
+                if (widebandBuffer != NULL)
+                {
+                    free(widebandBuffer);
+                    widebandBuffer = NULL;
+                }
+                free(item);
+                break;
+            }
+        }
+
+        TAILQ_FOREACH(item, &Wideband_client_list, entries)
+        {
+            client_count++;
+        }
+
+        sem_post(&wb_bufevent_semaphore);
+
+        bufferevent_free(bev);
+    }
+    else if (error & BEV_EVENT_ERROR)
+    {
+        /* check errno to see what error occurred */
+        /* ... */
+        sdr_log(SDR_LOG_INFO, "special EVUTIL_SOCKET_ERROR() %d: %s\n", EVUTIL_SOCKET_ERROR(), evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+    }
+    else if (error & BEV_EVENT_TIMEOUT)
+    {
+        /* must be a timeout event handle, handle it */
+        /* ... */
+    } else if (error & BEV_EVENT_CONNECTED)
+    {
+        sdr_log(SDR_LOG_INFO, "BEV_EVENT_CONNECTED: completed SSL handshake connection\n");
+    }
+} // end wideband_errorcb
+
+
+void do_accept_wideband(evutil_socket_t listener, short event, void *arg)
+{
+    client_entry *item;
+    struct event_base *base = arg;
+    struct sockaddr_in ss;
+    socklen_t slen = sizeof(ss);
+
+    int fd = accept(listener, (struct sockaddr*)&ss, &slen);
+    if (fd < 0)
+    {
+        sdr_log(SDR_LOG_WARNING, "wideband client accept failed\n");
+        return;
+    }
+    char ipstr[16];
+    // add newly connected client to Wideband_client_list
+    item = malloc(sizeof(*item));
+    memset(item, 0, sizeof(*item));
+    memcpy(&item->client, &ss, sizeof(ss));
+
+    inet_ntop(AF_INET, (void *)&item->client.sin_addr, ipstr, sizeof(ipstr));
+    sdr_log(SDR_LOG_INFO, "Wideband client connection from %s:%d\n",
+            ipstr, ntohs(item->client.sin_port));
+
+    struct bufferevent *bev;
+    evutil_make_socket_nonblocking(fd);
+    evutil_make_socket_closeonexec(fd);
+    bev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_THREADSAFE);
+    bufferevent_setcb(bev, wideband_readcb, wideband_writecb, wideband_errorcb, NULL);
+    bufferevent_setwatermark(bev, EV_READ, MSG_SIZE, 0);
+    bufferevent_setwatermark(bev, EV_WRITE, 4096, 0);
+    bufferevent_enable(bev, EV_READ|EV_WRITE);
+    item->bev = bev;
+    item->fps = 0;
+    item->wb_frame_counter = 0;
+    sem_wait(&wb_bufevent_semaphore);
+    TAILQ_INSERT_TAIL(&Wideband_client_list, item, entries);
+    sem_post(&wb_bufevent_semaphore);
+
+    int client_count = 0;
+    sem_wait(&wb_bufevent_semaphore);
+    /* NB: Clobbers item */
+    TAILQ_FOREACH(item, &Wideband_client_list, entries)
+    {
+        client_count++;
+    }
+    sem_post(&wb_bufevent_semaphore);
+} // emd do_accept_wideband
+
 
 /*****************************************************************************************************************
 ******************************************************************************************************************
@@ -1672,8 +2094,6 @@ void mic_audio_errorcb(struct bufferevent *bev, short error, void *ctx)
     client_entry *item;
     int client_count = 0;
 
-    printf("mic error\n");
-
     if ((error & BEV_EVENT_EOF) || (error & BEV_EVENT_ERROR))
     {
         /* connection has been closed, or error has occured, do any clean up here */
@@ -1688,7 +2108,6 @@ void mic_audio_errorcb(struct bufferevent *bev, short error, void *ctx)
                 sdr_log(SDR_LOG_INFO, "Mic audio client disconnection from %s:%d\n",
                         ipstr, ntohs(item->client.sin_port));
                 TAILQ_REMOVE(&Mic_audio_client_list, item, entries);
-                hw_stopIQ();
                 free(item);
                 break;
             }
@@ -1874,15 +2293,44 @@ void readcb(struct bufferevent *bev, void *ctx)
 
         if (message[0] == STARCOMMAND)
         {
+            fprintf(stderr, "Message: [%X] [%d] [%d]\n", message[0], message[1], message[2]);
             fprintf(stderr,"HARDWARE DIRECTED: message\n");
             //if (message[1] == STARHARDWARE) message[1] = 1;
             if (item->client_type == CONTROL)
             {
                 // if privilged client, forward the message to the hardware
                 if (message[1] == ATTACH)
-                    make_connection(channels[message[2]].radio_id, channels[message[2]].receiver, channels[message[2]].transmitter);
+                {
+//                    if (message[2] == TX)
+  //                      tx_init();
+                    make_connection(channels[message[2]].radio_id, channels[message[2]].recv_index, channels[message[2]].trans_index);
+                }
                 else
-                    hwSendStarCommand(message);
+                {
+                    if (message[1] == DETACH)
+                    {
+                        char command[64];
+                        setStopIQIssued(1);
+                        sleep(1);
+                        command[0] = '*';
+                        command[1] = DETACH;
+                        command[2] = (char)channels[message[2]].recv_index;
+                        command[3] = (char)channels[message[2]].radio_id;
+                        hwSendStarCommand(command, 3);
+                        DestroyAnalyzer(channels[message[2]].receiver);
+                        CloseChannel(channels[message[2]].receiver);
+                        if (channels[message[2]].transmitter >= 0)
+                        {
+                       //     pthread_kill(tx_thread_id, SIGKILL);
+                            DestroyAnalyzer(channels[message[2]].transmitter);
+                            CloseChannel(channels[message[2]].transmitter);
+                        }
+                        channels[message[2]].enabled = false;
+                        fprintf(stderr, "** Channel detached. **\n");
+                    }
+                    else
+                        hwSendStarCommand(message, strlen(message));
+                }
                 /////                answer_question(message, role, bev);
             }
             else
@@ -1980,9 +2428,10 @@ void readcb(struct bufferevent *bev, void *ctx)
             {
                 short int current_channel = (short int)message[1];
                 short int rx = channels[current_channel].receiver;
-                fprintf(stderr, "Ch = %d  TX = %d\n", current_channel, channels[current_channel].transmitter);
+                fprintf(stderr, "Ch = %d  RX = %d  TX = %d\n", current_channel, channels[current_channel].receiver, channels[current_channel].transmitter);
+
                 OpenChannel(rx, 512, 2048, 48000, 48000, 48000, 0, 0, 0.010, 0.025, 0.000, 0.010, 0);
-                printf("Channel %d opened.\n", rx);fflush(stdout);
+                printf("RX channel %d opened.\n", rx);fflush(stdout);
 
                 create_anbEXT(rx, 0, 512, 48000, 0.0001, 0.0001, 0.0001, 0.05, 20);
                 create_nobEXT(rx, 0, 0, 512, 48000, 0.0001, 0.0001, 0.0001, 0.05, 20);
@@ -1996,9 +2445,11 @@ void readcb(struct bufferevent *bev, void *ctx)
                 SetRXAPanelPan(rx, 0.5f);
                 SetRXAPanelCopy(rx, 0);
                 SetRXAPanelBinaural(rx, 0);
-                SetRXAPanelRun(rx, 1);
-                SetRXAEQRun(rx, 0);
-                SetRXABandpassRun(rx, 1);
+                SetRXAPanelRun(rx, true);
+
+                SetRXAEQRun(rx, false);
+
+                SetRXABandpassRun(rx, true);
 
                 SetRXAShiftFreq(rx, LO_offset);
 
@@ -2024,6 +2475,8 @@ void readcb(struct bufferevent *bev, void *ctx)
                 SetRXAANFRun(rx, false);
                 SetRXASNBARun(rx, false);
 
+                RXANBPSetRun(rx, true);
+
                 int rc = 0;
                 XCreateAnalyzer(rx, &rc, 262144, 1, 1, "");
                 if (rc < 0) printf("XCreateAnalyzer failed on channel %d.\n", rx);
@@ -2031,7 +2484,7 @@ void readcb(struct bufferevent *bev, void *ctx)
 
                 SetDisplayDetectorMode(rx, 0, DETECTOR_MODE_PEAK/*display_detector_mode*/);
                 SetDisplayAverageMode(rx, 0, AVERAGE_MODE_NONE/*display_average_mode*/);
-                calculate_display_average();
+                calculate_display_average(rx);
 
                 SetChannelState(rx, 1, 1);
                 channels[current_channel].enabled = true;
@@ -2113,9 +2566,13 @@ void readcb(struct bufferevent *bev, void *ctx)
                 sem_wait(&bufferevent_semaphore);
                 if (channels[ch].enabled)
                 {
+                    DestroyAnalyzer(channels[ch].receiver);
                     CloseChannel(channels[ch].receiver);
                     if (channels[ch].transmitter >= 0)
+                    {
+                        DestroyAnalyzer(channels[ch].transmitter);
                         CloseChannel(channels[ch].transmitter);
+                    }
                     channels[ch].enabled = false;
                 }
                 sem_post(&bufferevent_semaphore);
@@ -2124,11 +2581,20 @@ void readcb(struct bufferevent *bev, void *ctx)
                 break;
 
             case STARTIQ:
-                hw_startIQ();
+                hw_startIQ(current_channel);
                 fprintf(stderr, "IQ thread started.\n");
                 break;
 
-            case SETAGC:
+            case SETTXOSCTRLRUN:
+            {
+                int run = 0;
+                run = message[1];
+                SetTXACompressorRun(current_tx, run);
+                SetTXAosctrlRun(current_tx, run);
+            }
+                break;
+
+            case SETRXAGCMODE:
             {
                 int agc;
                 agc = message[1];
@@ -2136,11 +2602,70 @@ void readcb(struct bufferevent *bev, void *ctx)
             }
                 break;
 
-            case SETFIXEDAGC:
+            case SETRXAGCFIXED:
             {
                 double agc;
                 agc = atof((const char*)(message+1));
                 SetRXAAGCFixed(current_rx, agc);
+            }
+                break;
+
+            case SETRXAGCATTACK:
+            {
+                int attack = atoi((const char*)(message+1));
+                SetRXAAGCAttack(current_rx, attack);
+            }
+                break;
+
+            case SETRXAGCDECAY:
+            {
+                int decay = atoi((const char*)(message+1));
+                SetRXAAGCDecay(current_rx, decay);
+            }
+                break;
+
+            case SETRXAGCSLOPE:
+            {
+                int slope = atoi((const char*)(message+1));
+                SetRXAAGCSlope(current_rx, slope);
+            }
+                break;
+
+            case SETRXAGCHANG:
+            {
+                int hang = atoi((const char*)(message+1));
+                SetRXAAGCHang(current_rx, hang);
+            }
+                break;
+
+            case SETRXAGCHANGLEVEL:
+            {
+                double level = atof((const char*)(message+1));
+                SetRXAAGCHangLevel(current_rx, level);
+            }
+                break;
+
+            case SETRXAGCHANGTHRESH:
+            {
+                int thresh = atoi((const char*)(message+1));
+                SetRXAAGCHangThreshold(current_rx, thresh);
+            }
+                break;
+
+            case SETRXAGCTHRESH:
+            {
+                double thresh = 0.0f;
+                double size = 0.0f;
+                double rate = 0.0f;
+                sscanf((const char*)(message+1), "%lf %lf %lf", &thresh, &size, &rate);
+                SetRXAAGCThresh(current_rx, thresh, size, rate);
+            }
+                break;
+
+            case SETRXAGCTOP:
+            {
+                double max_agc = atof((const char*)(message+1));
+                SetRXAAGCTop(current_rx, max_agc);
             }
                 break;
 
@@ -2174,6 +2699,30 @@ void readcb(struct bufferevent *bev, void *ctx)
 
             case ENABLETXEQ:
                 SetTXAEQRun(current_tx, message[1]);
+                break;
+
+            case SETTXALCATTACK:
+            {
+                int attack = 0;
+                sscanf((const char*)(message+1), "%d", &attack);
+                SetTXAALCAttack(current_tx, attack);
+            }
+                break;
+
+            case SETTXALCDECAY:
+            {
+                int decay = 0;
+                sscanf((const char*)(message+1), "%d", &decay);
+                SetTXAALCDecay(current_tx, decay);
+            }
+                break;
+
+            case SETTXALCMAXGAIN:
+            {
+                double maxgain = 0.0f;
+                sscanf((const char*)(message+1), "%lf", &maxgain);
+                SetTXAALCMaxGain(current_tx, maxgain);
+            }
                 break;
 
             case SETFPS:
@@ -2328,7 +2877,7 @@ void readcb(struct bufferevent *bev, void *ctx)
                 int low, high;
                 current_rx = channels[message[1]].receiver;
                 sscanf((const char*)(message+2), "%d,%d", &low, &high);
-                printf("Low: %d   High: %d\n", low, high);
+                printf("RX: %d  Low: %d   High: %d\n", current_rx, low, high);
                 RXASetPassband(current_rx, (double)low, (double)high);
             }
                 break;
@@ -2577,7 +3126,7 @@ void readcb(struct bufferevent *bev, void *ctx)
                     SetChannelState(current_tx, 0, 1);
                     SetChannelState(current_rx, 1, 0);
                 }
-                sdr_log(SDR_LOG_INFO, "Mox set to: %d for %s\n", mox, user);
+                sdr_log(SDR_LOG_INFO, "Mox set to: %d for tx channel %d\n", mox, current_tx);
             }
                 break;
 
@@ -2603,7 +3152,7 @@ void client_set_samples(char* client_samples, float* samples, int size)
 
     if (size != 2000) {printf("Spectrum len: %d\n", size); fflush(stdout);}
     spec.length = size;
-    spec.radio_id = 0;
+    spec.radio_id = channels[current_channel].radio_id;
     spec.rx = current_rx;
     spec.fwd_pwr = txfwd;
     spec.rev_pwr = txref;
@@ -2650,6 +3199,31 @@ void client_set_samples(char* client_samples, float* samples, int size)
     }
     memcpy(client_samples, (char*)&spec, sizeof(spec));
 } // end client_set_samples
+
+
+void client_set_wb_samples(char* client_samples, float* samples, int size)
+{
+    spectrum spec;
+    int i = 0;
+    float extras = 0.0f;
+
+ //   if (size != 512) {printf("Wideband spectrum len: %d\n", size); fflush(stdout);}
+    spec.length = (unsigned short)size;
+    spec.radio_id = channels[current_channel].radio_id;
+    spec.rx = current_rx;
+    spec.sample_rate = sampleRate;
+
+
+#pragma omp parallel shared(size, samples, client_samples) private(i)
+    {
+#pragma omp for schedule(static)
+        for (i=0;i<size;i++)
+        {
+            client_samples[i+sizeof(spec)] = (char)-(samples[i]+extras);
+        }
+    }
+    memcpy(client_samples, (char*)&spec, sizeof(spec));
+} // end client_set_wb_samples
 
 
 #ifdef old
@@ -2822,7 +3396,6 @@ void initAnalyzer(int disp, int pixels, int frame_rate, int blocksize)
     //   int blocksize = 512;
     int window_type = 5;
     double kaiser_pi = 14.0;
-    int avm = 0;
     int calibration_data_set = 0;
     double span_min_freq = 0.0;
     double span_max_freq = 0.0;
@@ -2902,7 +3475,7 @@ void initAnalyzer(int disp, int pixels, int frame_rate, int blocksize)
     }
     }
 
-    fprintf(stderr, "avb: %f  davg: %d  low: %d  high: %d  clip: %d  sclip_l: %d  sclip_h: %d  overlap: %d  maxw: %d\n", avb, display_average, low, high, clip, span_clip_l, span_clip_h, overlap, max_w);
+    fprintf(stderr, "Disp: %d  avb: %f  davg: %d  low: %d  high: %d  clip: %d  sclip_l: %d  sclip_h: %d  overlap: %d  maxw: %d\n", disp, avb, display_average, low, high, clip, span_clip_l, span_clip_h, overlap, max_w);
     SetAnalyzer(disp,
                 n_pixout,
                 spur_eliminationtion_ffts,
@@ -2918,14 +3491,95 @@ void initAnalyzer(int disp, int pixels, int frame_rate, int blocksize)
                 span_clip_h,
                 pixels,
                 stitches,
-                //    avm,
-                //    display_average,
-                //     avb,
                 calibration_data_set,
                 span_min_freq,
                 span_max_freq,
                 max_w);
+    fprintf(stderr, "Analyzer created.\n");
 } // end initAnalyzer
+
+
+void enable_wideband(bool enable)
+{
+    int pixels = 512;
+    int ch = WIDEBAND_CHANNEL;
+    int result;
+
+
+    if (enable)
+    {
+        XCreateAnalyzer(ch, &result, 262144, 1, 1, "");
+        if (result != 0)
+        {
+            printf("XCreateAnalyzer channel=%d failed: %d\n", ch, result);
+        }
+        else
+        {
+            widebandInitAnalyzer(ch, pixels);
+        }
+
+        SetDisplayDetectorMode(ch, 0, DETECTOR_MODE_AVERAGE/*display_detector_mode*/);
+        SetDisplayAverageMode(ch, 0,  AVERAGE_MODE_LOG_RECURSIVE/*display_average_mode*/);
+        wideband_enabled = true;
+    }
+    else
+    {
+        wideband_enabled = false;
+        DestroyAnalyzer(ch);
+    }
+} // end enable_wideband
+
+
+void widebandInitAnalyzer(int disp, int pixels)
+{
+    //maximum number of frames of pixels to average
+    //   int frame_rate = 15;
+    int frame_rate = 10;
+//    double tau = 0.12;
+    int data_type = 1;
+    int n_pixout = 1;
+    int overlap = 0;
+    int fft_size = 16384;
+    int blocksize = 16384;
+    int sample_rate = 48000;
+    int clip = 0;
+    int stitches = 1;
+    int span_clip_l = 0;
+    int span_clip_h = 0;
+    const double KEEP_TIME = 0.1;
+    int max_w;
+    int spur_eliminationtion_ffts = 1;
+    static int h_flip[] = {0};
+    int window_type = 4;
+    double kaiser_pi = 14.0;
+    int calibration_data_set = 0;
+    double span_min_freq = 0.0;
+    double span_max_freq = 0.0;
+
+    max_w = fft_size + (int)MIN(KEEP_TIME * (double)frame_rate, KEEP_TIME * (double)fft_size * (double)frame_rate);
+
+//    fprintf(stderr, "Disp: %d  avb: %f  davg: %d  low: %d  high: %d  clip: %d  sclip_l: %d  sclip_h: %d  overlap: %d  maxw: %d\n", disp, avb, display_average, low, high, clip, span_clip_l, span_clip_h, overlap, max_w);
+    SetAnalyzer(disp,
+                n_pixout,
+                spur_eliminationtion_ffts,
+                data_type,
+                h_flip,
+                fft_size,
+                blocksize,
+                window_type,
+                kaiser_pi,
+                overlap,
+                clip,
+                span_clip_l,
+                span_clip_h,
+                pixels*2,
+                stitches,
+                calibration_data_set,
+                span_min_freq,
+                span_max_freq,
+                max_w);
+    fprintf(stderr, "Wideband analyzer created.\n");
+} // end windbandInitAnalyzer
 
 
 void printversion()

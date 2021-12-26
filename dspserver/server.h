@@ -46,6 +46,7 @@
 #define __SERVER_H__
 
 #include <sys/queue.h>
+#include <stdbool.h>
 #include <ortp/ortp.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -62,6 +63,9 @@ int numSamples;
 int rxMeterMode;
 int txMeterMode;
 // **********************
+
+#define WIDEBAND_CHANNEL 9
+#define BANDSCOPE_PORT 10040
 
 typedef enum _sdrmode
 {
@@ -192,14 +196,57 @@ enum COMMAND_SET {
     SETSQUELCHSTATE,
     SETTXAMCARLEV,
     GETSPECTRUM,
-    SETAGC,
+    SETRXAGCMODE,
     SETNBVAL,
     SETMICGAIN,
-    SETFIXEDAGC,
     ENABLERXEQ,
     ENABLETXEQ,
     SETRXEQPRO,
     SETTXEQPRO,
+    SETNOTCHFILTER,
+    ENABLENOTCHFILTER,
+    EDITNOTCHFILTER,
+    DELNOTCHFILTER,
+    SETRXAGCSLOPE,
+    SETRXAGCATTACK,
+    SETRXAGCDECAY,
+    SETRXAGCHANG,
+    SETRXAGCHANGLEVEL,
+    GETRXAGCHANGLEVEL,
+    GETRXAGCHANGTHRESH,
+    SETRXAGCHANGTHRESH,
+    GETRXAGCTHRESH,
+    SETRXAGCTHRESH,
+    GETRXAGCTOP,
+    SETRXAGCTOP,
+    SETRXAGCFIXED,
+    SETRXANFTAPS,
+    SETRXANFDELAY,
+    SETRXANFGAIN,
+    SETRXANFLEAKAGE,
+    SETRXANFVALS,
+    SETRXANFPOS,
+    SETRXANRTAPS,
+    SETRXANRDELAY,
+    SETRXANRGAIN,
+    SETRXANRLEAKAGE,
+    SETRXANRPOS,
+    SETRXEMNRRUN,
+    SETRXEMNRGAINMETHOD,
+    SETRXEMNRNPEMETHOD,
+    SETRXEMNRPOS,
+    SETRXCBLRUN,
+    SETTXLEVELERST,
+    SETTXLEVELERATTACK,
+    SETTXLEVELERDECAY,
+    SETTXLEVELERTOP,
+    SETTXBPASSFREQS,
+    SETRXBPASSFREQS,
+    SETTXOSCTRLRUN,
+    SETTXALCST,
+    SETTXALCATTACK,
+    SETTXALCDECAY,
+    SETTXALCMAXGAIN,
 
 
     STOPXCVR = 242,
@@ -211,11 +258,15 @@ enum COMMAND_SET {
     TX = 248,
     DETACH = 249,
     STARTIQ = 250,
-    STARTBANDSCOPE = 251,
     STOPIQ = 252,
-    STOPBANDSCOPE = 253,
     MOX = 254,
     STARHARDWARE = 255
+};
+
+enum BANDSCOPE {
+    STARTBANDSCOPE = 1,
+    STOPBANDSCOPE,
+    UPDATEBANDSCOPE
 };
 
 enum CLIENT_TYPE {
@@ -232,11 +283,13 @@ enum CLIENT_CONNECTION {
 typedef struct _client_entry {
     int client_type;
     struct sockaddr_in client;
-	struct bufferevent * bev;
-	int fps;
-	int frame_counter;
-	int samples;
-	TAILQ_ENTRY(_client_entry) entries;
+    struct bufferevent * bev;
+    int fps;
+    int frame_counter;
+    int wb_frame_counter;
+    int samples;
+    int wb_samples;
+    TAILQ_ENTRY(_client_entry) entries;
 } client_entry;
 
 typedef struct _memory_entry {
@@ -267,6 +320,15 @@ typedef struct _spectrum
     char           *samples; // not used here, just a place holder for client side consistancy.
 } spectrum;
 
+typedef struct _wideband
+{
+    unsigned short radio_id;
+    unsigned short rx;
+    unsigned short length;
+    unsigned int   sample_rate;
+    char           *samples;
+} wideband;
+
 extern short int active_channels;
 
 char servername[21];
@@ -279,7 +341,10 @@ void server_init(int receiver);
 void tx_init(void);
 void spectrum_init(void);
 void initAnalyzer(int, int, int, int);
+void enable_wideband(bool);
+void widebandInitAnalyzer(int, int);
 void spectrum_timer_init(void);
+void wideband_timer_init(void);
 void *spectrum_thread(void *);
 void *memory_thread(void *);
 void client_set_timing(void);
@@ -288,5 +353,5 @@ void printversion(void);
 static SSL_CTX *evssl_init(void);
 
 extern double mic_src_ratio;
-
+extern bool wideband_enabled;
 #endif

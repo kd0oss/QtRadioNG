@@ -243,7 +243,7 @@ static void  process_div_iq_data(unsigned char *buffer);
 static void  process_command_response();
 static void  process_high_priority();
 static void  process_mic_data(int bytes);
-
+static void process_wideband_data(WIDEBAND *w, unsigned char *buffer);
 
 #ifdef INCLUDED
 static void new_protocol_calc_buffers() {
@@ -606,6 +606,12 @@ static void new_protocol_general() {
     general_buffer[2]=general_sequence>>8;
     general_buffer[3]=general_sequence;
 
+    if (radio != NULL) {
+        if (radio->wideband != NULL) {
+            general_buffer[23] = 0x01; // enable for ADC-0
+        }
+    }
+
     // use defaults apart from
     general_buffer[37]=0x08;  //  phase word (not frequency)
     general_buffer[38]=0x01;  //  enable hardware timer
@@ -840,7 +846,7 @@ static void new_protocol_high_priority() {
         // Note: ALEX attenuators are not much used anyway since we
         //       have step attenuators on most boards.
         //
-      //  printf("******Att: %d\n", receiver[0]->alex_attenuation);
+        //printf("******Att: %d\n", receiver[0]->alex_attenuation);
         switch (receiver[0]->alex_attenuation) {
         case 0:
             alex0 |= ALEX_ATTENUATION_0dB;
@@ -1241,7 +1247,7 @@ static void new_protocol_receive_specific() {
     int i;
     int ddc;
     int rc;
-
+//fprintf(stderr, "adcs=%d  receivers=%d  device=%d\n", n_adc, receivers, device);
     pthread_mutex_lock(&rx_spec_mutex);
     memset(receive_specific_buffer, 0, sizeof(receive_specific_buffer));
 
@@ -1487,6 +1493,15 @@ static void* new_protocol_thread(void *data) {
 #endif
             }
             break;
+
+        case WIDE_BAND_TO_HOST_PORT:
+          if (radio->wideband != NULL)
+          {
+            process_wideband_data(radio->wideband, buffer);
+            free(buffer);
+          }
+          break;
+
         case COMMAND_RESPONCE_TO_HOST_PORT:
 #ifdef __APPLE__
             sem_wait(command_response_sem_ready);
@@ -2057,3 +2072,19 @@ void* new_protocol_timer_thread(void* arg) {
     }
     return NULL;
 }
+
+static void process_wideband_data(WIDEBAND *w, unsigned char *buffer) {
+    long sequence;
+    int b;
+    int16_t sample;
+
+  //  fprintf(stderr, "Widebannd data...\n");
+    sequence = ((buffer[0]&0xFF)<<24)+((buffer[1]&0xFF)<<16)+((buffer[2]&0xFF)<<8)+(buffer[3]&0xFF);
+    b = 4;
+    while (b < 1028) {
+        sample   = (int)((signed char) buffer[b++])<<8;
+        sample  |= (int)((unsigned char)buffer[b++]&0xFF);
+        add_wideband_sample(w, sample);
+    }
+}
+

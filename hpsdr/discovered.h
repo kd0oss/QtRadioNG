@@ -23,6 +23,7 @@
 #define _DISCOVERED_H
 
 #include <netinet/in.h>
+#include "receiver.h"
 
 #define MAX_DEVICES 16
 
@@ -58,7 +59,6 @@
 #define ORIGINAL_PROTOCOL 0
 #define NEW_PROTOCOL 1
 
-
 struct _DISCOVERED {
     int protocol;
     int device;
@@ -70,6 +70,7 @@ struct _DISCOVERED {
     int supported_transmitters;
     int adcs;
     int dacs;
+    WIDEBAND *wideband;
     double frequency_min;
     double frequency_max;
     union {

@@ -138,6 +138,12 @@ void RigCtlSocket::readyRead()
                             output = true;
                         }
                         else
+                            if (command[0] == 't')
+                            { // get_ptt
+                                out << main->rigGetPTT() << "\n";
+                                output = true;
+                            }
+                            else
                             if (command[0] == 's')
                             { // get_split_vfo
                                 out << "0" << "\n";
