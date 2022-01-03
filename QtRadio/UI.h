@@ -63,8 +63,6 @@
 //#include "hermesframe.h"
 #include "EqualizerDialog.h"
 
-#define DSPSERVER_BASE_PORT 8000
-
 #define AGC_FIXED 0
 #define AGC_LONG 1
 #define AGC_SLOW 2
@@ -203,7 +201,7 @@ public slots:
     void frequencyChanged(long long frequency);
     void sampleRateChanged(long rate);
 
-    void updateSpectrum();
+ //   void updateSpectrum();
     void masterButtonClicked(void);
 
     void audioDeviceChanged(QAudioDeviceInfo info,int rate,int channels,QAudioFormat::Endian byteOrder);
@@ -298,6 +296,13 @@ private slots:
     void sendHardwareCommand(QByteArray);
     void setCurrentChannel(int);
     void closeBandScope(void);
+    void cessbOvershootChanged(bool);
+    void aeFilterChanged(bool);
+    void nrGainMethodChanged(int);
+    void nrNpeMethodChanged(int);
+    void preAGCFiltersChanged(bool);
+    void rxFilterWindowChanged(int);
+    void txFilterWindowChanged(int);
 
 private:
     void printWindowTitle(QString message);

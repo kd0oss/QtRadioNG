@@ -691,28 +691,17 @@ void ServerConnection::processBuffer()
         nextBuffer = buffer->getBuffer();
         // emit a signal to show what buffer we have
         //   qDebug() << "processBuffer " << nextHeader[0];
-    //    if (nextHeader[0] == SPECTRUM_BUFFER)
-    //    {
-    //        emit spectrumBuffer(nextHeader, nextBuffer);
-    //    }
-    //    else
-            if (nextHeader[0] == AUDIO_BUFFER)
-            {
-                // need to add a duplex state
-                if (!muted)
-                    emit audioBuffer(nextHeader, nextBuffer);
-            }
-            else
-                if (nextHeader[0] == BANDSCOPE_BUFFER)
-                {
-                    //qDebug() << "socketData: bandscope";
- //                   emit bandscopeBuffer(nextHeader, nextBuffer);
-                }
-                else
-                {
-                    qDebug() << "Connection::socketData: invalid header: " << nextHeader[0];
-                    queue.clear();
-                }
+        if (nextHeader[0] == AUDIO_BUFFER)
+        {
+            // need to add a duplex state
+            if (!muted)
+                emit audioBuffer(nextHeader, nextBuffer);
+        }
+        else
+        {
+            qDebug() << "Connection::socketData: invalid header: " << nextHeader[0];
+            queue.clear();
+        }
     }
 } // end processBuffer
 
@@ -769,7 +758,7 @@ QString ServerConnection::getXcvrProperty(int server, int xcvr, const QString pr
 void ServerConnection::createChannels(int servers)
 {
     char line[80];
-    char *manifest=NULL;
+    char *manifest = NULL;
     char radio_type[25];
     int  index = 0;
     int  last_tx_ch = -1;
@@ -777,6 +766,7 @@ void ServerConnection::createChannels(int servers)
     int  radio_id = 0;
     int  num_chs = 0;
     int  num_rcvrs = 0;
+    int  hasBS = 0;
 
     for (int x=0;x<servers;x++)
     {
@@ -811,11 +801,12 @@ void ServerConnection::createChannels(int servers)
                 {
                     sscanf(line, "%*s %d", &radio_id);
                     channels[active_channels].receiver = -1;
-                    channels[active_channels].recv_index = -1;
+                    channels[active_channels].recv_index = 0;
                     channels[active_channels].transmitter = -1;
-                    channels[active_channels].trans_index = -1;
+                    channels[active_channels].trans_index = 0;
                     channels[active_channels].bandscope_capable = false;
                     channels[active_channels].enabled = false;
+                    hasBS = 0;
                 }
                 else
                     if (strstr(line, "radio_type"))
@@ -830,10 +821,7 @@ void ServerConnection::createChannels(int servers)
                         else
                             if (strstr(line, "bandscope"))
                             {
-                                int tmp=0;
-                                sscanf(line, "%*s %d %*s", &tmp);
-                                if (tmp == 1)
-                                    channels[active_channels].bandscope_capable = true;
+                                sscanf(line, "%*s %d %*s", &hasBS);
                             }
                             else
                                 if (strstr(line, "supported_transmitters"))
@@ -843,11 +831,11 @@ void ServerConnection::createChannels(int servers)
                                     for (int x=0;x<num_rcvrs;x++)
                                     {
                                         channels[active_channels].receiver = num_chs++;
-                                        channels[active_channels].recv_index++;
+                                        channels[active_channels].recv_index = x;
                                         if (r-- > 0)
                                         {
                                             channels[active_channels].transmitter = num_chs++;
-                                            channels[active_channels].trans_index++;
+                                            channels[active_channels].trans_index = x;
                                             last_tx_ch = num_chs - 1;
                                             last_trans_index = channels[active_channels].trans_index;
                                         }
@@ -858,6 +846,8 @@ void ServerConnection::createChannels(int servers)
                                         }
                                         channels[active_channels].radio_id = channels[active_channels].radio_id;
                                         strcpy(channels[active_channels].radio_type, radio_type);
+                                        if (hasBS)
+                                            channels[active_channels].bandscope_capable = true;
                                         channels[active_channels].enabled = false;
                                         active_channels++;
                                     }

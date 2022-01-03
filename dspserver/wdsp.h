@@ -79,7 +79,10 @@ extern void SetRXAPanelBinaural(int channel, int bin);
 extern void SetRXAPanelPan (int channel, double pan);
 extern void RXANBPSetFreqs (int channel, double low, double high);
 extern void RXANBPSetRun (int channel, int run);
+extern void RXANBPSetTuneFrequency (int channel, double tunefreq);
 extern void RXANBPSetNotchesRun (int channel, int run);
+extern void RXANBPSetShiftFrequency (int channel, double shift);
+extern void RXANBPSetWindow (int channel, int wintype);
 extern int RXANBPAddNotch (int channel, int notch, double fcenter, double fwidth, int active);
 extern int RXANBPEditNotch (int channel, int notch, double fcenter, double fwidth, int active);
 extern int RXANBPDeleteNotch (int channel, int notch);
@@ -91,9 +94,11 @@ extern void SetRXACBLRun (int channel, int run);
 extern void SetRXABandpassWindow (int channel, int wintype);
 
 extern void SetRXAANRRun(int channel, int run);
+extern void SetRXAANRPosition (int channel, int position);
 extern void SetRXAEMNRaeRun (int channel, int run);
 extern void SetRXASNBARun (int channel, int run);
 extern void SetRXAANFRun(int channel, int run);
+extern void SetRXAANFPosition (int channel, int position);
 
 extern void SetRXAShiftRun (int channel, int run);
 extern void SetRXAShiftFreq (int channel, double fshift);
@@ -120,7 +125,7 @@ extern void RXASetNC(int channel, int nc);
 extern void RXASetMP(int channel, int nc);
 extern void SetRXAEQRun (int channel, int run);
 extern void SetRXAEQProfile (int channel, int nfreqs, double* F, double* G);
-extern void RXANBPSetShiftFrequency (int channel, double shift);
+extern void SetRXAEQWintype (int channel, int wintype);
 
 // Diversity prototypes
 extern void create_divEXT (int id, int run, int nr, int size);
@@ -240,6 +245,7 @@ extern void TXAGetSpecF1(int channel, float* out);
 
 extern void SetTXAEQProfile (int channel, int nfreqs, double* F, double* G);
 extern void SetTXAGrphEQ (int channel, int *txeq);
+extern void SetTXAEQWintype (int channel, int wintype);
 
 extern void SetTXAFMDeviation (int channel, double deviation);
 extern void SetTXAFMEmphPosition (int channel, int position);
@@ -263,6 +269,10 @@ extern double SetPSTXDelay (int channel, double delay);
 extern void SetPSHWPeak (int channel, double peak);
 extern void SetPSPtol (int channel, double ptol);
 extern void SetPSFeedbackRate (int channel, int rate);
+extern void SetPSIntsAndSpi (int channel, int ints, int spi);
+extern void SetPSStabilize (int channel, int stbl);
+extern void SetPSMapMode (int channel, int map);
+extern void SetPSPinMode (int channel, int pin);
 
 extern void GetPSInfo (int channel, int *info);
 extern void GetPSHWPeak (int channel, double* peak);
@@ -305,6 +315,7 @@ extern void SetRXAPanelCopy (int channel, int copy);
 extern void SetRXAPanelBinaural (int channel, int bin);
 
 extern void SetTXAPanelRun (int channel, int run);
+extern void SetTXAPanelSelect (int channel, int select);
 extern void SetTXAPanelGain1 (int channel, double gain);
 
 // variable smapler

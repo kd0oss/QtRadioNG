@@ -19,9 +19,9 @@ Bandscope::Bandscope(SpectrumConnection *pConn, QWidget *parent):QFrame(parent),
     bandscopeHigh = 0;
     bandscopeLow = -140;
 
-    qDebug("Spec Port: %d", pConn->port);
+    qDebug("Spec Port: %d", DSPSERVER_BASE_PORT);
     host = pConn->server;
-    port = pConn->port;
+    port = DSPSERVER_BASE_PORT + 30;
 }
 
 
@@ -53,7 +53,7 @@ void Bandscope::connect()
     {
         return;
     }
-    connection->connect(host, port+1);
+    connection->connect(host, port);
 }
 
 

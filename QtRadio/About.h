@@ -8,7 +8,7 @@
 #include <QDialog>
 #endif
 
-#define GITREV "Revision: 2.00 2021  By Rick Schnicker KD0OSS!https://github.com/kd0oss/QtRadioNG"
+#define GITREV "Revision: 2.02 2021  By Rick Schnicker KD0OSS!https://github.com/kd0oss/QtRadioNG"
 
 namespace Ui {
     class About;

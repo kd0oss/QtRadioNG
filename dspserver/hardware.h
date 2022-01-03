@@ -110,7 +110,8 @@ typedef struct _radio {
     int num_transmitters;
     int max_power;
     int radio_id;
-    int iq_port[7];
+    int rx_iq_port[8];
+    int tx_iq_port;
     int spk_audio_port;
     int mic_audio_port;
     int bs_port;
@@ -125,6 +126,7 @@ typedef struct _channel
     short int recv_index;
     short int transmitter;
     short int trans_index;
+    bool      bandscope_capable;
     bool      enabled;
 } CHANNEL;
 
@@ -148,7 +150,6 @@ float txref;
 /**********************/
 
 extern int rxOnly;
-extern int hardware_control;
 extern char *manifest_xml[4];
 
 // values saved from last change to send to slaves
@@ -215,15 +216,6 @@ extern void setDuplex(int d);
 
 /* --------------------------------------------------------------------------*/
 /**
-* @brief Get Bandscope spectrum samples
-*
-* @return
-*/
-void getSpectrumSamples(char *samples);
-
-
-/* --------------------------------------------------------------------------*/
-/**
 * @brief Get hw software version
 *
 * @return
@@ -252,16 +244,14 @@ void hwRestoreState();
 *
 * @return
 */
-int make_connection(short int, short int, short int);
-void setSpeed(int s);
+int make_connection(short int);
+void setSpeed(int channel, int s);
 
-extern int hwSetSampleRate(long);
+extern int hwSetSampleRate(int, long);
 
 int hwSetRecord(char* state);
 
 void hw_set_canTx(char);
-
-void hw_set_harware_control(char);
 
 #ifdef	__cplusplus
 }

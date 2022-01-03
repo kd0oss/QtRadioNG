@@ -70,6 +70,15 @@ typedef enum {
     TRANSMITTER_DETACHED, TRANSMITTER_ATTACHED
 } TRANSMITTER_STATE;
 
+void* client_thread(void* arg);
+
+#define RX_IQ_PORT_0     10000
+#define TX_IQ_PORT_0     10020
+#define COMMAND_PORT     10100
+#define RX_AUDIO_PORT    10120
+#define MIC_AUDIO_PORT   10130
+#define BANDSCOPE_PORT   10140
+
 typedef struct _rcvr {
     int socket;
     unsigned int iq_length;
@@ -82,62 +91,9 @@ typedef struct _rcvr {
     int isTx;
     int iq_port;
     int bs_port;
+    int audio_port;
     int mox;
 } CLIENT;
-
-enum COMMAND_SET {
-    QUESTION = 0,
-    QLOFFSET,
-    QCOMMPROTOCOL1,
-    QINFO,
-    QCANTX,
-    STARCOMMAND,
-    STARGETSERIAL,
-    //ISMIC,
-    SETPREAMP,
-    SETMICBOOST,
-    SETPOWEROUT,
-    SETRXANT,
-    SETDITHER,
-    SETRANDOM,
-    SETLINEIN,
-    SETLINEINGAIN,
-    SETTXRELAY,
-    SETOCOUTPUT,
-    GETADCOVERFLOW,
-    SETATTENUATOR,
-
-    SETSAMPLERATE = 244,
-    SETRECORD = 245,
-    SETFREQ = 246,
-    ATTACH = 247,
-    TX = 248,
-    DETACH = 249,
-    STARTIQ = 250,
-    STARTBANDSCOPE = 251,
-    STOPIQ = 252,
-    STOPBANDSCOPE = 253,
-    MOX = 254,
-    QHARDWARE = 255
-};
-
-
-void* client_thread(void* arg);
-
-#define COMMAND_PORT 10100
-#define RX_IQ_PORT_0 10000
-#define RX_IQ_PORT_1 10001
-#define RX_IQ_PORT_2 10002
-#define RX_IQ_PORT_3 10003
-#define RX_IQ_PORT_4 10004
-#define RX_IQ_PORT_5 10005
-#define RX_IQ_PORT_6 10006
-#define RX_IQ_PORT_7 10007
-#define TX_IQ_PORT_0 10010
-#define TX_IQ_PORT_1 10011
-#define RX_AUDIO_PORT 10020
-#define MIC_AUDIO_PORT 10030
-#define BANDSCOPE_PORT 10040
 
 typedef struct _buffer {
     unsigned short chunk;

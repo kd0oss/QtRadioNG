@@ -177,6 +177,14 @@ signals:
     void alcAttackChanged(int); //KD0OSS
     void alcDecayChanged(int); //KD0OSS
     void alcMaxGainChanged(int); //KD0OSS
+    void cessbOvershootChanged(bool);
+    void aeFilterChanged(bool);
+    void preAGCChanged(bool);
+    void nrGainMethodChanged(int);
+    void nrNpeMethodChanged(int);
+    void nb2ModeChanged(int);
+    void rxFilterWindowChanged(int);
+    void txFilterWindowChanged(int);
 
 
 public slots:
@@ -204,6 +212,15 @@ public slots:
 
     void slotNbThresholdChanged(int threshold);
     void slotSdromThresholdChanged(int threshold);
+
+    void slotCESSBOvershoot(bool enable);
+    void slotAEFilterChanged(bool enable);
+    void slotPreAGCChanged(bool enable);
+    void slotNRgainMethodChanged(bool tmp);
+    void slotNRnpeMethodChanged(bool tmp);
+    void slotNB2ModeChanged(int mode);
+    void slotRxFilterWindowChanged(int type);
+    void slotTxFilterWindowChanged(int type);
 
     void slotXVTRAdd();
     void slotXVTRDelete();

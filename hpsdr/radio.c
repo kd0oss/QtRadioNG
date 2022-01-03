@@ -182,7 +182,7 @@ char *discovered_xml=NULL;
 
 void status_text(char *text)
 {
-    fprintf(stderr,"splash_status: %s\n", text);
+    fprintf(stderr, "splash_status: %s\n", text);
     usleep(10000);
 } // end status_text
 
@@ -199,15 +199,16 @@ int main_delete(int radio_id)
         {
         case ORIGINAL_PROTOCOL:
             old_protocol_stop();
-       //     free(radio);
+            //     free(radio);
             break;
         case NEW_PROTOCOL:
             new_protocol_stop();
             free(radio->wideband->input_buffer);
             free(radio->wideband);
-       //     free(radio);
+            //     free(radio);
             break;
         }
+        fprintf(stderr, "*** All radios shut down. ***\n");
     }
     receivers = active_receivers = 0;
     return 0; ////    _exit(0);
@@ -654,7 +655,7 @@ bool start_radio(int radio_id)
 
     if (can_transmit)
     {
-    //    calcDriveLevel(pa_calibration);
+        //    calcDriveLevel(pa_calibration);
         if (transmitter->puresignal)
         {
             ////////     tx_set_ps(transmitter,transmitter->puresignal);
@@ -709,35 +710,40 @@ void radio_change_receivers(int r)
 } // end radio_change_receivers
 
 
-void start_receiver(int radio_id, int rx)
+void start_receivers(int radio_id)
 {
     DISCOVERED *radio = &discovered[radio_id];
 
-    receiver[rx] = create_receiver(rx, buffer_size, 0, 0); // receiver[i]->alex_antenna, receiver[i]->alex_attenuation);
-    printf("Created receiver %d\n", receiver[rx]->id);
+    receivers = 0;
+
+    for (int i=0;i<radio->supported_receivers;i++)
+    {
+        receiver[i] = create_receiver(i, buffer_size, 0, 0); // receiver[i]->alex_antenna, receiver[i]->alex_attenuation);
+        fprintf(stderr, "Created receiver %d\n", receiver[i]->id);
         ////////   setSquelch(receiver[i]);
+
+        receivers++;
+
+        fprintf(stderr, "Starting: receivers=%d RECEIVERS=%d\n", receivers, RECEIVERS);
+        if (receivers != RECEIVERS)
+        {
+            int r=receivers;
+            /////////   receivers=RECEIVERS;
+            fprintf(stderr, "Starting receiver: calling radio_change_receivers: receivers=%d r=%d\n", RECEIVERS, r);
+            //////////    radio_change_receivers(r);
+        }
+    }
 
     //
     // Sanity check: in old protocol, all receivers must have the same sample rate
     //
-///////   if ((protocol == ORIGINAL_PROTOCOL) && (RECEIVERS == 2) && (receiver[0]->sample_rate != receiver[1]->sample_rate))
-///////    {
-///////        receiver[1]->sample_rate = receiver[0]->sample_rate;
-///////    }
-
-    active_receiver = receiver[rx];
-    receivers++;
-//    if (rx > 0)
-  //      receivers++;
-
-    printf("Starting: receivers=%d RECEIVERS=%d\n", receivers, RECEIVERS);
-    if (receivers != RECEIVERS)
+    if ((protocol == ORIGINAL_PROTOCOL) && (RECEIVERS == 2) && (receiver[0]->sample_rate != receiver[1]->sample_rate))
     {
-        int r=receivers;
-        /////////   receivers=RECEIVERS;
-        printf("Starting receiver: calling radio_change_receivers: receivers=%d r=%d\n", RECEIVERS, r);
-        //////////    radio_change_receivers(r);
+        receiver[1]->sample_rate = receiver[0]->sample_rate;
     }
+
+    active_receiver = receiver[0];
+    active_receivers = receivers;
 
     if (radio->supported_transmitters > 0)
         start_transmitter(radio_id, 0);
@@ -745,7 +751,7 @@ void start_receiver(int radio_id, int rx)
     switch (protocol)
     {
     case ORIGINAL_PROTOCOL:
-        old_protocol_init(receiver[rx]->sample_rate);
+        old_protocol_init(receiver[receivers-1]->sample_rate);
         break;
     case NEW_PROTOCOL:
         new_protocol_init();
@@ -754,7 +760,7 @@ void start_receiver(int radio_id, int rx)
 
     if (protocol == NEW_PROTOCOL)
     {
-        printf("Schedule_high_priority\n");
+        fprintf(stderr, "Schedule_high_priority\n");
         schedule_high_priority();
     }
 } // end start_receiver
@@ -899,7 +905,7 @@ int create_manifest()
         sprintf(line, "<radio_type>hermes</radio_type>\n");
         xml = (char*)realloc((char*)xml, strlen(xml)+strlen(line)+1);
         strcat(xml, line);
-        sprintf(line, "<protocol>%d</protocol>\n", d->protocol);
+        sprintf(line, "<protocol>%d</protocol>\n", d->protocol+1);
         xml = (char*)realloc((char*)xml, strlen(xml)+strlen(line)+1);
         strcat(xml, line);
         sprintf(line, "<device>%d</device>\n", d->device);
@@ -917,7 +923,10 @@ int create_manifest()
         sprintf(line, "<status>%d</status>\n", d->status);
         xml = (char*)realloc((char*)xml, strlen(xml)+strlen(line)+1);
         strcat(xml, line);
-        sprintf(line, "<bandscope>1</bandscope>\n");
+        if (d->protocol >= 1)
+            sprintf(line, "<bandscope>1</bandscope>\n");
+        else
+            sprintf(line, "<bandscope>0</bandscope>\n");
         xml = (char*)realloc((char*)xml, strlen(xml)+strlen(line)+1);
         strcat(xml, line);
         sprintf(line, "<supported_receivers>%d</supported_receivers>\n", d->supported_receivers);
@@ -966,6 +975,7 @@ int create_manifest()
     discovered_xml = (char*)malloc(strlen(xml)+1);
     memcpy((char*)discovered_xml, (char*)xml, strlen(xml)+1);
     free(xml);
+    fprintf(stderr, "Manifest created: Size: %d\n", (int)strlen(discovered_xml));
     return 0;
 } // end create_manifest
 
@@ -1025,51 +1035,51 @@ void set_alex_attenuation(int rx, int v)
 
 void dither_cb(bool enable)
 {
-  active_receiver->dither = enable;
-  if (protocol == NEW_PROTOCOL)
-  {
-    schedule_high_priority();
-  }
+    active_receiver->dither = enable;
+    if (protocol == NEW_PROTOCOL)
+    {
+        schedule_high_priority();
+    }
 } // end dither_cb
 
 
 void random_cb(bool enable)
 {
-  active_receiver->random = enable;
-  if (protocol == NEW_PROTOCOL)
-  {
-    schedule_high_priority();
-  }
+    active_receiver->random = enable;
+    if (protocol == NEW_PROTOCOL)
+    {
+        schedule_high_priority();
+    }
 } // end random_cb
 
 
 void preamp_cb(bool enable)
 {
-  active_receiver->preamp = enable;
-  if (protocol == NEW_PROTOCOL)
-  {
-    schedule_high_priority();
-  }
+    active_receiver->preamp = enable;
+    if (protocol == NEW_PROTOCOL)
+    {
+        schedule_high_priority();
+    }
 } // end preamp_cb
 
 
 void mic_boost_cb(bool enable)
 {
-  mic_boost = enable;
-  if (protocol == NEW_PROTOCOL)
-  {
-    schedule_high_priority();
-  }
+    mic_boost = enable;
+    if (protocol == NEW_PROTOCOL)
+    {
+        schedule_high_priority();
+    }
 } // end mic_boost_cb
 
 
 void linein_gain_cb(int gain)
 {
-  linein_gain = gain;
-  if (protocol == NEW_PROTOCOL)
-  {
-    schedule_high_priority();
-  }
+    linein_gain = gain;
+    if (protocol == NEW_PROTOCOL)
+    {
+        schedule_high_priority();
+    }
 } // end linein_gain_cb
 
 
@@ -1112,6 +1122,18 @@ void setFrequency(int v, long long f)
 } // end setFrequency
 
 
+void add_wideband_sample(WIDEBAND *w, int16_t sample)
+{
+    w->input_buffer[w->samples] = sample;
+    w->samples = w->samples+1;
+    if (w->samples >= 16384)
+    {
+        send_WB_IQ_buffer(w->channel);
+        w->samples = 0;
+    }
+} // end add_wideband_sample
+
+
 int main_start(char *dsp_server_address)
 {
     int status = 0;
@@ -1144,16 +1166,4 @@ int main_start(char *dsp_server_address)
     main_delete(0);
     return status;
 } // end main_start
-
-
-void add_wideband_sample(WIDEBAND *w, int16_t sample)
-{
-    w->input_buffer[w->samples] = sample;
-    w->samples = w->samples+1;
-    if (w->samples >= 16384)
-    {
-        send_WB_IQ_buffer(w->channel);
-        w->samples = 0;
-    }
-} // end add_wideband_sample
 

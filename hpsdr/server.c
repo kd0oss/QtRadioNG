@@ -24,6 +24,7 @@
 #include "discovered.h"
 #include "new_protocol.h"
 #include "old_protocol.h"
+#include "hermes.h"
 
 
 RECEIVER *receiver[MAX_RECEIVERS];
@@ -62,7 +63,7 @@ char* attach_receiver(int radio_id, int rx, CLIENT* client)
         return CLIENT_ATTACHED;
     }
 
-    if (rx >= d->supported_receivers)
+    if (rx - 1 >= d->supported_receivers)
     {
         return RECEIVER_INVALID;
     }
@@ -93,7 +94,7 @@ char* detach_receiver(int radio_id, int rx, CLIENT* client)
         return CLIENT_DETACHED;
     }
 
-    if (rx >= attached_rcvrs)
+    if (rx >= active_receivers)
     {
         return RECEIVER_INVALID;
     }
@@ -108,7 +109,7 @@ char* detach_receiver(int radio_id, int rx, CLIENT* client)
     if (attached_rcvrs > 0) attached_rcvrs--;
 
     //FIX-ME: Handle transmitter cleanup in a better way.
-    if (attached_xmits > 0)
+    if (attached_xmits > 0 && attached_rcvrs == 0)
     {
         //pthread_kill(tx_thread_id, SIGKILL);
         attached_xmits = 0;
@@ -155,15 +156,17 @@ char* parse_command(CLIENT* client, char* command)
 {
     _Bool  bDone = false;
 
-    fprintf(stderr, "parse_command(Rx%d): [%02X] %d %d\n", client->receiver, (unsigned char)command[0], (unsigned int)command[1], (unsigned int)command[2]);
+    fprintf(stderr, "parse_command(Rx%d): [%02X] %u %u\n", client->receiver, (unsigned char)command[0], (unsigned int)command[1], (unsigned int)command[2]);
+
+    if (attached_rcvrs <= 0 && (unsigned char)command[0] < HQHARDWARE) return INVALID_COMMAND; // No valid receivers so abort commmand.
 
     switch ((unsigned char)command[0])
     {
-    case ATTACH:
+    case HATTACH:
     {
         bDone = true;
         command[0] = 0;
-        if ((unsigned char)command[1] == TX)
+        if ((unsigned char)command[1] == HTX)
         {
             return attach_transmitter(client);
         }
@@ -172,28 +175,30 @@ char* parse_command(CLIENT* client, char* command)
             int rx = (int)command[1];
             radio_id = (short int)command[2];
             radio = &discovered[radio_id];
-            start_radio(radio_id);
+            start_radio(radio_id);  // change this FIX-ME
             fprintf(stderr, "Receiver attached: radio id = %d  rx = %d\n", radio_id, rx);
             return attach_receiver(radio_id, rx, client);
         }
     }
         break;
 
-    case DETACH:
+    case HDETACH:
     {
         bDone = true;
         command[0] = 0;
         int rx = (int)command[1];
         radio_id = (short int)command[2];
-        detach_receiver(radio_id, rx, client);
+        fprintf(stderr, "Detach Rid: %d  Rx: %d\n", radio_id, rx);
+        fprintf(stderr, "%s\n", detach_receiver(radio_id, rx, client));
         if (attached_rcvrs == 0)
             main_delete(radio_id);
     }
         break;
 
-    case QHARDWARE:
+    case HQHARDWARE:
     {
      //   strcpy(command, "OK Hermes");
+        fprintf(stderr, "Sending manifest.\n");
         command[0] = 0;
         send_manifest = true;
         bDone = true;
@@ -249,16 +254,19 @@ char* parse_command(CLIENT* client, char* command)
     }
         break;
 
-    case SETSAMPLERATE:
+    case HSETSAMPLERATE:
     {
+        fprintf(stderr, "Setting sample rate.\n");
+        int rx = 0;
+        long int r = 0;
         bDone = true;
         command[0] = 0;
-        long r = atol(command+1);
-        receiver_change_sample_rate(receiver[0], r);
+        sscanf((const char*)(command+1), "%d %ld", &rx, &r);
+        receiver_change_sample_rate(receiver[rx], r);
     }
         break;
 
-    case SETFREQ:
+    case HSETFREQ:
     {
         // set frequency
         bDone = true;
@@ -268,7 +276,7 @@ char* parse_command(CLIENT* client, char* command)
     }
         break;
 
-    case MOX:
+    case HMOX:
     {
         bDone = true;
         if (client->transmitter_state == TRANSMITTER_ATTACHED)
@@ -353,7 +361,7 @@ char* parse_command(CLIENT* client, char* command)
     }
         break;
 
-    case STARGETSERIAL:
+    case HSTARGETSERIAL:
     {
         static char buf[50];
         command[0] = 0;
@@ -386,7 +394,7 @@ char* parse_command(CLIENT* client, char* command)
     }
         break;
 
-    case SETRECORD:
+    case HSETRECORD:
     {
         bDone = true;
         command[0] = 0;
@@ -413,7 +421,7 @@ char* parse_command(CLIENT* client, char* command)
     }
         break;
 
-    case STARTIQ:
+    case HSTARTIQ:
     {
         bDone = true;
         command[0] = 0;
@@ -431,7 +439,7 @@ char* parse_command(CLIENT* client, char* command)
     }
         break;
 
-    case STOPIQ:
+    case HSTOPIQ:
     {
         bDone = true;
         command[0] = 0;
@@ -439,7 +447,7 @@ char* parse_command(CLIENT* client, char* command)
     }
         break;
 
-    case STARTBANDSCOPE:
+    case HSTARTBANDSCOPE:
     {
         bDone = true;
         command[0] = 0;
@@ -448,7 +456,7 @@ char* parse_command(CLIENT* client, char* command)
     }
         break;
 
-    case STOPBANDSCOPE:
+    case HSTOPBANDSCOPE:
     {
         bDone = true;
         command[0] = 0;
@@ -498,6 +506,9 @@ void* client_thread(void* arg)
     struct sockaddr_in address;
     socklen_t command_length = sizeof(address);
 
+    for (int i=0;i<MAX_RECEIVERS;i++)
+        iqclient[i].socket = NULL;
+
     s = socket(AF_INET, SOCK_STREAM, 0);
     if (s < 0)
     {
@@ -524,8 +535,9 @@ void* client_thread(void* arg)
     client->socket = s;
     client->iq_length = command_length;
     client->iq_addr = address;
-    client->iq_port=-1;
-    client->bs_port=-1;
+    client->iq_port = -1;
+    client->bs_port = -1;
+    client->audio_port = -1;
 
     client->receiver_state = RECEIVER_DETACHED;
     client->transmitter_state = TRANSMITTER_DETACHED;
@@ -588,7 +600,7 @@ void* client_thread(void* arg)
 #else
     closesocket(client->socket);
 #endif
-    main_delete(0);
+    main_delete(radio_id);
 
     fprintf(stderr, "client disconnected: %s:%d\n\n\n", inet_ntoa(client->iq_addr.sin_addr), ntohs(client->iq_addr.sin_port));
 
@@ -600,29 +612,30 @@ void* client_thread(void* arg)
 
 void init_receivers(int radio_id, int rx)
 {
-    start_receiver(radio_id, rx);
+    start_receivers(radio_id);
 
-//    for (int i=0;i<active_receivers;i++)
+    for (int i=0;i<active_receivers;i++)
     {
-        iqclient[rx].socket = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
-        if (iqclient[rx].socket < 0)
+        iqclient[i].socket = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if (iqclient[i].socket < 0)
         {
-            fprintf(stderr, "create rx_iq_socket failed for iq_socket: %d\n", rx);
+            fprintf(stderr, "create rx_iq_socket failed for iq_socket: %d\n", i);
             exit(1);
         }
 
         struct timeval read_timeout;
         read_timeout.tv_sec = 0;
         read_timeout.tv_usec = 10;
-        setsockopt(iqclient[rx].socket, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
+        setsockopt(iqclient[i].socket, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
 
-        iqclient[rx].iq_length = sizeof(cli_addr);
-        memset(&iqclient[rx].iq_addr, 0, iqclient[rx].iq_length);
-        iqclient[rx].iq_addr.sin_family = AF_INET;
-        iqclient[rx].iq_addr.sin_addr.s_addr = inet_addr(dsp_server_address);
-        iqclient[rx].iq_addr.sin_port = htons(RX_IQ_PORT_0 + rx);
-        iqclient[rx].iq_port = RX_IQ_PORT_0 + rx;
-        iqclient[rx].bs_port = BANDSCOPE_PORT + radio_id;
+        iqclient[i].iq_length = sizeof(cli_addr);
+        memset(&iqclient[i].iq_addr, 0, iqclient[i].iq_length);
+        iqclient[i].iq_addr.sin_family = AF_INET;
+        iqclient[i].iq_addr.sin_addr.s_addr = inet_addr(dsp_server_address);
+        iqclient[i].iq_addr.sin_port = htons(RX_IQ_PORT_0 + i);
+        iqclient[i].iq_port = RX_IQ_PORT_0 + i;
+        iqclient[i].bs_port = BANDSCOPE_PORT + radio_id;
+        fprintf(stderr, "Setup Rx%d IQ port: %d  Bandscope port: %d\n", i, iqclient[i].iq_port, iqclient[i].bs_port);
     }
 } // end init_receivers
 
@@ -643,7 +656,7 @@ void init_transmitter(unsigned int radio_id, int rx)
         perror("pthread_create mic_IQ_thread failed");
         exit(1);
     }
-    printf("Created socket for tx IQ port: %d\n", iqclient[rx].iq_port + 30);
+    fprintf(stderr, "TX threads created.\n");
 } // end init_transmitter
 
 
@@ -677,7 +690,7 @@ void send_Mic_buffer(float sample)
     memset((char*)&cli_addr, 0, cli_length);
     cli_addr.sin_family = AF_INET;
     cli_addr.sin_addr.s_addr = inet_addr(dsp_server_address);
-    cli_addr.sin_port = htons(10020);
+    cli_addr.sin_port = htons(MIC_AUDIO_PORT + radio_id);
 
     buffer.radio_id = radio_id;
     buffer.tx = 0;
@@ -688,7 +701,7 @@ void send_Mic_buffer(float sample)
         rc = sendto(mic_socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr*)&cli_addr, cli_length);
         if (rc <= 0)
         {
-            fprintf(stderr, "sendto failed for mic data on port 10020");
+            fprintf(stderr, "sendto failed for mic data on port %d", MIC_AUDIO_PORT + radio_id);
             exit(1);
         }
     }
@@ -704,11 +717,12 @@ void send_IQ_buffer(int rx)
     unsigned short offset = 0;
     BUFFERL buffer;
     int rc;
-
+fprintf(stderr, "IQ send on rc: %d\n", rx);
+    if (iqclient[rx].socket == NULL) return;
     if (iqclient[rx].socket != -1)
     {
         // send the IQ buffer
- //       printf("Send to client: %d\n", rx);
+     //   fprintf(stderr, "Send to client: Rid: %d  rx: %d\n", radio_id, rx);
         cli_length = sizeof(cli_addr);
         memset((char*)&cli_addr, 0, cli_length);
         cli_addr.sin_family = AF_INET;
@@ -724,7 +738,7 @@ void send_IQ_buffer(int rx)
         rc = sendto(iqclient[rx].socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr*)&cli_addr, cli_length);
         if (rc <= 0)
         {
-            fprintf(stderr, "sendto failed for iq data");
+            fprintf(stderr, "sendto failed for rx iq data: Rx%d ret=%d\n", rx, rc);
             exit(1);
         }
     }
@@ -741,6 +755,7 @@ void send_WB_IQ_buffer(int rx)
     int rc;
     WIDEBAND *w = discovered[rx].wideband;
 
+    if (iqclient[rx].socket == NULL) return;
     if (iqclient[rx].socket != -1)
     {
         // send the WB IQ buffer
@@ -760,7 +775,7 @@ void send_WB_IQ_buffer(int rx)
         rc = sendto(iqclient[rx].socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr*)&cli_addr, cli_length);
         if (rc <= 0)
         {
-            fprintf(stderr, "sendto failed for wb iq data");
+            fprintf(stderr, "sendto failed for wb iq data\n");
             exit(1);
         }
     }
@@ -862,9 +877,9 @@ void* tx_IQ_thread(void* arg)
         memset((char*)&cli_addr, 0, cli_length);
         cli_addr.sin_family = AF_INET;
         cli_addr.sin_addr.s_addr = iqclient[rx].iq_addr.sin_addr.s_addr;
-        cli_addr.sin_port = htons(iqclient[rx].iq_port + 30);
+        cli_addr.sin_port = htons(TX_IQ_PORT_0 + radio_id);
 
-        fprintf(stderr, "connection to rx %d tx IQ on port %d\n", rx, iqclient[rx].iq_port + 30);
+        fprintf(stderr, "connection to rx %d tx IQ on port %d\n", rx, TX_IQ_PORT_0 + radio_id);
     }
     sendto(iqclient[rx].socket, (char*)&buf, sizeof(buf), 0, (struct sockaddr*)&cli_addr, cli_length);
 

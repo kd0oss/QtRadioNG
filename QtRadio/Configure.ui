@@ -32,7 +32,7 @@
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>4</number>
+      <number>0</number>
      </property>
      <widget class="QWidget" name="Server">
       <attribute name="title">
@@ -762,7 +762,7 @@
        <item>
         <widget class="QTabWidget" name="tabWidget_2">
          <property name="currentIndex">
-          <number>2</number>
+          <number>0</number>
          </property>
          <widget class="QWidget" name="options">
           <attribute name="title">
@@ -1464,6 +1464,9 @@
             <property name="text">
              <string>Pre-AGC</string>
             </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
            </widget>
            <widget class="QRadioButton" name="postAGCButton">
             <property name="geometry">
@@ -1483,7 +1486,7 @@
              <string>Post-AGC</string>
             </property>
             <property name="checked">
-             <bool>true</bool>
+             <bool>false</bool>
             </property>
            </widget>
           </widget>

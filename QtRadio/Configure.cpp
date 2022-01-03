@@ -109,6 +109,7 @@ Configure::Configure() {
     connect(widget.rxAgcHangSpinBox,SIGNAL(valueChanged(int)),this,SLOT(onRxAgcHangChanged(int))); //KD0OSS
     connect(widget.rxAgcFixedGainSpinBox,SIGNAL(valueChanged(int)),this,SLOT(onRxAgcFixedGainChanged(int))); //KD0OSS
     connect(widget.rxAgcHangThreshSpinBox,SIGNAL(valueChanged(int)),this,SLOT(onRxAgcHangThreshChanged(int))); //KD0OSS
+    connect(widget.preAGCButton, SIGNAL(toggled(bool)), this, SLOT(slotPreAGCChanged(bool)));
 
     connect(widget.levelerEnabledCheckBox,SIGNAL(stateChanged(int)),this,SLOT(onLevelerStateChanged(int))); //KD0OSS
     connect(widget.levelerAttackSpinBox,SIGNAL(valueChanged(int)),this,SLOT(onLevelerAttackChanged(int))); //KD0OSS
@@ -130,11 +131,20 @@ Configure::Configure() {
     connect(widget.nrDelaySpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotNrDelayChanged(int)));
     connect(widget.nrGainSpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotNrGainChanged(int)));
     connect(widget.nrLeakSpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotNrLeakChanged(int)));
+    connect(widget.nrGainGammaButton, SIGNAL(toggled(bool)), this, SLOT(slotNRgainMethodChanged(bool)));
+    connect(widget.nrGainLogButton, SIGNAL(toggled(bool)), this, SLOT(slotNRgainMethodChanged(bool)));
+    connect(widget.nrGainLinearButton, SIGNAL(toggled(bool)), this, SLOT(slotNRgainMethodChanged(bool)));
+    connect(widget.nrNPEOsmsButton, SIGNAL(toggled(bool)), this, SLOT(slotNRnpeMethodChanged(bool)));
+//    connect(widget.nrNPEMmseButton, SIGNAL(toggled(bool)), this, SLOT(slotNRnpeMethodChanged(bool)));
 
     connect(widget.anfTapsSpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotAnfTapsChanged(int)));
     connect(widget.anfDelaySpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotAnfDelayChanged(int)));
     connect(widget.anfGainSpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotAnfGainChanged(int)));
     connect(widget.anfLeakSpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotAnfLeakChanged(int)));
+
+    connect(widget.cessbOvershootCB,SIGNAL(toggled(bool)), this, SLOT(slotCESSBOvershoot(bool)));
+    connect(widget.aeFilterCB, SIGNAL(toggled(bool)), this, SLOT(slotAEFilterChanged(bool)));
+    connect(widget.nb2ModeCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotNB2ModeChanged(int)));
 
     connect(widget.windowComboBox,SIGNAL(currentIndexChanged(int)),this,SLOT(slotWindowType(int)));
 
@@ -255,13 +265,23 @@ void Configure::loadSettings(QSettings* settings)
     if (settings->contains("delay"))widget.nrDelaySpinBox->setValue(settings->value("delay").toInt());
     if (settings->contains("gain")) widget.nrGainSpinBox->setValue(settings->value("gain").toInt());
     if (settings->contains("leak")) widget.nrLeakSpinBox->setValue(settings->value("leak").toInt());
+    if (settings->contains("txfilterwin")) widget.txFilterWindowCombo->setCurrentIndex(settings->value("txfilterwin").toInt());
+    if (settings->contains("rxfilterwin")) widget.rxFilterWindowCombo->setCurrentIndex(settings->value("rxfilterwin").toInt());
     settings->endGroup();
 
     settings->beginGroup("ANF");
     if (settings->contains("taps")) widget.anfGainSpinBox->setValue(settings->value("taps").toInt());
-    if (settings->contains("delay"))widget.anfDelaySpinBox->setValue(settings->value("delay").toInt());
+    if (settings->contains("delay")) widget.anfDelaySpinBox->setValue(settings->value("delay").toInt());
     if (settings->contains("gain")) widget.anfGainSpinBox->setValue(settings->value("gain").toInt());
     if (settings->contains("leak")) widget.anfLeakSpinBox->setValue(settings->value("leak").toInt());
+    if (settings->contains("cessb")) widget.cessbOvershootCB->setChecked(settings->value("cessb").toBool());
+    if (settings->contains("preagc")) widget.preAGCButton->setChecked(settings->value("preagc").toBool());
+    if (settings->contains("nrgaingamma")) widget.nrGainGammaButton->setChecked(settings->value("nrgaingamma").toBool());
+    if (settings->contains("nrgainlog")) widget.nrGainLogButton->setChecked(settings->value("nrgainlog").toBool());
+    if (settings->contains("nrgainlinear")) widget.nrGainLinearButton->setChecked(settings->value("nrgainlinear").toBool());
+    if (settings->contains("nrnpeosms")) widget.nrNPEOsmsButton->setChecked(settings->value("nrnpeosms").toBool());
+    if (settings->contains("nrnpemmse")) widget.nrNPEMmseButton->setChecked(settings->value("nrnpemmse").toBool());
+    if (settings->contains("nb2mode")) widget.nb2ModeCombo->setCurrentIndex(settings->value("nb2mode").toInt());
     settings->endGroup();
 
     settings->beginGroup("AGC"); // KD0OSS
@@ -350,7 +370,7 @@ void Configure::saveSettings(QSettings* settings) {
     settings->beginGroup("Servers");
     qDebug() << "server count=" << widget.hostComboBox->count();
     settings->setValue("entries",widget.hostComboBox->count());
-    for(i=0;i<widget.hostComboBox->count();i++) {
+    for (i=0;i<widget.hostComboBox->count();i++) {
         qDebug() << "server: " << widget.hostComboBox->itemText(i);
         settings->setValue(QString::number(i),widget.hostComboBox->itemText(i));
     }
@@ -358,6 +378,7 @@ void Configure::saveSettings(QSettings* settings) {
     qDebug() << "server selected: " << widget.hostComboBox->currentIndex();
     settings->setValue("rx",widget.rxSpinBox->value());
     settings->endGroup();
+
     settings->beginGroup("Display");
     settings->setValue("spectrumHigh",widget.spectrumHighSpinBox->value());
     settings->setValue("spectrumLow",widget.spectrumLowSpinBox->value());
@@ -369,6 +390,7 @@ void Configure::saveSettings(QSettings* settings) {
     settings->setValue("WindowGeometryFlag", widget.checkBoxWindowPosn->checkState());
     settings->setValue("windowMode", widget.windowComboBox->currentIndex());
     settings->endGroup();
+
     settings->beginGroup("Audio");
     settings->setValue("device",widget.audioDeviceComboBox->currentIndex());
   //  settings->setValue("encoding",widget.encodingComboBox->currentIndex());
@@ -376,18 +398,31 @@ void Configure::saveSettings(QSettings* settings) {
 //    settings->setValue("micEncoding",widget.MicEncodingComboBox->currentIndex());
     settings->setValue("cwPitch",widget.spinBox_cwPitch->value());
     settings->endGroup();
+
     settings->beginGroup("NR");
     settings->setValue("taps",widget.nrTapsSpinBox->value());
     settings->setValue("delay",widget.nrDelaySpinBox->value());
     settings->setValue("gain",widget.nrGainSpinBox->value());
     settings->setValue("leak",widget.nrLeakSpinBox->value());
+    settings->setValue("txfilterwin", widget.txFilterWindowCombo->currentIndex());
+    settings->setValue("rxfilterwin", widget.rxFilterWindowCombo->currentIndex());
     settings->endGroup();
+
     settings->beginGroup("ANF");
     settings->setValue("taps",widget.anfTapsSpinBox->value());
     settings->setValue("delay",widget.anfDelaySpinBox->value());
     settings->setValue("gain",widget.anfGainSpinBox->value());
     settings->setValue("leak",widget.anfLeakSpinBox->value());
+    settings->setValue("cessb", widget.cessbOvershootCB->isChecked());
+    settings->setValue("preagc", widget.preAGCButton->isChecked());
+    settings->setValue("nrgaingamma", widget.nrGainGammaButton->isChecked());
+    settings->setValue("nrgainlog", widget.nrGainLogButton->isChecked());
+    settings->setValue("nrgainlinear", widget.nrGainLinearButton->isChecked());
+    settings->setValue("nrnpeosms", widget.nrNPEOsmsButton->isChecked());
+    settings->setValue("nrnpemmse", widget.nrNPEMmseButton->isChecked());
+    settings->setValue("nb2mode", widget.nb2ModeCombo->currentIndex());
     settings->endGroup();
+
     settings->beginGroup("AGC"); // KD0OSS
     settings->setValue("slope",widget.rxAgcSlopeSpinBox->value());
     settings->setValue("maxgain",widget.rxAgcMaxGainSpinBox->value());
@@ -397,34 +432,41 @@ void Configure::saveSettings(QSettings* settings) {
     settings->setValue("fixedgain",widget.rxAgcFixedGainSpinBox->value());
     settings->setValue("hangthreshold",widget.rxAgcHangThreshSpinBox->value());
     settings->endGroup();
+
     settings->beginGroup("Leveler"); // KD0OSS
     settings->setValue("enabled",widget.levelerEnabledCheckBox->checkState());
     settings->setValue("attack",widget.levelerAttackSpinBox->value());
     settings->setValue("decay",widget.levelerDecaySpinBox->value());
     settings->setValue("hang",widget.levelerHangSpinBox->value());
     settings->endGroup();
+
     settings->beginGroup("ALC");  // KD0OSS
 //    settings->setValue("enabled",widget.alcEnabledCheckBox->checkState());
     settings->setValue("attack",widget.alcAttackSpinBox->value());
     settings->setValue("decay",widget.alcDecaySpinBox->value());
     settings->setValue("maxgain",widget.alcMaxGainSpinBox->value());
     settings->endGroup();
+
     settings->beginGroup("NB");
 //    settings->setValue("threshold",widget.nbThresholdSpinBox->value());
     settings->endGroup();
+
     settings->beginGroup("SDROM");
 //    settings->setValue("threshold",widget.nbThresholdSpinBox->value());
     settings->endGroup();
+
     settings->beginGroup("RXDCBlock");  // KD0OSS
 //    settings->setValue("rxDCBlock",widget.rxDCBlockCheckBox->checkState());
 //    settings->setValue("rxDCBlockGain",widget.rxDCBlkGainSpinBox->value());
     settings->endGroup();
+
     settings->beginGroup("TxSettings");
     settings->setValue("allowTx",widget.allowTx->checkState());
 //    settings->setValue("txDCBlock",widget.txDCBlockCheckBox->checkState());  //KD0OSS
     settings->setValue("pttKeyId", pttKeyId); //KD0OSS
     settings->setValue("pttKeyText", widget.pttKeyEdit->text());
     settings->endGroup();
+
 //    settings->beginGroup("TxIQimage"); // KD0OSS
 //    settings->setValue("TxIQPhaseCorrect",widget.txIQPhaseSpinBox->value());
 //    settings->setValue("TxIQGainCorrect",widget.txIQGainSpinBox->value());
@@ -435,6 +477,7 @@ void Configure::saveSettings(QSettings* settings) {
 //    settings->setValue("RxIQPhaseCorrect",widget.rxIQPhaseSpinBox->value());  //KD0OSS
 //    settings->setValue("RxIQGainCorrect",widget.rxIQGainSpinBox->value());  //KD0OSS
 //    settings->endGroup();
+
     settings->beginGroup("UserPass");
     QTableWidgetItem *server, *user, *pass;
     for (int i=0;i<widget.userpass->rowCount();i++){
@@ -508,37 +551,80 @@ void Configure::slotMicDeviceChanged(int selection) {
                           QAudioFormat::LittleEndian);
 }
 
+void Configure::slotRxFilterWindowChanged(int type)
+{
+    emit rxFilterWindowChanged(type);
+}
+
+void Configure::slotTxFilterWindowChanged(int type)
+{
+    emit txFilterWindowChanged(type);
+}
+
+void Configure::slotNB2ModeChanged(int mode)
+{
+    emit nb2ModeChanged(mode);
+}
+
+void Configure::slotPreAGCChanged(bool enable)
+{
+    emit preAGCChanged(enable);
+}
+
+void Configure::slotCESSBOvershoot(bool enable)
+{
+    emit cessbOvershootChanged(enable);
+}
+
+void Configure::slotNRgainMethodChanged(bool tmp)
+{
+    int method = 2;
+
+    if (widget.nrGainGammaButton->isChecked()) method = 2;
+    if (widget.nrGainLogButton->isChecked()) method = 1;
+    if (widget.nrGainLinearButton->isChecked()) method = 0;
+    emit nrGainMethodChanged(method);
+}
+
+void Configure::slotNRnpeMethodChanged(bool tmp)
+{
+    int method = 0;
+
+    if (widget.nrNPEMmseButton->isChecked()) method = 1;
+    if (widget.nrNPEOsmsButton->isChecked()) method = 0;
+    emit nrNpeMethodChanged(method);
+}
 
 void Configure::slotNrTapsChanged(int taps) {
-    emit nrValuesChanged(widget.nrTapsSpinBox->value(),widget.nrDelaySpinBox->value(),(double)widget.nrGainSpinBox->value()*0.00001,(double)widget.nrLeakSpinBox->value()*0.0000001);
+    emit nrValuesChanged(widget.nrTapsSpinBox->value(),widget.nrDelaySpinBox->value(),(double)widget.nrGainSpinBox->value()*0.00001,(double)widget.nrLeakSpinBox->value()*0.001);
 }
 
 void Configure::slotNrDelayChanged(int delay) {
-    emit nrValuesChanged(widget.nrTapsSpinBox->value(),widget.nrDelaySpinBox->value(),(double)widget.nrGainSpinBox->value()*0.00001,(double)widget.nrLeakSpinBox->value()*0.0000001);
+    emit nrValuesChanged(widget.nrTapsSpinBox->value(),widget.nrDelaySpinBox->value(),(double)widget.nrGainSpinBox->value()*0.00001,(double)widget.nrLeakSpinBox->value()*0.001);
 }
 
 void Configure::slotNrGainChanged(int gain) {
-    emit nrValuesChanged(widget.nrTapsSpinBox->value(),widget.nrDelaySpinBox->value(),(double)widget.nrGainSpinBox->value()*0.00001,(double)widget.nrLeakSpinBox->value()*0.0000001);
+    emit nrValuesChanged(widget.nrTapsSpinBox->value(),widget.nrDelaySpinBox->value(),(double)widget.nrGainSpinBox->value()*0.00001,(double)widget.nrLeakSpinBox->value()*0.001);
 }
 
 void Configure::slotNrLeakChanged(int leak) {
-    emit nrValuesChanged(widget.nrTapsSpinBox->value(),widget.nrDelaySpinBox->value(),(double)widget.nrGainSpinBox->value()*0.00001,(double)widget.nrLeakSpinBox->value()*0.0000001);
+    emit nrValuesChanged(widget.nrTapsSpinBox->value(),widget.nrDelaySpinBox->value(),(double)widget.nrGainSpinBox->value()*0.00001,(double)widget.nrLeakSpinBox->value()*0.001);
 }
 
 void Configure::slotAnfTapsChanged(int taps) {
-    emit anfValuesChanged(widget.anfTapsSpinBox->value(),widget.anfDelaySpinBox->value(),(double)widget.anfGainSpinBox->value()*0.00001,(double)widget.anfLeakSpinBox->value()*0.0000001);
+    emit anfValuesChanged(widget.anfTapsSpinBox->value(),widget.anfDelaySpinBox->value(),(double)widget.anfGainSpinBox->value()*0.00001,(double)widget.anfLeakSpinBox->value()*0.001);
 }
 
 void Configure::slotAnfDelayChanged(int delay) {
-    emit anfValuesChanged(widget.anfTapsSpinBox->value(),widget.anfDelaySpinBox->value(),(double)widget.anfGainSpinBox->value()*0.00001,(double)widget.anfLeakSpinBox->value()*0.0000001);
+    emit anfValuesChanged(widget.anfTapsSpinBox->value(),widget.anfDelaySpinBox->value(),(double)widget.anfGainSpinBox->value()*0.00001,(double)widget.anfLeakSpinBox->value()*0.001);
 }
 
 void Configure::slotAnfGainChanged(int gain) {
-    emit anfValuesChanged(widget.anfTapsSpinBox->value(),widget.anfDelaySpinBox->value(),(double)widget.anfGainSpinBox->value()*0.00001,(double)widget.anfLeakSpinBox->value()*0.0000001);
+    emit anfValuesChanged(widget.anfTapsSpinBox->value(),widget.anfDelaySpinBox->value(),(double)widget.anfGainSpinBox->value()*0.00001,(double)widget.anfLeakSpinBox->value()*0.001);
 }
 
 void Configure::slotAnfLeakChanged(int leak) {
-    emit anfValuesChanged(widget.anfTapsSpinBox->value(),widget.anfDelaySpinBox->value(),(double)widget.anfGainSpinBox->value()*0.00001,(double)widget.anfLeakSpinBox->value()*0.0000001);
+    emit anfValuesChanged(widget.anfTapsSpinBox->value(),widget.anfDelaySpinBox->value(),(double)widget.anfGainSpinBox->value()*0.00001,(double)widget.anfLeakSpinBox->value()*0.001);
 }
 
 void Configure::slotNbThresholdChanged(int threshold) {
@@ -547,6 +633,11 @@ void Configure::slotNbThresholdChanged(int threshold) {
 
 void Configure::slotSdromThresholdChanged(int threshold) {
  //   emit sdromThresholdChanged((double)widget.sdromThresholdSpinBox->value()*0.165);
+}
+
+void Configure::slotAEFilterChanged(bool enable)
+{
+    emit aeFilterChanged(enable);
 }
 
 void Configure::slotWindowType(int type) {
@@ -675,7 +766,7 @@ double Configure::getNrGain() {
 }
 
 double Configure::getNrLeak() {
-    return (double)widget.nrLeakSpinBox->value()*0.0000001;
+    return (double)widget.nrLeakSpinBox->value()*0.001;
 }
 
 int Configure::getAnfTaps() {
@@ -691,12 +782,13 @@ double Configure::getAnfGain() {
 }
 
 double Configure::getAnfLeak() {
-    return (double)widget.anfLeakSpinBox->value()*0.0000001;
+    return (double)widget.anfLeakSpinBox->value()*0.001;
 }
 
 double Configure::getNbThreshold() {
  //   return (double)widget.nbThresholdSpinBox->value()*0.165;
 }
+
 
 void Configure::slotXVTRAdd() {
 
@@ -803,17 +895,17 @@ void Configure::setTxAllowed(bool newstate)
 
 int Configure::getWindowType()
 {
-    widget.windowComboBox->currentIndex();
+    return widget.windowComboBox->currentIndex();
 }
 
 int Configure::getRxFilterWindow()
 {
-    widget.rxFilterWindowCombo->currentIndex();
+    return widget.rxFilterWindowCombo->currentIndex();
 }
 
 int Configure::getTxFilterWindow()
 {
-    widget.txFilterWindowCombo->currentIndex();
+    return widget.txFilterWindowCombo->currentIndex();
 }
 
 void Configure::on_userpasssave_clicked()

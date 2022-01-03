@@ -9,41 +9,8 @@
 #include <QSettings>
 //#endif
 #include "UI.h"
+#include "../hpsdr/hermes.h"
 
-enum HCOMMAND_SET {
-    HQUESTION = 0,
-    HQLOFFSET,
-    HQCOMMPROTOCOL1,
-    HQINFO,
-    HQCANTX,
-    HSTARCOMMAND,
-    STARGETSERIAL,
-//    ISMIC,
-//    HSETFREQ,
-    SETPREAMP,
-    SETMICBOOST,
-    SETPOWEROUT,
-    SETRXANT,
-    SETDITHER,
-    SETRANDOM,
-//    ATTACH,
-//    TX,
-//    DETACH,
-    SETLINEIN,
-    SETLINEINGAIN,
-    SETTXRELAY,
-    SETOCOUTPUT,
-    GETADCOVERFLOW,
-    SETATTENUATOR,
-//    SETRECORD,
-//    STARTIQ,
-//    STARTBANDSCOPE,
-//    STOPIQ,
-//    STOPBANDSCOPE
-
-//    MOX = 254,
-//    QHARDWARE = 255
-};
 
 namespace Ui {
     class HermesFrame;

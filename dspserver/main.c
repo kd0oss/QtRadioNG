@@ -158,9 +158,6 @@ void processCommands(int argc, char** argv, struct dspserver_config *config)
         case OPT_HPSDR:
             hw_set_canTx(true);
             break;
-        case OPT_HPSDRLOC:
-            hw_set_harware_control(true);
-            break;
         case OPT_NOCORRECTIQ:
             config->no_correct_iq = 1;
             break;
@@ -170,7 +167,6 @@ void processCommands(int argc, char** argv, struct dspserver_config *config)
             fprintf(stderr,"            --offset 0 \n");
             fprintf(stderr,"            --lo 0 (if no LO offset desired in DDC receivers, or 9000 in softrocks\n");
             fprintf(stderr,"            --hpsdr (if can transmit\n");
-            fprintf(stderr,"            --hpsdrloc (if using hardware with LOCAL mike and headphone)\n");
             fprintf(stderr,"            --nocorrectiq (select if using non QSD receivers, like Hermes, Perseus, HiQSDR, Mercury)\n");
             exit(1);
 

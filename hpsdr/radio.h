@@ -267,7 +267,7 @@ extern bool start_radio(int);
 extern int isTransmitting();
 extern int band_get_current();
 extern void calcDriveLevel(double pa_calibration);
-extern void start_receiver(int, int);
+extern void start_receivers(int);
 extern void start_transmitter(int, int);
 extern void setFrequency(int v, long long f);
 extern void set_attenuation(int value);

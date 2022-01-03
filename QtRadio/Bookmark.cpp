@@ -37,19 +37,19 @@ void Bookmark::setBand(int b) {
     band=b;
 }
 
-    void Bookmark::setFrequency(long long f) {
-        frequency=f;
-    }
+void Bookmark::setFrequency(long long f) {
+    frequency=f;
+}
 
-    void Bookmark::setMode(int m) {
-        mode=m;
-    }
+void Bookmark::setMode(int m) {
+    mode=m;
+}
 
-    void Bookmark::setFilter(int f) {
-        filter=f;
-    }
+void Bookmark::setFilter(int f) {
+    filter=f;
+}
 
-    /*
+/*
 
     void Bookmark::setStep(int s) {
         step=s;
@@ -73,27 +73,27 @@ void Bookmark::setBand(int b) {
 
     */
 
-    QString Bookmark::getTitle() {
-        return title;
-    }
+QString Bookmark::getTitle() {
+    return title;
+}
 
-    int Bookmark::getBand() {
-        return band;
-    }
+int Bookmark::getBand() {
+    return band;
+}
 
-    long long Bookmark::getFrequency() {
-        return frequency;
-    }
+long long Bookmark::getFrequency() {
+    return frequency;
+}
 
-    int Bookmark::getMode() {
-        return mode;
-    }
+int Bookmark::getMode() {
+    return mode;
+}
 
-    int Bookmark::getFilter() {
-        return filter;
-    }
+int Bookmark::getFilter() {
+    return filter;
+}
 
-    /*
+/*
     int Bookmark::getStep() {
         return step;
     }

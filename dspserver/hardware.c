@@ -66,10 +66,6 @@ static int hw_debug = 0;
 
 #define BUFFER_SIZE 1024
 
-#define COMMAND_PORT 10100 //12000
-#define IQ_PORT      10000 // increment 1 per recv channel
-#define AUDIO_PORT   15000
-
 RADIO *radio[5];
 CHANNEL channels[35];
 int iq_socket = -1;
@@ -83,15 +79,6 @@ float mic_left_buffer[BUFFER_SIZE];
 float mic_right_buffer[BUFFER_SIZE];
 
 int samples = 0;
-
-int left_sample;
-int right_sample;
-int mic_sample;
-
-
-float left_sample_float;
-float right_sample_float;
-float mic_sample_float;
 
 short left_rx_sample;
 short right_rx_sample;
@@ -112,23 +99,16 @@ int command_port;
 static struct sockaddr_in command_addr;
 static socklen_t command_length = sizeof(command_addr);
 
-int audio_socket;
-int audio_port;
-struct sockaddr_in audio_addr;
-socklen_t audio_length = sizeof(audio_addr);
+int tx_iq_socket;
+struct sockaddr_in tx_iq_addr;
+socklen_t tx_iq_length = sizeof(tx_iq_addr);
 
 struct sockaddr_in server_audio_addr;
 socklen_t server_audio_length = sizeof(server_audio_addr);
 
-static struct sockaddr_in server_addr;
-static socklen_t server_length = sizeof(server_addr);
-
-short server_port;
-
 int session;
 
 int rxOnly = 1;
-int hardware_control = 0;
 
 char *manifest_xml[4];
 
@@ -169,7 +149,7 @@ void setStopIQIssued(int val)
 
 void* iq_thread(void* channel)
 {
-    int ch = 0; // *((int*)channel);
+    int ch = (int*)channel;
     struct sockaddr_in iq_addr;
     int iq_length = sizeof(iq_addr);
     BUFFERL buffer;
@@ -177,7 +157,6 @@ void* iq_thread(void* channel)
     static float data_in[2048];
     static float data_out[2048];
 
-//fprintf(stderr, "\n************ HHHHHHHHHHHHEEEEEEEEEEEEEEEEEEEEEERRRRRRRRRRRRRRRRRRRREEEEEEEEEEEEEEEE ************\n\n");
     // create a socket to receive iq from the server
     iq_socket = socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
     if (iq_socket < 0)
@@ -191,7 +170,7 @@ void* iq_thread(void* channel)
     memset(&iq_addr, 0, iq_length);
     iq_addr.sin_family = AF_INET;
     iq_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    iq_addr.sin_port = htons(IQ_PORT + channels[ch].receiver);          // Fix channel
+    iq_addr.sin_port = htons(RX_IQ_PORT_0 + channels[ch].recv_index);
 
     if (bind(iq_socket, (struct sockaddr*)&iq_addr, iq_length) < 0)
     {
@@ -224,9 +203,9 @@ void* iq_thread(void* channel)
         double dataout[2048];
 
         if (bUseNB)
-            xanbEXT(0, buffer.data, buffer.data);
+            xanbEXT(channels[ch].receiver, buffer.data, buffer.data);
         if (bUseNB2)
-            xnobEXT(0, buffer.data, buffer.data);
+            xnobEXT(channels[ch].receiver, buffer.data, buffer.data);
 
         int error = 0;
         fexchange0(channels[ch].receiver, buffer.data, dataout, &error);
@@ -237,8 +216,8 @@ void* iq_thread(void* channel)
 #pragma omp parallel for schedule(static) private(j)
         for (j=0; j < (i/2); j++)
         {
-            data_in[j*2]   = (float)dataout[j*2];    // left_samples[i];
-            data_in[j*2+1] = (float)dataout[j*2+1];  // right_samples[i];
+            data_in[j*2]   = (float)dataout[j*2];
+            data_in[j*2+1] = (float)dataout[j*2+1];
         }
 
         SRC_DATA data;
@@ -279,7 +258,7 @@ void* iq_thread(void* channel)
 
 void* wb_iq_thread(void* channel)
 {
-    int ch = 9; // *((int*)channel);
+    int ch = WIDEBAND_CHANNEL; // *((int*)channel);
     struct sockaddr_in iq_addr;
     int iq_socket = -1;
     int iq_length = sizeof(iq_addr);
@@ -302,7 +281,7 @@ void* wb_iq_thread(void* channel)
     memset(&iq_addr, 0, iq_length);
     iq_addr.sin_family = AF_INET;
     iq_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    iq_addr.sin_port = htons(10040 + channels[0].radio_id);   //  Fix channels
+    iq_addr.sin_port = htons(BANDSCOPE_PORT + channels[0].radio_id);   //  Fix channels
 
     if (bind(iq_socket, (struct sockaddr*)&iq_addr, iq_length) < 0)
     {
@@ -368,15 +347,15 @@ void hw_send(unsigned char* data, int length, int ch)
     {
         buffer.chunk = i;
         buffer.radio_id = channels[ch].radio_id;
-        buffer.receiver = channels[ch].receiver;
+        buffer.receiver = channels[ch].recv_index;
         buffer.length = length;
         memcpy((char*)&buffer.data[0], (char*)&data[512*i], 512);
 
-        int bytes_written = sendto(audio_socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr *)&audio_addr, audio_length);
+        int bytes_written = sendto(tx_iq_socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr *)&tx_iq_addr, tx_iq_length);
         if (bytes_written < 0)
         {
             perror("socket error: ");
-            fprintf(stderr, "sendto audio failed: %d length=%d\n", bytes_written, length);
+            fprintf(stderr, "sendto tx_iq failed: %d length=%d\n", bytes_written, length);
             exit(1);
         }
     }
@@ -393,7 +372,7 @@ void hw_send(unsigned char* data, int length, int ch)
 */
 void send_command(char* command, int len, char *response)
 {
-    int rc;
+    int rc = -1;
 
     //fprintf(stderr, "send_command: command='%s'\n", command);
 
@@ -437,18 +416,17 @@ void* keepalive_thread(void* arg)
 } // end keepalive_thread
 
 
-int make_connection(short int radio_id, short int receiver, short int transmitter)
+int make_connection(short int channel)
 {
     char *token, *saveptr;
     char command[64], response[HW_RESPONSE_SIZE];
     int result;
-//    char buffer[64]="";
 
     setStopIQIssued(false);
     result = 1;
     command[0] = ATTACH;
-    command[1] = (char)receiver;
-    command[2] = (char)radio_id;
+    command[1] = (char)channels[channel].recv_index;
+    command[2] = (char)channels[channel].radio_id;
     //sprintf(command, "connect %d %d", receiver, IQ_PORT+(receiver*2));
     send_command(command, 3, response);
     fprintf(stderr, "Resp: %s\n", response);
@@ -457,26 +435,24 @@ int make_connection(short int radio_id, short int receiver, short int transmitte
     {
         if (strcmp(token, "OK") == 0)
         {
-     //       channels[active_channels].radio_id = radio_id;
-     //       channels[active_channels++].receiver = receiver;
-
             token=strtok_r(NULL, " ", &saveptr);
             if (token != NULL)
             {
                 result = 1;
                 sampleRate = 48000; //////////atoi(token);
                 fprintf(stderr, "connect: sampleRate=%d\n", sampleRate);
-                setSpeed(sampleRate);
+                setSpeed(channel, sampleRate);
 
                 // FIXME:  Not a good place for this.
-                if (transmitter >= 0)
+                if (channels[channel].trans_index >= 0)
                 {
                     tx_init();
                     fprintf(stderr, "ATTACH TX\n");
                     command[0] = (char)ATTACH;
                     command[1] = (char)TX;
                     send_command(command, 2, response);
-                    recvfrom(audio_socket, (char*)&command, 2, 0, (struct sockaddr*)&audio_addr, (socklen_t *)&audio_length);
+                    recvfrom(tx_iq_socket, (char*)&command, 2, 0, (struct sockaddr*)&tx_iq_addr, (socklen_t *)&tx_iq_length);
+                    fprintf(stderr, "Transmitter attached.\n");
                 }
             }
             else
@@ -501,7 +477,7 @@ int make_connection(short int radio_id, short int receiver, short int transmitte
 } // end make_connection
 
 
-void hwDisconnect(short int radio_id, short int receiver)
+void hwDisconnect(short int radio_id, short int receiver) // FIX-ME: Change this to passing channel.
 {
     char command[128], response[HW_RESPONSE_SIZE];
 
@@ -509,11 +485,11 @@ void hwDisconnect(short int radio_id, short int receiver)
  //   send_command(command, 3, response);
 
     close(radio[radio_id]->socket);
-    close(audio_socket);
+    close(tx_iq_socket);
 } // end hwDisconnect
 
 
-int hwSetSampleRate(long rate)
+int hwSetSampleRate(int channel, long rate)
 {
     char *token;
     char command[64], response[HW_RESPONSE_SIZE];
@@ -521,7 +497,7 @@ int hwSetSampleRate(long rate)
     char *saveptr;
 
     result = 0;
-    sprintf(command, "%c %ld", SETSAMPLERATE, rate);
+    sprintf(command, "%c %d %ld", SETSAMPLERATE, channels[channel].recv_index, rate);
     send_command(command, 64, response);
     token = strtok_r(response, " ", &saveptr);
     if (token != NULL)
@@ -554,7 +530,7 @@ int hwSetFrequency(int ch, long long ddsAFrequency)
     char *saveptr;
 
     result = 0;
-    sprintf(command, "%c%c%lld", SETFREQ, channels[ch].receiver, (ddsAFrequency - (long long)LO_offset));
+    sprintf(command, "%c%c%lld", SETFREQ, channels[ch].recv_index, (ddsAFrequency - (long long)LO_offset));
     send_command(command, 64, response);
     token = strtok_r(response, " ", &saveptr);
     if (token != NULL)
@@ -666,46 +642,23 @@ int hwSendStarCommand(char *command, int len)
 
 /* --------------------------------------------------------------------------*/
 /** 
-* @brief Process the hw input buffer
-* 
-* @param buffer
-*/
-void process_hw_input_buffer(char* buffer)
-{
-} // end process_hw_input_buffer
-
-
-/* --------------------------------------------------------------------------*/
-/** 
-* @brief Get the iq samples
-* 
-* @param samples
-*/
-void getSpectrumSamples(char *samples) 
-{
-    memcpy(samples, iq_samples, SPECTRUM_BUFFER_SIZE);
-} // end getSpectrumSamples
-
-
-/* --------------------------------------------------------------------------*/
-/** 
 * @brief Set the speed
 * 
 * @param speed
 */
-void setSpeed(int s) 
+void setSpeed(int channel, int s)
 {
-    fprintf(stderr, "setSpeed %d\n", s);
+    fprintf(stderr, "setSpeed %d on rx: %d\n", s, channels[channel].receiver);
     fprintf(stderr, "LO_offset %f\n", LO_offset);
 
     sampleRate = s;
 
-    SetDSPSamplerate(0, sampleRate);
+    SetDSPSamplerate(channels[channel].receiver, sampleRate);
 
     // SetRXAShiftFreq(0, -LO_offset);
     //SetRXAShiftFreq(1, -LO_offset);
 
-    fprintf(stderr, "%s: %f\n", __FUNCTION__, (double)sampleRate);
+    fprintf(stderr, "%s:  rx: %d  %f\n", __FUNCTION__, channels[channel].receiver, (double)sampleRate);
     hw_set_src_ratio();
 } // end setSpeed
 
@@ -714,7 +667,7 @@ void hw_startIQ(int channel)
 {
     int ch = channel;
 
-    int rc = pthread_create(&iq_thread_id, NULL, iq_thread, NULL);
+    int rc = pthread_create(&iq_thread_id, NULL, iq_thread, (void*)ch);
     if (rc != 0)
     {
          fprintf(stderr,"pthread_create failed on iq_thread: rc=%d\n", rc);
@@ -800,7 +753,7 @@ void* hw_command_listener_thread(void* arg)
 
         radio = malloc(sizeof(RADIO));
         radio->iq_length = sizeof(radio->iq_addr);
-        radio->iq_port[0]=-1;
+        radio->rx_iq_port[0]=-1;
 
         if ((radio->socket=accept(command_socket, (struct sockaddr*)&radio->iq_addr, &radio->iq_length)) < 0)
         {
@@ -864,27 +817,27 @@ int hw_init()
         exit(1);
     }
 
-    // create a socket to send audio to the server
-    audio_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (audio_socket < 0)
+    // create a socket to send TX IQ to the server
+    tx_iq_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (tx_iq_socket < 0)
     {
-        perror("hw_init: create audio socket failed");
+        perror("hw_init: create tx_iq socket failed");
         exit(1);
     }
-    setsockopt(audio_socket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+    setsockopt(tx_iq_socket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
 
-    memset(&audio_addr, 0, audio_length);
-    audio_addr.sin_family = AF_INET;
-    audio_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    audio_addr.sin_port = htons(IQ_PORT+30);
+    memset(&tx_iq_addr, 0, tx_iq_length);
+    tx_iq_addr.sin_family = AF_INET;
+    tx_iq_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    tx_iq_addr.sin_port = htons(TX_IQ_PORT_0 + channels[0].radio_id);  // FIX-ME: TX channel needs to be fixed.
 
-    if (bind(audio_socket, (struct sockaddr*)&audio_addr, audio_length) < 0)
+    if (bind(tx_iq_socket, (struct sockaddr*)&tx_iq_addr, tx_iq_length) < 0)
     {
-        perror("hw_init: bind socket failed for audio socket");
+        perror("hw_init: bind socket failed for tx_iq socket");
         exit(1);
     }
 
-    fprintf(stderr, "hw_init: audio bound to port %d socket %d\n", ntohs(audio_addr.sin_port), audio_socket);
+    fprintf(stderr, "hw_init: tx_iq bound to port %d socket %d\n", ntohs(tx_iq_addr.sin_port), tx_iq_socket);
 
     // create sample rate subobject
     hw_set_src_ratio();
@@ -964,12 +917,6 @@ void hw_set_canTx(char state)
 } // end hw_set_canTx
 
 
-void hw_set_harware_control(char enable)
-{
-    hardware_control = enable;
-} // end hw_set_hardware_control
-
-
 void createChannels(char *manifest)
 {
     char line[80];
@@ -1009,9 +956,10 @@ void createChannels(char *manifest)
             {
                 sscanf(line, "%*s %d", &radio_id);
                 channels[active_channels].receiver = -1;
-                channels[active_channels].recv_index = -1;
+                channels[active_channels].recv_index = 0;
                 channels[active_channels].transmitter = -1;
-                channels[active_channels].trans_index = -1;
+                channels[active_channels].trans_index = 0;
+                channels[active_channels].bandscope_capable = false;
                 channels[active_channels].enabled = false;
             }
             else
@@ -1025,36 +973,45 @@ void createChannels(char *manifest)
                         sscanf(line, "%*s %d %*s", &num_rcvrs);
                     }
                     else
-                        if (strstr(line, "supported_transmitters"))
+                        if (strstr(line, "bandscope"))
                         {
-                            int r = 0;
-                            sscanf(line, "%*s %d %*s", &r);
-                            for (int x=0;x<num_rcvrs;x++)
-                            {
-                                channels[active_channels].receiver = num_chs++;
-                                channels[active_channels].recv_index++;
-                                if (r-- > 0)
-                                {
-                                    channels[active_channels].transmitter = num_chs++;
-                                    channels[active_channels].trans_index++;
-                                    last_tx_ch = num_chs-1;
-                                    last_trans_index = channels[active_channels].trans_index;
-                                }
-                                else
-                                {
-                                    channels[active_channels].transmitter = last_tx_ch;
-                                    channels[active_channels].trans_index = last_trans_index;
-                                }
-                                channels[active_channels].radio_id = radio_id;
-                                strcpy(channels[active_channels].radio_type, radio_type);
-                                channels[active_channels].enabled = false;
-                                active_channels++;
-                            }
+                            int tmp=0;
+                            sscanf(line, "%*s %d %*s", &tmp);
+                            if (tmp == 1)
+                                channels[active_channels].bandscope_capable = true;
                         }
+                        else
+                            if (strstr(line, "supported_transmitters"))
+                            {
+                                int r = 0;
+                                sscanf(line, "%*s %d %*s", &r);
+                                for (int x=0;x<num_rcvrs;x++)
+                                {
+                                    channels[active_channels].receiver = num_chs++;
+                                    channels[active_channels].recv_index = x;
+                                    if (r-- > 0)
+                                    {
+                                        channels[active_channels].transmitter = num_chs++;
+                                        channels[active_channels].trans_index = x;
+                                        last_tx_ch = num_chs-1;
+                                        last_trans_index = channels[active_channels].trans_index;
+                                    }
+                                    else
+                                    {
+                                        channels[active_channels].transmitter = last_tx_ch;
+                                        channels[active_channels].trans_index = last_trans_index;
+                                    }
+                                    channels[active_channels].radio_id = radio_id;
+                                    strcpy(channels[active_channels].radio_type, radio_type);
+                                    channels[active_channels].enabled = false;
+                                    active_channels++;
+                                }
+                            }
         }
     }
     fprintf(stderr, "Active channels = %d\n", active_channels);
-    fprintf(stderr, "RX = %d  TX = %d  Type = %s\n", channels[0].receiver, channels[0].transmitter, channels[0].radio_type);
+    for (int i=0;i<active_channels;i++)
+        fprintf(stderr, "RX = %d  TX = %d  RXi = %d  TXi = %d  Type = %s\n", channels[i].receiver, channels[i].transmitter, channels[i].recv_index, channels[i].trans_index, channels[i].radio_type);
 } // end createChannels
 
 
@@ -1063,7 +1020,7 @@ void hw_get_manifest()
     char command[64], response[HW_RESPONSE_SIZE];
     int result;
 
-    command[0] = 255; // QHARDWARE
+    command[0] = QHARDWARE;
     sem_wait(&hw_cmd_semaphore);
     int rc = send(command_socket, command, 1, 0);
     if (rc < 0)

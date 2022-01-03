@@ -1438,11 +1438,19 @@ void Panadapter::setZoom(int value)
 
 void Panadapter::setFrequency(long long f)
 {
-    frequency=f;
+    QByteArray command;
+
+    frequency = f;
 
     // KD0OSS ***************************
     if (!initialized)
         return;
+
+    command.clear();
+    command.append((char)SETNOTCHFILTERTUNE);
+    command.append(QString("%1").arg(frequency/1000000.0f));
+    connection->sendCommand(command);
+
     drawFrequencyLines();
     drawBandLimits();
     drawCursor(1, false);
@@ -1686,15 +1694,11 @@ void Panadapter::enableNotchFilter(bool enable)   // KD0OSS
         command.append((char)ENABLENOTCHFILTER);
         command.append((char)enable);
         connection->sendCommand(command);
-      //  command.clear();
-      //  QTextStream(&command) << ENABLENOTCHFILTER << " " << 0 << " " << index << " " << enable;
-      //  connection->sendCommand(command);
-      //  qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
 
         command.clear();
-  //      QTextStream(&command) << ENABLENOTCHFILTER << " " << 1 << " " << index << " " << enable;
-  //      connection->sendCommand(command);
-  //      qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
+        command.append((char)SETNOTCHFILTERTUNE);
+        command.append(QString("%1").arg(frequency/1000000.0f));
+        connection->sendCommand(command);
     }
     //emit enableNotchFilterSig(enable);
 }

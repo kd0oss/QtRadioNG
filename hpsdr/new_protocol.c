@@ -310,7 +310,7 @@ void update_action_table() {
     int xmit=isTransmitting();  // store such that it cannot change while building the flag
     int newdev=(device==NEW_DEVICE_ANGELIA || device==NEW_DEVICE_ORION || device == NEW_DEVICE_ORION2);
 
-    if (duplex && xmit)			flag +=10000;
+    if (duplex && xmit)		flag +=10000;
     if (newdev)				flag +=1000;
     if (xmit)				flag +=100;
     if (transmitter != NULL)
@@ -388,7 +388,7 @@ void new_protocol_init() {
     int i;
     int rc;
 
-    printf("new_protocol_init: MIC_SAMPLES=%d\n", MIC_SAMPLES);
+    fprintf(stderr, "new_protocol_init: MIC_SAMPLES=%d\n", MIC_SAMPLES);
 
     memset(rxcase      , 0, MAX_DDC*sizeof(int));
     memset(rxid        , 0, MAX_DDC*sizeof(int));
@@ -530,40 +530,40 @@ void new_protocol_init() {
         exit(-1);
     }
 
-    printf("new_protocol_init: data_socket %d bound to interface %s:%d\n",data_socket,inet_ntoa(radio->info.network.interface_address.sin_addr),ntohs(radio->info.network.interface_address.sin_port));
+    fprintf(stderr, "new_protocol_init: data_socket %d bound to interface %s:%d\n",data_socket,inet_ntoa(radio->info.network.interface_address.sin_addr),ntohs(radio->info.network.interface_address.sin_port));
 
     memcpy(&base_addr,&radio->info.network.address,radio->info.network.address_length);
     base_addr_length=radio->info.network.address_length;
     base_addr.sin_port=htons(GENERAL_REGISTERS_FROM_HOST_PORT);
 
-    printf("base_addr=%s\n",inet_ntoa(radio->info.network.address.sin_addr));
+    fprintf(stderr, "base_addr=%s\n",inet_ntoa(radio->info.network.address.sin_addr));
 
     memcpy(&receiver_addr,&radio->info.network.address,radio->info.network.address_length);
     receiver_addr_length=radio->info.network.address_length;
     receiver_addr.sin_port=htons(RECEIVER_SPECIFIC_REGISTERS_FROM_HOST_PORT);
-    printf("receive_addr=%s\n",inet_ntoa(radio->info.network.address.sin_addr));
+    fprintf(stderr, "receive_addr=%s\n",inet_ntoa(radio->info.network.address.sin_addr));
 
     memcpy(&transmitter_addr,&radio->info.network.address,radio->info.network.address_length);
     transmitter_addr_length=radio->info.network.address_length;
     transmitter_addr.sin_port=htons(TRANSMITTER_SPECIFIC_REGISTERS_FROM_HOST_PORT);
-    printf("transmit_addr=%s\n",inet_ntoa(radio->info.network.address.sin_addr));
+    fprintf(stderr, "transmit_addr=%s\n",inet_ntoa(radio->info.network.address.sin_addr));
 
     memcpy(&high_priority_addr,&radio->info.network.address,radio->info.network.address_length);
     high_priority_addr_length=radio->info.network.address_length;
     high_priority_addr.sin_port=htons(HIGH_PRIORITY_FROM_HOST_PORT);
-    printf("high_priority_addr=%s\n",inet_ntoa(radio->info.network.address.sin_addr));
+    fprintf(stderr, "high_priority_addr=%s\n",inet_ntoa(radio->info.network.address.sin_addr));
 
-    printf("new_protocol_thread: high_priority_addr setup for port %d\n",HIGH_PRIORITY_FROM_HOST_PORT);
+    fprintf(stderr, "new_protocol_thread: high_priority_addr setup for port %d\n",HIGH_PRIORITY_FROM_HOST_PORT);
 
     memcpy(&audio_addr,&radio->info.network.address,radio->info.network.address_length);
     audio_addr_length=radio->info.network.address_length;
     audio_addr.sin_port=htons(AUDIO_FROM_HOST_PORT);
-    printf("audio_addr=%s\n",inet_ntoa(radio->info.network.address.sin_addr));
+    fprintf(stderr, "audio_addr=%s\n",inet_ntoa(radio->info.network.address.sin_addr));
 
     memcpy(&iq_addr,&radio->info.network.address,radio->info.network.address_length);
     iq_addr_length=radio->info.network.address_length;
     iq_addr.sin_port=htons(TX_IQ_FROM_HOST_PORT);
-    printf("iq_addr=%s\n",inet_ntoa(radio->info.network.address.sin_addr));
+    fprintf(stderr, "iq_addr=%s\n",inet_ntoa(radio->info.network.address.sin_addr));
 
 
     for (i=0;i<MAX_DDC;i++) {
@@ -583,12 +583,12 @@ void new_protocol_init() {
         printf("thread_new failed on new_protocol_thread\n");
         exit( -1 );
     }
-    //    printf( "new_protocol_thread: id=%d\n",new_protocol_thread_id);
+    fprintf(stderr, "new_protocol_thread: id=%d\n", new_protocol_thread_id);
 
     new_protocol_general();
     new_protocol_start();
     new_protocol_high_priority();
-    printf("End new_protocol_init.\n");
+    fprintf(stderr, "End new_protocol_init.\n");
 } // end new_protocol_init
 
 
@@ -676,7 +676,7 @@ static void new_protocol_high_priority() {
     high_priority_buffer_to_radio[3]=high_priority_sequence;
     high_priority_buffer_to_radio[4]=running;
     //
-    //  We need not set PTT of doing internal CW with break-in
+    //  We need not set PTT if doing internal CW with break-in
     //
     if (txmode==modeCWU || txmode==modeCWL) {
         if (isTransmitting() && (!cw_keyer_internal || !cw_breakin || CAT_cw_is_active)) high_priority_buffer_to_radio[4]|=0x02;
@@ -1033,7 +1033,7 @@ static void new_protocol_high_priority() {
         // Out of paranoia: print warning and choose ANT1
         //
         if (i<0 || i>2) {
-            printf("WARNING: illegal TX antenna chosen, using ANT1\n");
+            fprintf(stderr, "WARNING: illegal TX antenna chosen, using ANT1\n");
             transmitter->alex_antenna=0;
             i=0;
         }
@@ -1227,7 +1227,7 @@ static void new_protocol_transmit_specific() {
     // Attenuator for ADC0 upon TX
     transmit_specific_buffer[59]=transmitter->attenuation;
 
-    //printf("new_protocol_transmit_specific: %s:%d\n",inet_ntoa(transmitter_addr.sin_addr),ntohs(transmitter_addr.sin_port));
+ //   fprintf(stderr, "new_protocol_transmit_specific: %s:%d\n",inet_ntoa(transmitter_addr.sin_addr),ntohs(transmitter_addr.sin_port));
 
     if ((rc=sendto(data_socket,transmit_specific_buffer,sizeof(transmit_specific_buffer),0,(struct sockaddr*)&transmitter_addr,transmitter_addr_length))<0) {
         printf("sendto socket failed for tx specific: %d\n",rc);
@@ -1240,14 +1240,14 @@ static void new_protocol_transmit_specific() {
 
     tx_specific_sequence++;
     pthread_mutex_unlock(&tx_spec_mutex);
-
 }
 
 static void new_protocol_receive_specific() {
     int i;
     int ddc;
     int rc;
-//fprintf(stderr, "adcs=%d  receivers=%d  device=%d\n", n_adc, receivers, device);
+
+//    fprintf(stderr, "adcs=%d  receivers=%d  device=%d\n", n_adc, receivers, device);
     pthread_mutex_lock(&rx_spec_mutex);
     memset(receive_specific_buffer, 0, sizeof(receive_specific_buffer));
 
@@ -1258,7 +1258,7 @@ static void new_protocol_receive_specific() {
 
     receive_specific_buffer[4]=n_adc; 	// number of ADCs
 
-    for(i=0;i<receivers;i++) {
+    for (i=0;i<receivers;i++) {
         // note that for HERMES, receiver[i] is associated with DDC(i) but beyond
         // (that is, ANGELIA, ORION, ORION2) receiver[i] is associated with DDC(i+2)
         ddc=i;
@@ -1278,6 +1278,8 @@ static void new_protocol_receive_specific() {
         receive_specific_buffer[19+(ddc*6)]=(receiver[i]->sample_rate/1000)&0xFF;
         receive_specific_buffer[22+(ddc*6)]=24;
     }
+
+  //  fprintf(stderr, "new_protocol_receive_specific: %s:%d enable=%02X\n",inet_ntoa(receiver_addr.sin_addr),ntohs(receiver_addr.sin_port),receive_specific_buffer[7]);
 
     if (transmitter->puresignal && isTransmitting()) {
         //
@@ -1327,8 +1329,6 @@ static void new_protocol_receive_specific() {
         receive_specific_buffer[7]=1; 						// enable  DDC0 but disable all others
     }
 
-    //printf("new_protocol_receive_specific: %s:%d enable=%02X\n",inet_ntoa(receiver_addr.sin_addr),ntohs(receiver_addr.sin_port),receive_specific_buffer[7]);
-
     if ((rc=sendto(data_socket,receive_specific_buffer,sizeof(receive_specific_buffer),0,(struct sockaddr*)&receiver_addr,receiver_addr_length))<0) {
         printf("sendto socket failed for receive_specific: %d\n",rc);
         exit(1);
@@ -1349,10 +1349,10 @@ static void new_protocol_start() {
     pthread_create(&(new_protocol_timer_thread_id), NULL, &new_protocol_timer_thread, NULL);
     if (!new_protocol_timer_thread_id)
     {
-        printf("g_thread_new failed on new_protocol_timer_thread\n");
+        fprintf(stderr, "pthread_new failed on new_protocol_timer_thread\n");
         exit( -1 );
     }
-    //   printf( "new_protocol_timer_thread: id=%p\n",new_protocol_timer_thread_id);
+    fprintf(stderr, "new_protocol_timer_thread: id=%p\n",new_protocol_timer_thread_id);
 }
 
 void new_protocol_stop() {
@@ -1406,10 +1406,12 @@ void new_protocol_restart() {
     micsamples_sequence=0;
     audiosequence=0;
     tx_iq_sequence=0;
+
     memset(rxcase      , 0, MAX_DDC*sizeof(int));
     memset(rxid        , 0, MAX_DDC*sizeof(int));
     memset(ddc_sequence, 0, MAX_DDC*sizeof(long));
     update_action_table();
+
     // running is set to 1 at the top of new_protocol_thread,
     // but this may lead to race conditions. So out of paranoia,
     // set it to 1 here as well such that we are *absolutely* sure
@@ -1428,9 +1430,9 @@ static void* new_protocol_thread(void *data) {
     int ddc;
     short sourceport;
     unsigned char *buffer;
-    int bytesread;
+    int bytesread = 0;
 
-    printf("new_protocol_thread\n");
+    fprintf(stderr, "new_protocol_thread\n");
 
     iqindex=4;
 
@@ -1450,6 +1452,7 @@ static void* new_protocol_thread(void *data) {
             // we were doing "recvfrom". In this case, we do not want to "exit" but let the main
             // thread exit gracefully, including writing the props files.
             //
+            fprintf(stderr, "new_protocol_thread stopped\n");
             free(buffer);
             break;
         }
@@ -1462,7 +1465,7 @@ static void* new_protocol_thread(void *data) {
 
         sourceport=ntohs(addr.sin_port);
 
-  //      printf("new_protocol_thread: recvd %d bytes on port %d\n",bytesread,sourceport);
+    //    fprintf(stderr, "new_protocol_thread: recvd %d bytes on port %d\n",bytesread,sourceport);
 
         switch (sourceport)
         {
@@ -1550,13 +1553,13 @@ static void* new_protocol_thread(void *data) {
             break;
         } // switch
     } // while
-    printf("End new_protocol_thread.\n");
+    fprintf(stderr, "End new_protocol_thread.\n");
     return NULL;
 }
 
 
 static void* command_response_thread(void *data) {
-    printf("command_response_thread\n");
+    fprintf(stderr, "command_response_thread\n");
     while(1) {
 #ifdef __APPLE__
         sem_post(command_response_sem_ready);
@@ -1572,7 +1575,7 @@ static void* command_response_thread(void *data) {
 }
 
 static void* high_priority_thread(void *data) {
-    printf("high_priority_thread\n");
+    fprintf(stderr, "high_priority_thread\n");
     while (1)
     {
 #ifdef __APPLE__
@@ -1589,7 +1592,7 @@ static void* high_priority_thread(void *data) {
 }
 
 static void* mic_line_thread(void *data) {
-    printf("mic_line_thread\n");
+    fprintf(stderr, "mic_line_thread\n");
     while(1) {
 #ifdef __APPLE__
         sem_post(mic_line_sem_ready);
@@ -1614,7 +1617,8 @@ static void* iq_thread(void *data)
     free(data);
     long sequence;
     unsigned char *buffer;
-    printf("iq_thread: ddc=%d\n",ddc);
+
+    fprintf(stderr, "iq_thread: ddc=%d\n",ddc);
     while (1)
     {
 #ifdef __APPLE__
@@ -1834,7 +1838,7 @@ static void process_command_response() {
     }
     response_sequence++;
     response=command_response_buffer[4]&0xFF;
-    printf("CommandResponse with seq=%ld and command=%d\n",sequence,response);
+    fprintf(stderr, "CommandResponse with seq=%ld and command=%d\n",sequence,response);
 #ifdef __APPLE__
     sem_post(response_sem);
 #else
