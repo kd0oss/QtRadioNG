@@ -1,10 +1,10 @@
 # QtRadioNG
 Next generation of SDR client sofware based on QtRadio
 
-This release takes the original QtRadio SDR sofware by John Melton G0ORX/N6LYT a few steps farther.
+This release takes the original QtRadio SDR software by John Melton G0ORX/N6LYT a few steps farther.
 This is a modular client/server style system the heart of which is the open source DSP software
 known as WDSP by Warren C. Pratt, NR0V. This core is wrapped in the main server portion of the system
-called dspserver.  As the main server this program has to be running first.  All other software is
+called dspserver.  As the main server, this program has to be running first.  All other software is
 considered a client to dspserver. Multiple clients can connect offering different services. One 
 service would be an SDR radio controller program.  This is an abstraction layer between the actual
 radio hardware and dspserver.  All communication between dspserver and the radio client will
@@ -18,7 +18,7 @@ monitor or add features such as modems or audio encode/decode software or hardwa
 
 While the software could all run on the same machine this system is more usefull when the
 server and client can't be in close proximity to the radio operator such as in remote shack
-operation. The dspserver and hardware really need to be located on a local network because of
+operation. The dspserver and hardware really need to be located on the same local network because of
 the speed and bandwidth requirements.  The user interface however only requires a very small
 bandwidth similar to an old dialup connection. This makes it ideal for operation over the
 internet.
