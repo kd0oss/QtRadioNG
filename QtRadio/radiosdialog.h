@@ -20,15 +20,18 @@ public:
     QString radio_type;
     int     available_xcvrs[4];
     int     servers;
-    int     selected_channel;
+    int8_t  selected_channel;
     bool    receivers_active[7];
+    int8_t  receiver_channel[7];
     bool    remote_audio;
     bool    remote_mic_audio;
     long    sample_rate[7];
+    int     active_radios;
     int     active_channels;
-    CHANNEL *channel;
+    int8_t  txrxPair[2];
+    CHANNEL *channels;
 
-    void fillRadioTable();
+    void fillRadioList();
 
 private:
     Ui::RadiosDialog *ui;

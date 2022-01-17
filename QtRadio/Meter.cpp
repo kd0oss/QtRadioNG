@@ -125,8 +125,9 @@ Meter::Meter(QString title, short mtype)
         painter.drawText(dxmax-5, dymax,"180");
     }
 
-    painter.drawText(0,0,image->width(),image->height(),Qt::AlignBottom||Qt::AlignHCenter,title);
+    painter.drawText(0, 0, image->width(), image->height(), Qt::AlignTop, title);
 }
+
 
 void Meter::calculateLine(int dbm, double minRadius, double maxRadius)
 {
@@ -142,6 +143,7 @@ void Meter::calculateLine(int dbm, double minRadius, double maxRadius)
     dymax = CENTER_Y + (int)(maxRadius * cosine);
 
 }
+
 
 void Meter::calculateNeedle(int dbm, double minRadius, double maxRadius)
 {
@@ -166,8 +168,10 @@ void Meter::calculateNeedle(int dbm, double minRadius, double maxRadius)
 
 }
 
-QImage Meter::getImage(float meter1, float meter2)
+
+QImage Meter::getImage(float meter0, float meter1, float meter2)
 {
+    Calc calc;
     QImage qImage(*image);
     QPainter painter(&qImage);
   //  Calc calc;
@@ -177,7 +181,7 @@ QImage Meter::getImage(float meter1, float meter2)
     if (type == POWMETER)
     {
 //        qDebug("F: %2.2f  R: %2.2f", meter1, meter2);
-//        calculateNeedle(calc.PAPower((dbm & 0xff00) >> 8),0,75);
+//        calculateNeedle(calc.PAPower((meter0 & 0xff00) >> 8),0,75);
         calculateNeedle((int)(meter1), 0, 75);
         painter.drawLine(dxmin, dymin, dxmax, dymax);
         painter.setPen(Qt::black);
@@ -187,11 +191,11 @@ QImage Meter::getImage(float meter1, float meter2)
     }
     else
     {
-        calculateNeedle((int)meter1, 0, 75);
+        calculateNeedle((int)meter0, 0, 75);
         painter.drawLine(dxmin, dymin, dxmax, dymax);
         painter.setPen(Qt::black);
         painter.setBackground(QBrush(QColor(Qt::white)));
-        strDbm.sprintf("%d dBm", (int)meter1);
+        strDbm.sprintf("%d dBm", (int)meter0);
         QRectF r1(image->width()-150, image->height()-15, 105, 20);
         painter.drawText(r1, Qt::AlignRight, strDbm);
     }

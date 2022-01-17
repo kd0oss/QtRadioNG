@@ -10,6 +10,9 @@ HermesFrame::HermesFrame(UI *pUI, QWidget *parent) : QFrame(parent), ui(new Ui::
     tuning = false;
     pui = pUI;
 
+    currentRxChannel = -1;
+    currentTxChannel = -1;
+
     // Load hardware settings
     settings = new QSettings("FreeSDR", "QtRadioII");
     settings->beginGroup("Hermes");
@@ -79,10 +82,6 @@ HermesFrame::HermesFrame(UI *pUI, QWidget *parent) : QFrame(parent), ui(new Ui::
     };
     settings->endGroup();
 
- //   setAttenuation(true);
- //   setRxAntenna();
- //   setTxRelay();
-
     connect(ui->hhTxPowerSlider, SIGNAL(valueChanged(int)), this, SLOT(adjustPower(int)));
     connect(ui->hhTxMicBoostCB, SIGNAL(toggled(bool)), this, SLOT(adjustMicBoost(bool)));
     connect(ui->hhPreampCB, SIGNAL(toggled(bool)), this, SLOT(enablePreamp(bool)));
@@ -102,7 +101,6 @@ HermesFrame::HermesFrame(UI *pUI, QWidget *parent) : QFrame(parent), ui(new Ui::
     connect(ui->hhIO4CB, SIGNAL(released()), this, SLOT(setOCOutputs()));
     connect(ui->hhIO5CB, SIGNAL(released()), this, SLOT(setOCOutputs()));
     connect(ui->hhIO6CB, SIGNAL(released()), this, SLOT(setOCOutputs()));
-    connect(pUI, SIGNAL(tuningEnable(bool)), this, SLOT(tuningEnabled(bool)));
     connect(ui->hhTxTuneButton, SIGNAL(released()), this, SLOT(tuneClicked()));
     connect(ui->hhRxAnt0Radio, SIGNAL(released()), this, SLOT(setRxAntenna()));
     connect(ui->hhRxAnt1Radio, SIGNAL(released()), this, SLOT(setRxAntenna()));
@@ -110,6 +108,7 @@ HermesFrame::HermesFrame(UI *pUI, QWidget *parent) : QFrame(parent), ui(new Ui::
     connect(ui->hhTxAnt0Radio, SIGNAL(released()), this, SLOT(setTxRelay()));
     connect(ui->hhTxAnt1Radio, SIGNAL(released()), this, SLOT(setTxRelay()));
     connect(ui->hhTxAnt2Radio, SIGNAL(released()), this, SLOT(setTxRelay()));
+    connect(pUI, SIGNAL(tuningEnable(bool)), this, SLOT(tuningEnabled(bool)));
 } // end constructor
 
 
@@ -170,6 +169,7 @@ void HermesFrame::setAttenuation(bool button)
         atn = -ui->hhRxAttSlider->value() / 10;
 
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)STARCOMMAND);
     command.append((char)SETATTENUATOR);
     command.append(QString("%1").arg(atn));
@@ -207,6 +207,7 @@ void HermesFrame::setOCOutputs(void)
         io = 6;
 
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)STARCOMMAND);
     command.append((char)SETOCOUTPUT);
     command.append((char)io);
@@ -218,7 +219,10 @@ void HermesFrame::adjustPower(int pwr)
 {
     QByteArray command;
 
+    if (currentTxChannel < 0)
+        return;
     command.clear();
+    command.append((char)currentTxChannel);
     command.append((char)STARCOMMAND);
     command.append((char)SETPOWEROUT);
     command.append((char)pwr);
@@ -233,7 +237,10 @@ void HermesFrame::adjustMicBoost(bool enable)
 {
     QByteArray command;
 
+    if (currentTxChannel < 0)
+        return;
     command.clear();
+    command.append((char)currentTxChannel);
     command.append((char)STARCOMMAND);
     command.append((char)SETMICBOOST);
     command.append((char)enable);
@@ -249,6 +256,7 @@ void HermesFrame::enablePreamp(bool enable)
     QByteArray command;
 
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)STARCOMMAND);
     command.append((char)SETPREAMP);
     command.append((char)enable);
@@ -264,6 +272,7 @@ void HermesFrame::enableDither(bool enable)
     QByteArray command;
 
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)STARCOMMAND);
     command.append((char)SETDITHER);
     command.append((char)enable);
@@ -279,6 +288,7 @@ void HermesFrame::enableRandom(bool enable)
     QByteArray command;
 
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)STARCOMMAND);
     command.append((char)SETRANDOM);
     command.append((char)enable);
@@ -301,6 +311,7 @@ void HermesFrame::setRxAntenna(void)
     if (ui->hhRxAnt2Radio->isChecked())
         ant = 2;
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)STARCOMMAND);
     command.append((char)SETRXANT);
     command.append((char)ant);
@@ -316,6 +327,8 @@ void HermesFrame::setTxRelay(void)
     QByteArray command;
     char ant;
 
+    if (currentTxChannel < 0)
+        return;
     if (ui->hhTxAnt0Radio->isChecked())
         ant = 0;
     if (ui->hhTxAnt1Radio->isChecked())
@@ -323,6 +336,7 @@ void HermesFrame::setTxRelay(void)
     if (ui->hhTxAnt2Radio->isChecked())
         ant = 2;
     command.clear();
+    command.append((char)currentTxChannel);
     command.append((char)STARCOMMAND);
     command.append((char)SETTXRELAY);
     command.append((char)ant);
@@ -338,16 +352,20 @@ void HermesFrame::pwrSliderValueChanged(int pwr)
 //    if (tuning) return;
     QByteArray command;
 
+    if (currentTxChannel < 0)
+        return;
     if (pui->mode.getMode() == MODE_AM || pui->mode.getMode() == MODE_SAM)
     {
         fprintf(stderr, "TX Gain slider: %d\n", pwr);
         command.clear();
+        command.append((char)currentTxChannel);
         command.append((char)SETTXAMCARLEV);
         command.append(QString("%1").arg(pwr/1000.0));
     }
     else
     {
         command.clear();
+        command.append((char)currentTxChannel);
         command.append((char)SETMICGAIN);
         command.append(QString("%1").arg(pwr/1000.0));
     }
@@ -362,10 +380,13 @@ void HermesFrame::pwrSliderValueChanged(int pwr)
 
 void HermesFrame::tunePwrSliderValueChanged(int pwr)
 {
+    if (currentTxChannel < 0)
+        return;
     if (!tuning) return;
     QByteArray command;
     fprintf(stderr, "Tune slider: %d", pwr);
     command.clear();
+    command.append((char)currentTxChannel);
     command.append((char)SETTXAMCARLEV);
     command.append(QString("%1").arg(pwr/1000.0));
     emit hhcommand(command);
@@ -380,6 +401,7 @@ void HermesFrame::getSerial(void)
     QByteArray command;
 
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)STARGETSERIAL);
     emit hhcommand(command);
 } // end getSerial

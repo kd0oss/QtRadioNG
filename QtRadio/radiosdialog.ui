@@ -25,62 +25,6 @@
   <property name="windowTitle">
    <string>Available Radios</string>
   </property>
-  <widget class="QTableWidget" name="radioListTable">
-   <property name="geometry">
-    <rect>
-     <x>10</x>
-     <y>10</y>
-     <width>641</width>
-     <height>201</height>
-    </rect>
-   </property>
-   <property name="frameShape">
-    <enum>QFrame::WinPanel</enum>
-   </property>
-   <property name="editTriggers">
-    <set>QAbstractItemView::NoEditTriggers</set>
-   </property>
-   <property name="showDropIndicator" stdset="0">
-    <bool>false</bool>
-   </property>
-   <property name="dragDropOverwriteMode">
-    <bool>false</bool>
-   </property>
-   <property name="selectionMode">
-    <enum>QAbstractItemView::SingleSelection</enum>
-   </property>
-   <property name="selectionBehavior">
-    <enum>QAbstractItemView::SelectRows</enum>
-   </property>
-   <property name="cornerButtonEnabled">
-    <bool>false</bool>
-   </property>
-   <column>
-    <property name="text">
-     <string>Channel</string>
-    </property>
-   </column>
-   <column>
-    <property name="text">
-     <string>Type</string>
-    </property>
-   </column>
-   <column>
-    <property name="text">
-     <string>Rcvr</string>
-    </property>
-   </column>
-   <column>
-    <property name="text">
-     <string>Xmtr</string>
-    </property>
-   </column>
-   <column>
-    <property name="text">
-     <string>Running</string>
-    </property>
-   </column>
-  </widget>
   <widget class="QPushButton" name="radioStartButton">
    <property name="geometry">
     <rect>
@@ -283,6 +227,240 @@
      </widget>
     </item>
    </layout>
+  </widget>
+  <widget class="QFrame" name="frame">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>10</y>
+     <width>641</width>
+     <height>201</height>
+    </rect>
+   </property>
+   <property name="frameShape">
+    <enum>QFrame::WinPanel</enum>
+   </property>
+   <property name="frameShadow">
+    <enum>QFrame::Sunken</enum>
+   </property>
+   <widget class="QListWidget" name="radioList">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>30</y>
+      <width>351</width>
+      <height>161</height>
+     </rect>
+    </property>
+    <property name="editTriggers">
+     <set>QAbstractItemView::NoEditTriggers</set>
+    </property>
+    <property name="showDropIndicator" stdset="0">
+     <bool>false</bool>
+    </property>
+    <property name="alternatingRowColors">
+     <bool>true</bool>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label">
+    <property name="geometry">
+     <rect>
+      <x>21</x>
+      <y>10</y>
+      <width>61</width>
+      <height>19</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>13</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>Radios:</string>
+    </property>
+   </widget>
+   <widget class="QFrame" name="frame_2">
+    <property name="geometry">
+     <rect>
+      <x>390</x>
+      <y>30</y>
+      <width>109</width>
+      <height>161</height>
+     </rect>
+    </property>
+    <property name="frameShape">
+     <enum>QFrame::StyledPanel</enum>
+    </property>
+    <property name="frameShadow">
+     <enum>QFrame::Raised</enum>
+    </property>
+    <layout class="QVBoxLayout" name="verticalLayout">
+     <property name="spacing">
+      <number>0</number>
+     </property>
+     <property name="topMargin">
+      <number>0</number>
+     </property>
+     <property name="bottomMargin">
+      <number>0</number>
+     </property>
+     <item>
+      <widget class="QCheckBox" name="receiver1Ckb">
+       <property name="font">
+        <font>
+         <pointsize>12</pointsize>
+        </font>
+       </property>
+       <property name="text">
+        <string>Receiver 1</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="receiver2Ckb">
+       <property name="font">
+        <font>
+         <pointsize>12</pointsize>
+        </font>
+       </property>
+       <property name="text">
+        <string>Receiver 2</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="receiver3Ckb">
+       <property name="font">
+        <font>
+         <pointsize>12</pointsize>
+        </font>
+       </property>
+       <property name="text">
+        <string>Receiver 3</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="receiver4Ckb">
+       <property name="font">
+        <font>
+         <pointsize>12</pointsize>
+        </font>
+       </property>
+       <property name="text">
+        <string>Receiver 4</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="receiver5Ckb">
+       <property name="font">
+        <font>
+         <pointsize>12</pointsize>
+        </font>
+       </property>
+       <property name="text">
+        <string>Receiver 5</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="receiver6Ckb">
+       <property name="font">
+        <font>
+         <pointsize>12</pointsize>
+        </font>
+       </property>
+       <property name="text">
+        <string>Receiver 6</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="receiver7Ckb">
+       <property name="font">
+        <font>
+         <pointsize>12</pointsize>
+        </font>
+       </property>
+       <property name="text">
+        <string>Receiver 7</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </widget>
+   <widget class="QLabel" name="label_2">
+    <property name="geometry">
+     <rect>
+      <x>391</x>
+      <y>10</y>
+      <width>91</width>
+      <height>19</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>13</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>Active RXs:</string>
+    </property>
+   </widget>
+   <widget class="QComboBox" name="transPairedCB">
+    <property name="geometry">
+     <rect>
+      <x>520</x>
+      <y>30</y>
+      <width>106</width>
+      <height>24</height>
+     </rect>
+    </property>
+    <property name="minimumSize">
+     <size>
+      <width>106</width>
+      <height>0</height>
+     </size>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>12</pointsize>
+     </font>
+    </property>
+    <property name="maxCount">
+     <number>8</number>
+    </property>
+    <item>
+     <property name="text">
+      <string>None</string>
+     </property>
+    </item>
+    <item>
+     <property name="text">
+      <string>Recv 1</string>
+     </property>
+    </item>
+   </widget>
+   <widget class="QLabel" name="label_3">
+    <property name="geometry">
+     <rect>
+      <x>522</x>
+      <y>10</y>
+      <width>102</width>
+      <height>19</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>13</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>TX Paired to:</string>
+    </property>
+   </widget>
   </widget>
  </widget>
  <resources/>

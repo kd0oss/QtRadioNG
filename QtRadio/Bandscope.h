@@ -37,8 +37,11 @@ public:
     void connect();
     void disconnect();
 
+    int8_t channel;
+    int8_t radio_id;
+
 public slots:
-    void bandscopeBuffer(spectrum);
+    void bandscopeBuffer(SPECTRUM);
     void connected();
     void disconnected();
     void updateBandscope();

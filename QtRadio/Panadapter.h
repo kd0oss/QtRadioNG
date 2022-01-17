@@ -119,6 +119,7 @@ public:
     void    paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget);
     QRectF  boundingRect() const;
     int     itemType;
+    int8_t  currentChannel;
 
 private:
     int plotWidth;
@@ -239,7 +240,7 @@ public:
 //    void setSampleRate(int r);
 //    void setFrequency(long long f);
     void setFilter(int low,int high);
-    void updateSpectrumFrame(spectrum);
+    void updateSpectrumFrame(SPECTRUM);
 //    int samplerate();
 
 //    int getHigh();
@@ -251,12 +252,13 @@ public:
 //    void setBand(QString b);
 //    void setFilter(QString f);
 //    void setBandLimits(long long min,long long max);
+    int8_t  currentChannel;
 
 signals:
     void frequencyMoved(int steps,int step);
     void spectrumHighChanged(int high);
     void spectrumLowChanged(int low);
-    void meterValue(float, float);
+    void meterValue(float, float, float);
 
 protected:
 //    void resizeEvent(QResizeEvent *event);
@@ -341,8 +343,9 @@ public:
     void setSampleRate(int r);
     void setFrequency(long long f);
     void setFilter(int low,int high);
-    void updateSpectrumFrame(spectrum);
+    void updateSpectrumFrame(SPECTRUM);
     int samplerate();
+    int8_t  currentChannel;
 
     int getHigh();
     int getLow();
@@ -370,7 +373,7 @@ signals:
     void spectrumLowChanged(int low);
     void waterfallHighChanged(int high);
     void waterfallLowChanged(int low);
-    void meterValue(float, float);
+    void meterValue(float, float, float);
     void squelchValueChanged(int step);
     void statusMessage(QString);
     void removeNotchFilter(void);

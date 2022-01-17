@@ -12,7 +12,7 @@
 class Meter {
 public:
     Meter(QString title, short mtype);
-    QImage getImage(float meter1, float meter2);
+    QImage getImage(float meter0, float meter1, float meter2);
 
 private:
     QImage* image;

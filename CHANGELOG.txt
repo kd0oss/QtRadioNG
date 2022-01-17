@@ -1,0 +1,35 @@
+QtRadioNG changes log by Rick Schnicker KD0OSS
+==================================================
+
+2022/01/08   Up rev'd to version ALPHA 2.02
+    Put most DSP related functions into new source dsp.c
+    to make it easier to use a differenct DSP core in
+    the future.
+
+    Added a few more WDSP function calls to dspserver.
+
+    Cleaned up a few of the source files.
+
+    HPSDR will now start up all the connected radio's
+    resources upon connection rather than as needed.
+    This simplifies client functions.
+
+    Most all of the GUI widgets should function now.
+
+    Bandscope function now works with receivers that
+    allow it.
+
+    Communication between user client and dspserver
+    now managed on a channel structure. Each channel
+    represents a specific IQ stream to and from
+    each radio connected. A maximum of 35 channels is
+    the current limit. The bottom 5 channels are
+    reserved for bandscope streams. The maximum radios
+    allowed to connect is 4. This is an abitrary number
+    and may be increased in the furture.
+
+    We currently allow upto 7 receivers and 1 transmitter
+    per radio. The transmitter may be paired with any
+    active receiver.
+
+    More source file cleaning.

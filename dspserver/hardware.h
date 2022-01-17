@@ -1,5 +1,5 @@
 /** 
-* @file ozy.h
+* @file hardware.h
 * @brief Header files for the Ozy interface functions 
 * @author John Melton, G0ORX/N6LYT, Doxygen Comments Dave Larsen, KV0S
 * @version 0.1
@@ -22,31 +22,37 @@
 * along with this program; if not, write to the Free Software
 * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 * 
+* Updated by Rick Schnicker KD0OSS  -- 2021,2022
 */
 
 
-#ifndef _OZY_H
-#define	_OZY_H
+#ifndef _HARDWARE_H
+#define	_HARDWARE_H
 
 #ifdef	__cplusplus
 extern "C" {
 #endif
 #include <stdbool.h>
+#include "server.h"
 
+#define WIDEBAND_CHANNEL MAX_CHANNELS-1
 
-#define SYNC 0x7F
-#define HW_BUFFER_SIZE 512
+// Response buffers passed to hw_send must be this size
+#define HW_RESPONSE_SIZE          64
+#define BUFFER_SIZE               1024
+#define SYNC                      0x7F
+#define HW_BUFFER_SIZE            512
 
 // HW command and control
-#define MOX_DISABLED    0x00
-#define MOX_ENABLED     0x01
+#define MOX_DISABLED              0x00
+#define MOX_ENABLED               0x01
 
-#define MIC_SOURCE_JANUS 0x00
-#define MIC_SOURCE_PENELOPE 0x80
-#define CONFIG_NONE     0x00
-#define CONFIG_PENELOPE 0x20
-#define CONFIG_MERCURY  0x40
-#define CONFIG_BOTH     0x60
+#define MIC_SOURCE_JANUS          0x00
+#define MIC_SOURCE_PENELOPE       0x80
+#define CONFIG_NONE               0x00
+#define CONFIG_PENELOPE           0x20
+#define CONFIG_MERCURY            0x40
+#define CONFIG_BOTH               0x60
 #define PENELOPE_122_88MHZ_SOURCE 0x00
 #define MERCURY_122_88MHZ_SOURCE  0x10
 #define ATLAS_10MHZ_SOURCE        0x00
@@ -67,88 +73,44 @@ extern "C" {
 #define LT2208_RANDOM_OFF         0x00
 #define LT2208_RANDOM_ON          0x10
 
-typedef struct _buffer {
-    unsigned short chunk;
-    unsigned short radio_id;
-    unsigned short receiver;
-    unsigned short length;
-    double data[64];
-} BUFFER;
-
-typedef struct _bufferl {
-    unsigned short chunk;
-    unsigned short radio_id;
-    unsigned short receiver;
-    unsigned short length;
-    double data[2048];
-} BUFFERL;
-
-typedef struct _bufferwb {
-    unsigned short chunk;
-    unsigned short radio_id;
-    unsigned short receiver;
-    unsigned short length;
-    int16_t data[16384];
-} BUFFERWB;
-
-typedef enum {
-    RECEIVER_DETACHED, RECEIVER_ATTACHED
-} RECEIVER_STATE;
-
-typedef enum {
-    TRANSMITTER_DETACHED, TRANSMITTER_ATTACHED
-} TRANSMITTER_STATE;
-
 typedef struct _radio {
     int socket;
     unsigned int iq_length;
     struct sockaddr_in iq_addr;
     pthread_t thread_id;
-    RECEIVER_STATE receiver_state;
-    TRANSMITTER_STATE transmitter_state;
-    int num_receivers;
-    int num_transmitters;
-    int max_power;
-    int radio_id;
-    int rx_iq_port[8];
-    int tx_iq_port;
-    int spk_audio_port;
-    int mic_audio_port;
-    int bs_port;
-    int mox;
 } RADIO;
 
-typedef struct _channel
-{
-    short int radio_id;
-    char      radio_type[25];
-    short int receiver;
-    short int recv_index;
-    short int transmitter;
-    short int trans_index;
-    bool      bandscope_capable;
-    bool      enabled;
-} CHANNEL;
+typedef struct _buffer {
+    unsigned short chunk;
+    int8_t         radio_id;
+    int8_t         receiver;
+    unsigned short length;
+    double         data[64];
+} BUFFER;
 
-extern CHANNEL channels[35];
+typedef struct _bufferl {
+    unsigned short chunk;
+    int8_t         radio_id;
+    int8_t         receiver;
+    unsigned short length;
+    double         data[2048];
+} BUFFERL;
+
+typedef struct _bufferwb {
+    unsigned short chunk;
+    int8_t         radio_id;
+    int8_t         receiver;
+    unsigned short length;
+    int16_t        data[16384];
+} BUFFERWB;
+
+extern CHANNEL channels[MAX_CHANNELS];
 extern int iq_socket;
 extern short int connected_radios;
-
-#define SPECTRUM_BUFFER_SIZE 8192
-
 extern int sampleRate;
-
 extern int mox;
-
 extern int receiver;
-
 extern double LO_offset;
-
-/**  added by KD0OSS **/
-float txfwd;
-float txref;
-/**********************/
-
 extern int rxOnly;
 extern char *manifest_xml[4];
 
@@ -180,7 +142,7 @@ extern void hwClose();
 * 
 * @return 
 */
-extern void hwDisconnect(short int, short int);
+extern void hwDisconnect(int8_t);
 
 /* --------------------------------------------------------------------------*/
 /** 
@@ -268,14 +230,15 @@ void hw_set_debug(int state);
 int  hwSetTxMode(int mode);
 int  hwSetMox(int state);
 void hw_send(unsigned char* data, int length, int rd);
-int  hwSendStarCommand(char *command, int);
+int  hwSendStarCommand(unsigned char *command, int);
 void hw_set_src_ratio(void);
 void hw_startIQ(int);
 void hw_stopIQ(void);
 
 extern int audio_socket;
+extern int radioMic;
 extern struct sockaddr_in audio_addr, server_audio_addr;
 extern socklen_t audio_length, server_audio_length;
 
-#endif	/* _OZY_H */
+#endif	/* _HARDWARE_H */
 

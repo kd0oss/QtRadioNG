@@ -78,7 +78,7 @@ void Ctl::clearMoxBtn()
 
 void Ctl::HideTX(bool cantx)
 {
-    if (cantx)
+    if (!cantx)
     {
         ui->btnMox->setEnabled(true);
     }

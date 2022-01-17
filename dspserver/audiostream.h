@@ -58,6 +58,7 @@ struct audio_entry {
     struct bufferevent * bev;
     unsigned char *buf;
     int length;
+    int8_t channel;
     TAILQ_ENTRY(audio_entry) entries;
 };
 

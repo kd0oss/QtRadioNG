@@ -81,7 +81,7 @@
 #define false 0
 #define true  1
 
-const char *version = "20210312;-primary"; //YYYYMMDD; text desc
+const char *version = "20220108;-primary"; //YYYYMMDD; text desc
 
 #include <fcntl.h>
 #include <sys/types.h>
@@ -149,7 +149,7 @@ void processCommands(int argc, char** argv, struct dspserver_config *config)
             config->offset = atoi(optarg);
             break;
         case OPT_TIMING:
-            client_set_timing();
+       //     client_set_timing();
             break;
         case OPT_LO:
             /* global */
@@ -214,9 +214,6 @@ int main(int argc, char* argv[])
     //    read the audio_stream_queue and send into the TCP socket
     //
     server_init(0);
-    audio_stream_init(0);
-    audio_stream_reset();
-    G711A_init();
 
     // create and start iq_thread in hw.c in order to
     // receive iq stream from hardware server
@@ -228,6 +225,9 @@ int main(int argc, char* argv[])
     // in case of HPSDR hardware (that is provided with a local D/A converter
     // sends via hw_send() the audio back to the hardware server
 
+    audio_stream_init(0);
+    audio_stream_reset();
+    G711A_init();
     hw_init();
 
     // create and start the tx_thread (see client.c)

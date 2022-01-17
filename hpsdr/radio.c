@@ -868,6 +868,7 @@ void set_tx_power(int pow)
     {
         schedule_high_priority();
     }
+    fprintf(stderr, "Set TX Power: %d\n", pow);
 } // end set_tx_power
 
 
@@ -878,7 +879,7 @@ void calcDriveLevel(double pa_calibration)
     {
         schedule_high_priority();
     }
-    //fprintf(stderr, "calcDriveLevel: drive=%d drive_level=%d\n",transmitter->drive,transmitter->drive_level);
+    fprintf(stderr, "calcDriveLevel: drive=%d drive_level=%d\n",transmitter->drive,transmitter->drive_level);
 } // end calcDriveLevel
 
 
@@ -1106,7 +1107,7 @@ void setFrequency(int v, long long f)
         else
         {
             vfo[v].frequency = f;
-            fprintf(stderr, "Set Freq: %lld\n", f);
+            fprintf(stderr, "Set Freq: %lld  for %d\n", f, v);
         }
         break;
     }

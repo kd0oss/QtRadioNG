@@ -25,6 +25,9 @@ public:
     ~HermesFrame();
     void initialize(void);
 
+    int currentRxChannel;
+    int currentTxChannel;
+
 private:
     Ui::HermesFrame *ui;
     bool tuning;

@@ -8,29 +8,37 @@ RadiosDialog::RadiosDialog(QWidget *parent): QDialog(parent), ui(new Ui::RadiosD
     servers = 0;
     selected_channel = -1;
     active_channels = 0;
+    txrxPair[0] = -1;
+    txrxPair[1] = -1;
 
     for (int i=0;i<4;i++)
     {
         manifest_xml[i].clear();
         available_xcvrs[i] = 0;
     }
-/*
-    ui->radioActRxChk_1->setCheckable(true);
-    ui->radioActRxChk_2->setChecked(false);
-    ui->radioActRxChk_3->setChecked(false);
-    ui->radioActRxChk_4->setChecked(false);
-    ui->radioActRxChk_5->setChecked(false);
-    ui->radioActRxChk_6->setChecked(false);
-    ui->radioActRxChk_7->setChecked(false);
 
-    ui->radioActRxChk_2->setCheckable(false);
-    ui->radioActRxChk_3->setCheckable(false);
-    ui->radioActRxChk_4->setCheckable(false);
-    ui->radioActRxChk_5->setCheckable(false);
-    ui->radioActRxChk_6->setCheckable(false);
-    ui->radioActRxChk_7->setCheckable(false);
-*/
-    connect(ui->radioListTable, SIGNAL(itemClicked(QTableWidgetItem*)), this, SLOT(getRadioDetails()));
+    for (int i=0;i<7;i++)
+    {
+        receivers_active[i] = false;
+        receiver_channel[i] = -1;
+    }
+
+    ui->receiver1Ckb->setEnabled(false);
+    ui->receiver2Ckb->setChecked(false);
+    ui->receiver3Ckb->setChecked(false);
+    ui->receiver4Ckb->setChecked(false);
+    ui->receiver5Ckb->setChecked(false);
+    ui->receiver6Ckb->setChecked(false);
+    ui->receiver7Ckb->setChecked(false);
+
+    ui->receiver2Ckb->setEnabled(false);
+    ui->receiver3Ckb->setEnabled(false);
+    ui->receiver4Ckb->setEnabled(false);
+    ui->receiver5Ckb->setEnabled(false);
+    ui->receiver6Ckb->setEnabled(false);
+    ui->receiver7Ckb->setEnabled(false);
+
+    connect(ui->radioList, SIGNAL(itemClicked(QListWidgetItem*)), this, SLOT(getRadioDetails()));
     connect(ui->radioStartButton, SIGNAL(released()), this, SLOT(startRadio()));
 }
 
@@ -40,55 +48,38 @@ RadiosDialog::~RadiosDialog()
     delete ui;
 }
 
-void RadiosDialog::fillRadioTable()
-{
-    QTableWidgetItem *newItem;
-    QString           value;
-    int               row=0;
 
-    for (int i=0; i<active_channels; i++)
+void RadiosDialog::fillRadioList()
+{
+    for (int i=0;i<active_radios;i++)
     {
-      //  for (int x=0;x<available_xcvrs[i];x++)
+        for (int x=0;x<active_channels;x++)
         {
-            ui->radioListTable->insertRow(row);
-            //value = getXcvrProperty(i, x, "name");
-            newItem = new QTableWidgetItem(QString("%1").arg(i+1));
-            ui->radioListTable->setItem(row, 0, newItem);
-//            value = getXcvrProperty(i, x, "radio_type");
-            newItem = new QTableWidgetItem(QString("%1").arg(channel[i].radio_type));
-            ui->radioListTable->setItem(row, 1, newItem);
-//            value = getXcvrProperty(i, x, "supported_receivers");
-            newItem = new QTableWidgetItem(QString("%1").arg(channel[i].receiver));
-            newItem->setTextAlignment(Qt::AlignRight|Qt::AlignVCenter);
-            ui->radioListTable->setItem(row, 2, newItem);
-//            value = getXcvrProperty(i, x, "supported_transmitters");
-            if (channel[i].transmitter >= 0)
-                newItem = new QTableWidgetItem(QString("%1").arg(channel[i].transmitter));
-            else
-                newItem = new QTableWidgetItem("NA");
-            newItem->setTextAlignment(Qt::AlignRight|Qt::AlignVCenter);
-            ui->radioListTable->setItem(row, 3, newItem);
-            newItem = new QTableWidgetItem(QString("%1").arg(channel[i].enabled));
-//            newItem = new QTableWidgetItem("No");
-            ui->radioListTable->setItem(row, 4, newItem);
-            row++;
+            if (channels[x].radio.radio_id == i)
+            {
+                ui->radioList->addItem(QString("%1   %2   %3   %4").arg(i+1).arg(channels[x].radio.radio_type).arg(channels[x].radio.mac_address).arg(channels[x].radio.ip_address));
+                break;
+            }
         }
     }
-} // end fillRadiotable
+} // end fillRadioList
 
 
 void RadiosDialog::startRadio()
 {
     if (selected_channel < 0) return;
-    /*
-    receivers_active[0] = ui->radioActRxChk_1->isChecked();
-    receivers_active[1] = ui->radioActRxChk_2->isChecked();
-    receivers_active[2] = ui->radioActRxChk_3->isChecked();
-    receivers_active[3] = ui->radioActRxChk_4->isChecked();
-    receivers_active[4] = ui->radioActRxChk_5->isChecked();
-    receivers_active[5] = ui->radioActRxChk_6->isChecked();
-    receivers_active[6] = ui->radioActRxChk_7->isChecked();
-*/
+
+    receivers_active[0] = ui->receiver1Ckb->isChecked();
+    receivers_active[1] = ui->receiver2Ckb->isChecked();
+    receivers_active[2] = ui->receiver3Ckb->isChecked();
+    receivers_active[3] = ui->receiver4Ckb->isChecked();
+    receivers_active[4] = ui->receiver5Ckb->isChecked();
+    receivers_active[5] = ui->receiver6Ckb->isChecked();
+    receivers_active[6] = ui->receiver7Ckb->isChecked();
+
+    if (ui->transPairedCB->currentIndex() > 0 && txrxPair[0] > -1)
+        txrxPair[1] = receiver_channel[ui->transPairedCB->currentIndex()-1];
+
     remote_audio = ui->radioAudioRemoteChk->isChecked();
     remote_mic_audio = ui->radioMicRemoteChk->isChecked();
 
@@ -115,62 +106,115 @@ void RadiosDialog::startRadio()
 
 void RadiosDialog::getRadioDetails()
 {
-    int row = ui->radioListTable->currentRow();
-    qDebug("Row: %d\n", row);
-    selected_channel = row;
-    radio_type = ui->radioListTable->item(row, 1)->text();
-/*
-    switch (ui->radioListTable->item(row, 2)->text().toInt())
+    int ch = 0;
+    int radio_id = ui->radioList->currentItem()->text().split(" ").at(0).toInt() - 1;
+
+    txrxPair[0] = -1;
+    txrxPair[1] = -1;
+
+    selected_channel = radio_id;
+    radio_type = ui->radioList->currentItem()->text().split(" ").at(1);
+
+    ui->receiver1Ckb->setEnabled(false);
+    ui->receiver2Ckb->setChecked(false);
+    ui->receiver3Ckb->setChecked(false);
+    ui->receiver4Ckb->setChecked(false);
+    ui->receiver5Ckb->setChecked(false);
+    ui->receiver6Ckb->setChecked(false);
+    ui->receiver7Ckb->setChecked(false);
+
+    ui->receiver2Ckb->setEnabled(false);
+    ui->receiver3Ckb->setEnabled(false);
+    ui->receiver4Ckb->setEnabled(false);
+    ui->receiver5Ckb->setEnabled(false);
+    ui->receiver6Ckb->setEnabled(false);
+    ui->receiver7Ckb->setEnabled(false);
+
+    ui->radioAudioLocalChk->setEnabled(false);
+    ui->radioMicLocalChk->setEnabled(false);
+
+    ui->transPairedCB->clear();
+    ui->transPairedCB->addItem("None");
+
+    for (int x=0;x<MAX_CHANNELS;x++)
     {
-    case 1:
-        ui->radioActRxChk_1->setCheckable(true);
-    break;
+        if (channels[x].radio.radio_id == radio_id)
+        {
+            if (channels[x].radio.local_audio)
+                ui->radioAudioLocalChk->setEnabled(true);
+            else
+            {
+                ui->radioAudioRemoteChk->setChecked(true);
+                ui->radioAudioLocalChk->setChecked(false);
+                ui->radioAudioLocalChk->setEnabled(false);
+            }
 
-    case 2:
-        ui->radioActRxChk_1->setCheckable(true);
-        ui->radioActRxChk_2->setCheckable(true);
-        break;
+            if (channels[x].radio.local_mic)
+                ui->radioMicLocalChk->setEnabled(true);
+            else
+            {
+                ui->radioMicRemoteChk->setChecked(true);
+                ui->radioMicLocalChk->setChecked(false);
+                ui->radioMicLocalChk->setEnabled(false);
+            }
+        }
 
-    case 3:
-        ui->radioActRxChk_1->setCheckable(true);
-        ui->radioActRxChk_2->setCheckable(true);
-        ui->radioActRxChk_3->setCheckable(true);
-        break;
+        if (ch >= 7) break;
+        if (channels[x].dsp_channel != -1 && channels[x].radio.radio_id == radio_id)
+        {
+            if (channels[x].isTX)
+                txrxPair[0] = x;
+            else
+                switch (ch)
+                {
+                case 0:
+                    ui->receiver1Ckb->setEnabled(true);
+                    ui->transPairedCB->addItem("Recv 1");
+                    receiver_channel[ch] = x;
+                    break;
 
-    case 4:
-        ui->radioActRxChk_1->setCheckable(true);
-        ui->radioActRxChk_2->setCheckable(true);
-        ui->radioActRxChk_3->setCheckable(true);
-        ui->radioActRxChk_4->setCheckable(true);
-        break;
+                case 1:
+                    ui->receiver2Ckb->setEnabled(true);
+                    ui->transPairedCB->addItem("Recv 2");
+                    receiver_channel[ch] = x;
+                    break;
 
-    case 5:
-        ui->radioActRxChk_1->setCheckable(true);
-        ui->radioActRxChk_2->setCheckable(true);
-        ui->radioActRxChk_3->setCheckable(true);
-        ui->radioActRxChk_4->setCheckable(true);
-        ui->radioActRxChk_5->setCheckable(true);
-        break;
+                case 2:
+                    ui->receiver3Ckb->setEnabled(true);
+                    ui->transPairedCB->addItem("Recv 3");
+                    receiver_channel[ch] = x;
+                    break;
 
-    case 6:
-        ui->radioActRxChk_1->setCheckable(true);
-        ui->radioActRxChk_2->setCheckable(true);
-        ui->radioActRxChk_3->setCheckable(true);
-        ui->radioActRxChk_4->setCheckable(true);
-        ui->radioActRxChk_5->setCheckable(true);
-        ui->radioActRxChk_6->setCheckable(true);
-        break;
+                case 3:
+                    ui->receiver4Ckb->setEnabled(true);
+                    ui->transPairedCB->addItem("Recv 4");
+                    receiver_channel[ch] = x;
+                    break;
 
-    case 7:
-        ui->radioActRxChk_1->setCheckable(true);
-        ui->radioActRxChk_2->setCheckable(true);
-        ui->radioActRxChk_3->setCheckable(true);
-        ui->radioActRxChk_4->setCheckable(true);
-        ui->radioActRxChk_5->setCheckable(true);
-        ui->radioActRxChk_6->setCheckable(true);
-        ui->radioActRxChk_7->setCheckable(true);
+                case 4:
+                    ui->receiver5Ckb->setEnabled(true);
+                    ui->transPairedCB->addItem("Recv 5");
+                    receiver_channel[ch] = x;
+                    break;
+
+                case 5:
+                    ui->receiver6Ckb->setEnabled(true);
+                    ui->transPairedCB->addItem("Recv 6");
+                    receiver_channel[ch] = x;
+                    break;
+
+                case 6:
+                    ui->receiver7Ckb->setEnabled(true);
+                    ui->transPairedCB->addItem("Recv 7");
+                    receiver_channel[ch] = x;
+                    break;
+
+                default:
+                    break;
+                }
+            ch++;
+        }
     }
-    */
 } // end getRadioDetails
 
 

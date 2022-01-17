@@ -114,14 +114,6 @@ static struct audiostream_config as_conf_cache = { AUDIO_BUFFER_SIZE, 8000, 1, 0
 
 static unsigned char* audio_buffer = NULL;
 
-static int samples_per_frame, bits_per_frame;
-
-// bits_per_frame is now a variable
-#undef BITS_SIZE
-#define BITS_SIZE   ((bits_per_frame + 7) / 8)
-
-unsigned char *bits;
-
 static int audio_stream_buffer_insert = 0;
 
 static unsigned char encodetable[65536];

@@ -72,32 +72,50 @@
 #define READ_SPECTRUM         8
 #define READ_WIDEBAND         9
 
+#define MAX_CHANNELS         35
+
+typedef enum {
+    RXS, TXS, BS
+} SPECTRUM_TYPE;
+
+typedef struct _xcvr
+{
+    int8_t    radio_id;
+    char      radio_type[25];
+    char      ip_address[16];
+    char      mac_address[18];
+    bool      bandscope_capable;
+    bool      mox;
+    bool      local_audio;
+    bool      local_mic;
+    int       ant_switch;
+} XCVR;
+
 typedef struct _spectrum
 {
-    unsigned short channel;
-    unsigned short is_tx;
+    SPECTRUM_TYPE  type;
     unsigned short length;
-    float          rx_meter;
+    float          meter;
     float          fwd_pwr;
     float          rev_pwr;
     unsigned int   sample_rate;
     float          lo_offset;
-    char           *samples;
-} spectrum;
-
+    short int      fps;
+    int            nsamples;
+    int            frame_counter;
+    char           *samples; // not used here, just a place holder for client side consistancy.
+} SPECTRUM;
 
 typedef struct _channel
 {
-    short int radio_id;
-    char      radio_type[25];
-    short int receiver;
-    short int recv_index;
-    short int transmitter;
-    short int trans_index;
-    bool      bandscope_capable;
+    int8_t    id;
+    XCVR     radio;
+    SPECTRUM  spectrum;
+    int8_t    dsp_channel;
+    int8_t    index;
+    bool      isTX;
     bool      enabled;
 } CHANNEL;
-
 
 class ServerConnection : public QObject {
     Q_OBJECT
@@ -108,11 +126,13 @@ public:
 
     QString  manifest_xml[4];
     int      available_xcvrs[4];
-    int      receivers_active[7];
+    bool     receivers_active[7];
+    int8_t   receiver_channel[7];
     long     sample_rate;
-    int      radio_index;
     CHANNEL  channels[35];
+    int8_t   txrxPair;
     int      active_channels;
+    int      active_radios;
     int      selected_channel;
 
     void    connect(QString host, int receiver);
@@ -135,7 +155,7 @@ public slots:
     void activateRadio();
 
 signals:
-    void isConnected(int);
+    void isConnected(bool*, int8_t*, int8_t*);
     void disconnected(QString message);
     void header(char* header);
     void audioBuffer(char* header, char* buffer);
@@ -190,7 +210,7 @@ public:
     virtual ~SpectrumConnection();
     void    connect(QString host, int receiver);
     void    sendCommand(QByteArray command);
-    void    freeBuffers(spectrum);
+    void    freeBuffers(SPECTRUM);
     QString server;
     int     port;
 
@@ -213,7 +233,7 @@ public slots:
 signals:
     void isConnected();
     void disconnected(QString message);
-    void spectrumBuffer(spectrum);
+    void spectrumBuffer(CHANNEL);
 };
 
 
@@ -226,7 +246,7 @@ public:
     virtual ~WidebandConnection();
     void    connect(QString host, int receiver);
     void    sendCommand(QByteArray command);
-    void    freeBuffers(spectrum);
+    void    freeBuffers(SPECTRUM);
 
 private:
     QTcpSocket  *tcpSocket;
@@ -250,7 +270,7 @@ signals:
     void isConnected();
     void disconnected(QString message);
     void bsConnected();
-    void bandscopeBuffer(spectrum);
+    void bandscopeBuffer(SPECTRUM);
 };
 
 
@@ -295,7 +315,7 @@ public:
     MicAudioConnection();
     virtual ~MicAudioConnection();
     void    connect(QString host, int receiver);
-    void    sendAudio(int length, unsigned char* data);
+    void    sendAudio(int8_t channel, int length, unsigned char* data);
 
 private:
     QTcpSocket  *tcpSocket;

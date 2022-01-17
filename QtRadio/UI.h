@@ -73,6 +73,8 @@
 #define MIC_NO_OF_FRAMES 4      // need to ensure this is the same value in dspserver
 #define MIC_ALAW_BUFFER_SIZE 512 //58 // limited by the 64 byte TCP message frame
 
+#define MAX_RECEIVERS 7
+
 class UI : public QMainWindow {
     Q_OBJECT
 
@@ -102,7 +104,10 @@ public:
     MicAudioConnection micAudioConnection;
     TxPanadapter *txp;
     Mode mode;
-    int currentChannel;
+    bool   receivers_active[7];
+    int8_t receiver_channel[7];
+    int8_t currentRxChannel;
+    int8_t currentTxChannel;
     double currentPwr;
 
 signals:
@@ -113,7 +118,7 @@ signals:
     void HideTX(bool cantx);
 
 public slots:
-    void getMeterValue(float m, float s);
+    void getMeterValue(float s, float f, float r);
 
     bool newDspServerCheck(void);
 
@@ -188,10 +193,10 @@ public slots:
     void actionLong();
 
 
-    void connected(int);
+    void connected(bool*, int8_t*, int8_t*);
     void disconnected(QString message);
     void audioBuffer(char* header,char* buffer);
-    void spectrumBuffer(spectrum);
+    void spectrumBuffer(CHANNEL);
 
     void bandChanged(int previousBand,int newBand);
     void modeChanged(int previousMode,int newMode);

@@ -39,8 +39,8 @@ static int attached_rcvrs = 0;
 static int attached_xmits = 0;
 
 static CLIENT iqclient[MAX_RECEIVERS];
-static struct sockaddr_in cli_addr;
-static int cli_length;
+//static struct sockaddr_in cli_addr;
+//static socklen_t cli_length;
 bool send_manifest = false;
 
 static char resp[80];
@@ -82,6 +82,7 @@ char* attach_receiver(int radio_id, int rx, CLIENT* client)
 
     sprintf(resp,"%s %d", OK, receiver[rx]->sample_rate);
     attached_rcvrs++;
+    fprintf(stderr, "Receiver attached: radio id = %d  rx = %d\n", radio_id, rx);
 
     return resp;
 } // end attach_receiver
@@ -104,9 +105,12 @@ char* detach_receiver(int radio_id, int rx, CLIENT* client)
         return RECEIVER_NOT_OWNER;
     }
 
-    client->receiver_state = RECEIVER_DETACHED;
-    receiver[rx]->client = (CLIENT*)NULL;
     if (attached_rcvrs > 0) attached_rcvrs--;
+    if (attached_rcvrs == 0)
+    {
+        client->receiver_state = RECEIVER_DETACHED;
+        receiver[rx]->client = (CLIENT*)NULL;
+    }
 
     //FIX-ME: Handle transmitter cleanup in a better way.
     if (attached_xmits > 0 && attached_rcvrs == 0)
@@ -114,7 +118,6 @@ char* detach_receiver(int radio_id, int rx, CLIENT* client)
         //pthread_kill(tx_thread_id, SIGKILL);
         attached_xmits = 0;
         struct _txiq_entry *item;
-        fprintf(stderr, "TX Detach...\n");
         sem_wait(&txiq_semaphore);
         for (item = TAILQ_FIRST(&txiq_buffer); item != NULL; item = TAILQ_NEXT(item, entries))
         {
@@ -123,8 +126,10 @@ char* detach_receiver(int radio_id, int rx, CLIENT* client)
             free(item);
         }
         sem_post(&txiq_semaphore);
+        client->transmitter_state = TRANSMITTER_DETACHED;
+        fprintf(stderr, "Transmitter detached: radio id = %d  ch = %d\n", radio_id, rx);
     }
-    fprintf(stderr, "Receiver detached: radio id = %d  rx = %d\n", radio_id, rx);
+    fprintf(stderr, "Receiver detached: radio id = %d  ch = %d\n", radio_id, rx);
     return OK;
 } // end detach_receiver
 
@@ -136,10 +141,8 @@ char* attach_transmitter(CLIENT* client)
         return RECEIVER_NOT_ATTACHED;
     }
 
-//    if (client->receiver != 0)
-//    {
-//        return RECEIVER_NOT_ZERO;
-//    }
+    if (client->transmitter_state == TRANSMITTER_ATTACHED)
+        return OK;
 
     client->transmitter_state = TRANSMITTER_ATTACHED;
 
@@ -148,6 +151,7 @@ char* attach_transmitter(CLIENT* client)
     sem_init(&txiq_semaphore, 0, 1);
     TAILQ_INIT(&txiq_buffer);
     init_transmitter(client->radio_id, client->receiver);
+    fprintf(stderr, "Transmitter attached: radio id = %d\n", radio_id);
     return resp;
 } // end attach_transmitter
 
@@ -156,9 +160,9 @@ char* parse_command(CLIENT* client, char* command)
 {
     _Bool  bDone = false;
 
-    fprintf(stderr, "parse_command(Rx%d): [%02X] %u %u\n", client->receiver, (unsigned char)command[0], (unsigned int)command[1], (unsigned int)command[2]);
+    fprintf(stderr, "parse_command(Rx%d): [%02X] %u %u\n", client->receiver, (uint8_t)command[0], (uint8_t)command[1], (uint8_t)command[2]);
 
-    if (attached_rcvrs <= 0 && (unsigned char)command[0] < HQHARDWARE) return INVALID_COMMAND; // No valid receivers so abort commmand.
+    if (attached_rcvrs <= 0 && (uint8_t)command[0] < HQHARDWARE) return INVALID_COMMAND; // No valid receivers so abort commmand.
 
     switch ((unsigned char)command[0])
     {
@@ -168,15 +172,18 @@ char* parse_command(CLIENT* client, char* command)
         command[0] = 0;
         if ((unsigned char)command[1] == HTX)
         {
-            return attach_transmitter(client);
+            if (client->radio_id == (int8_t)command[2])
+                return attach_transmitter(client);
         }
         else
         {
             int rx = (int)command[1];
             radio_id = (short int)command[2];
-            radio = &discovered[radio_id];
-            start_radio(radio_id);  // change this FIX-ME
-            fprintf(stderr, "Receiver attached: radio id = %d  rx = %d\n", radio_id, rx);
+            if (client->receiver_state == RECEIVER_DETACHED)
+            {
+                radio = &discovered[radio_id];
+                start_radio(radio_id);
+            }
             return attach_receiver(radio_id, rx, client);
         }
     }
@@ -485,7 +492,7 @@ void create_listener_thread(char *dsp_server_addr)
 
     strcpy(dsp_server_address , dsp_server_addr);
 
-    // create the thread to listen for TCP connections
+    // create the thread to make TCP connection to dspsever
     rc = pthread_create(&thread_id, NULL, client_thread, NULL);
     if (rc < 0)
     {
@@ -507,7 +514,7 @@ void* client_thread(void* arg)
     socklen_t command_length = sizeof(address);
 
     for (int i=0;i<MAX_RECEIVERS;i++)
-        iqclient[i].socket = NULL;
+        iqclient[i].socket = 0;
 
     s = socket(AF_INET, SOCK_STREAM, 0);
     if (s < 0)
@@ -612,6 +619,9 @@ void* client_thread(void* arg)
 
 void init_receivers(int radio_id, int rx)
 {
+    int on = 1;
+    struct sockaddr_in cli_addr;
+
     start_receivers(radio_id);
 
     for (int i=0;i<active_receivers;i++)
@@ -627,6 +637,7 @@ void init_receivers(int radio_id, int rx)
         read_timeout.tv_sec = 0;
         read_timeout.tv_usec = 10;
         setsockopt(iqclient[i].socket, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
+        setsockopt(iqclient[i].socket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
 
         iqclient[i].iq_length = sizeof(cli_addr);
         memset(&iqclient[i].iq_addr, 0, iqclient[i].iq_length);
@@ -650,7 +661,7 @@ void init_transmitter(unsigned int radio_id, int rx)
         perror("pthread_create txiq_send thread failed");
         exit(1);
     }
-    rc = pthread_create(&tx_thread_id, NULL, tx_IQ_thread, (void*)rx);
+    rc = pthread_create(&tx_thread_id, NULL, tx_IQ_thread, (void*)(intptr_t)rx);
     if (rc < 0)
     {
         perror("pthread_create mic_IQ_thread failed");
@@ -664,7 +675,7 @@ void init_transmitter(unsigned int radio_id, int rx)
 void send_Mic_buffer(float sample)
 {
     struct sockaddr_in cli_addr;
-    int cli_length;
+    socklen_t cli_length;
     int mic_socket;
     static int count = 0;
     static MIC_BUFFER buffer;
@@ -676,7 +687,7 @@ void send_Mic_buffer(float sample)
     updateTx(transmitter);
     buffer.fwd_pwr = (float)transmitter->fwd;
     buffer.rev_pwr = (float)transmitter->rev;
- //   fprintf(stderr, "F: %2.2f  R: %2.2f\n", buffer.fwd_pwr, buffer.rev_pwr);
+//    fprintf(stderr, "F: %2.2f  R: %2.2f\n", buffer.fwd_pwr, buffer.rev_pwr);
 
     count = 0;
     // send the Mic buffer
@@ -713,12 +724,12 @@ void send_Mic_buffer(float sample)
 void send_IQ_buffer(int rx)
 {
     struct sockaddr_in cli_addr;
-    int cli_length;
+    socklen_t cli_length;
     unsigned short offset = 0;
     BUFFERL buffer;
     int rc;
-fprintf(stderr, "IQ send on rc: %d\n", rx);
-    if (iqclient[rx].socket == NULL) return;
+
+    if (iqclient[rx].socket <= 0) return;
     if (iqclient[rx].socket != -1)
     {
         // send the IQ buffer
@@ -749,13 +760,12 @@ fprintf(stderr, "IQ send on rc: %d\n", rx);
 void send_WB_IQ_buffer(int rx)
 {
     struct sockaddr_in cli_addr;
-    int cli_length;
-    unsigned short offset = 0;
+    socklen_t cli_length;
     BUFFERWB buffer;
     int rc;
     WIDEBAND *w = discovered[rx].wideband;
 
-    if (iqclient[rx].socket == NULL) return;
+    if (iqclient[rx].socket <= 0) return;
     if (iqclient[rx].socket != -1)
     {
         // send the WB IQ buffer
@@ -861,8 +871,8 @@ void* tx_IQ_thread(void* arg)
 {
     struct sockaddr_in cli_addr;
     struct _txiq_entry *item;
-    int cli_length;
-    int rx = (int)arg;
+    socklen_t cli_length;
+    int rx = (intptr_t)arg;
     int old_state, old_type;
     int bytes_read;
     BUFFER buffer;
@@ -882,6 +892,8 @@ void* tx_IQ_thread(void* arg)
         fprintf(stderr, "connection to rx %d tx IQ on port %d\n", rx, TX_IQ_PORT_0 + radio_id);
     }
     sendto(iqclient[rx].socket, (char*)&buf, sizeof(buf), 0, (struct sockaddr*)&cli_addr, cli_length);
+    sleep(2);
+    sendto(iqclient[rx].socket, (char*)&buf, sizeof(buf), 0, (struct sockaddr*)&cli_addr, cli_length);
 
     while (attached_xmits)
     {
@@ -892,7 +904,7 @@ void* tx_IQ_thread(void* arg)
             if (bytes_read < 0)
             {
              //   perror("recvfrom socket failed for tx IQ buffer");
-            //    exit(1);
+                continue;
             }
             if (bytes_read > 30)
             {

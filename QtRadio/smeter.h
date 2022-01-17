@@ -23,6 +23,7 @@ public:
     sMeter(QWidget* parent=0);
     virtual ~sMeter();
     Meter* sMeterMain;
+    int meter0;
     int meter1;
     int meter2;
 

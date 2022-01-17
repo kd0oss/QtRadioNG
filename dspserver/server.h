@@ -1,5 +1,5 @@
 /** 
-* @file client.h
+* @file server.h
 * @brief iPhone network interface
 * @author John Melton, G0ORX/N6LYT, Doxygen Comments Dave Larsen, KV0S
 * @version 0.1
@@ -40,6 +40,8 @@
 * You should have received a copy of the GNU General Public License
 * along with this program; if not, write to the Free Software
 * Foundation, Inc., 59 Temple Pl
+*
+* Updated by Rick Schnicker KD0OSS -- 2021,2022
 */
 
 #if ! defined __SERVER_H__
@@ -58,13 +60,9 @@
 #include <event2/listener.h>
 #include <event2/bufferevent_ssl.h>
 
-// added by KD0OSS ******
-int panadapterMode;
-int rxMeterMode;
-int txMeterMode;
-// **********************
-
-#define WIDEBAND_CHANNEL 9
+#define SPECTRUM_BUFFER_SIZE 8192
+#define MAX_CHANNELS         35  // Internal stream management not related to WDSP channels.
+#define MAX_WDSP_CHANNELS    31  // Max channels defined in WDSP documentation.
 
 #define RX_IQ_PORT_0     10000
 #define TX_IQ_PORT_0     10020
@@ -129,7 +127,7 @@ enum txaMode
 enum PanadapterMode
 {
 //        FIRST = -1,
-        SPECTRUM,
+        SPECT,
         PANADAPTER,
         SCOPE,
         SCOPE2,
@@ -175,14 +173,10 @@ enum CLIENT_CONNECTION {
 } client_connection;
 
 typedef struct _client_entry {
-    int client_type;
-    struct sockaddr_in client;
-    struct bufferevent * bev;
-    int fps;
-    int frame_counter;
-    int wb_frame_counter;
-    int samples;
-    int wb_samples;
+    int                        client_type[MAX_CHANNELS];
+    struct sockaddr_in         client;
+    struct bufferevent        *bev;
+    bool                       channel_enabled[MAX_CHANNELS];
     TAILQ_ENTRY(_client_entry) entries;
 } client_entry;
 
@@ -193,41 +187,67 @@ typedef struct _memory_entry {
 
 typedef struct _mic_buffer
 {
-    unsigned short radio_id;
-    unsigned short tx;
-    unsigned short length;
-    float          fwd_pwr;
-    float          rev_pwr;
-    float          data[512];
+    int8_t    radio_id;
+    int8_t    tx;
+    short int length;
+    float     fwd_pwr;
+    float     rev_pwr;
+    float     data[512];
 } MIC_BUFFER;
+
+typedef enum {
+    RXS, TXS, BS
+} SPECTRUM_TYPE;
+
+typedef struct _xcvr
+{
+    int8_t    radio_id;
+    char      radio_type[25];
+    char      ip_address[16];
+    char      mac_address[18];
+    bool      bandscope_capable;
+    bool      mox;
+    bool      local_audio;
+    bool      local_mic;
+    int       ant_switch;
+} XCVR;
 
 typedef struct _spectrum
 {
-    unsigned short radio_id;
-    unsigned short rx;
+    SPECTRUM_TYPE  type;
     unsigned short length;
-    float          rx_meter;
+    float          meter;
     float          fwd_pwr;
     float          rev_pwr;
     unsigned int   sample_rate;
     float          lo_offset;
+    short int      fps;
+    int            nsamples;
+    int            frame_counter;
     char           *samples; // not used here, just a place holder for client side consistancy.
-} spectrum;
+} SPECTRUM;
 
-typedef struct _wideband
+typedef struct _channel
 {
-    unsigned short radio_id;
-    unsigned short rx;
-    unsigned short length;
-    unsigned int   sample_rate;
-    char           *samples;
-} wideband;
+    int8_t    id;
+    XCVR     radio;
+    SPECTRUM  spectrum;
+    int8_t    dsp_channel;
+    int8_t    index;
+    bool      isTX;
+    bool      enabled;
+} CHANNEL;
 
 extern short int active_channels;
+extern double mic_src_ratio;
+extern bool wideband_enabled;
 
 char servername[21];
-unsigned char bUseNB;
-unsigned char bUseNB2;
+int panadapterMode;
+int rxMeterMode;
+int txMeterMode;
+bool bUseNB;
+bool bUseNB2;
 float multimeterCalibrationOffset;
 float displayCalibrationOffset;
 
@@ -235,7 +255,7 @@ void server_init(int receiver);
 void tx_init(void);
 void spectrum_init(void);
 void initAnalyzer(int, int, int, int);
-void enable_wideband(bool);
+void enable_wideband(int8_t, bool);
 void widebandInitAnalyzer(int, int);
 void spectrum_timer_init(void);
 void wideband_timer_init(void);
@@ -245,7 +265,4 @@ void client_set_timing(void);
 void answer_question(char *message, char *clienttype, struct bufferevent *bev);
 void printversion(void);
 static SSL_CTX *evssl_init(void);
-
-extern double mic_src_ratio;
-extern bool wideband_enabled;
 #endif

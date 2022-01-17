@@ -33,6 +33,7 @@
 #endif
 
 #include "UI.h"
+#include "Connection.h"
 #include "About.h"
 #include "Audio.h"
 #include "Filters.h"
@@ -81,6 +82,8 @@ UI::UI(const QString server)
     mic_buffer_count = 0;
     mic_frame_count = 0;
     connection_valid = false;
+    currentRxChannel = -1;
+    currentTxChannel = -1;
 
     isConnected = false;
     modeFlag = false;
@@ -90,7 +93,7 @@ UI::UI(const QString server)
     dspversiontxt = "Unknown";
     meter = -121;
 
-    widget.statusbar->showMessage("QtRadio NG branch: KD0OSS 2020");
+    widget.statusbar->showMessage("QtRadio NG branch: KD0OSS 2022");
 
     widget.actionBandscope->setEnabled(false);
     widget.actionRecord->setEnabled(false);
@@ -103,10 +106,10 @@ UI::UI(const QString server)
 
     txp = new TxPanadapter();
     widget.txSpectrumView->setScene(txp->txpanadapterScene);
-    connect(txp, SIGNAL(meterValue(float,float)), this, SLOT(getMeterValue(float,float)));
+    connect(txp, SIGNAL(meterValue(float, float, float)), this, SLOT(getMeterValue(float, float, float)));
 
     // connect up all the menus
-    connect(&connection, SIGNAL(isConnected(int)), this, SLOT(connected(int)));
+    connect(&connection, SIGNAL(isConnected(bool*, int8_t*, int8_t*)), this, SLOT(connected(bool*, int8_t*, int8_t*)));
     connect(&connection, SIGNAL(disconnected(QString)), this, SLOT(disconnected(QString)));
     connect(&connection, SIGNAL(printStatusBar(QString)), this, SLOT(printStatusBar(QString)));
     connect(&connection, SIGNAL(slaveSetFreq(long long)), this, SLOT(frequencyChanged(long long)));
@@ -200,11 +203,11 @@ UI::UI(const QString server)
     connect(widget.spectrumView, SIGNAL(spectrumLowChanged(int)), this, SLOT(spectrumLowChanged(int)));
     connect(widget.spectrumView, SIGNAL(waterfallHighChanged(int)), this, SLOT(waterfallHighChanged(int)));
     connect(widget.spectrumView, SIGNAL(waterfallLowChanged(int)), this, SLOT(waterfallLowChanged(int)));
-    connect(widget.spectrumView, SIGNAL(meterValue(float,float)), this, SLOT(getMeterValue(float,float)));
+    connect(widget.spectrumView, SIGNAL(meterValue(float,float,float)), this, SLOT(getMeterValue(float,float,float)));
     connect(widget.spectrumView, SIGNAL(squelchValueChanged(int)), this, SLOT(squelchValueChanged(int)));
     connect(widget.spectrumView, SIGNAL(statusMessage(QString)), this, SLOT(statusMessage(QString)));
     connect(widget.spectrumView, SIGNAL(removeNotchFilter()), this, SLOT(removeNotchFilter()));
-    connect(&spectrumConnection, SIGNAL(spectrumBuffer(spectrum)), this, SLOT(spectrumBuffer(spectrum)));
+    connect(&spectrumConnection, SIGNAL(spectrumBuffer(CHANNEL)), this, SLOT(spectrumBuffer(CHANNEL)));
 
     connect(widget.vfoFrame, SIGNAL(frequencyMoved(int,int)), this, SLOT(frequencyMoved(int,int)));
     connect(widget.vfoFrame, SIGNAL(frequencyChanged(long long)), this, SLOT(frequencyChanged(long long)));
@@ -282,7 +285,7 @@ UI::UI(const QString server)
     connect(&xvtr, SIGNAL(xvtrSelected(QAction*)), this, SLOT(selectXVTR(QAction*)));
 
     connect(this, SIGNAL(process_audio(char*,char*,int)), audio, SLOT(process_audio(char*,char*,int)));
-    connect(this, SIGNAL(HideTX(bool)), widget.ctlFrame, SLOT(HideTX(bool)));
+//    connect(this, SIGNAL(HideTX(bool)), widget.ctlFrame, SLOT(HideTX(bool)));
 
     bandscope = NULL;
     fps = 15;
@@ -311,10 +314,6 @@ UI::UI(const QString server)
     widget.statusbar->addPermanentWidget(&modeInfo);
 
     band.initBand(band.getBand());
-
-    // make spectrum timer
-//    spectrumTimer = new QTimer(this);
-//    connect(spectrumTimer, SIGNAL(timeout()), this, SLOT(updateSpectrum()));
 
     // automatically select a server and connect to it //IW0HDV
     if (server.length())
@@ -552,6 +551,7 @@ void UI::setFPS(void)
 {
     QByteArray command;
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETFPS);
     command.append(QString("2000,%1").arg(fps));
     connection.sendCommand(command);
@@ -637,11 +637,38 @@ void UI::actionDisconnect()
     if (bandscope != NULL)
         bandscope->close();
 
-    command.clear();
-    command.append((char)STARCOMMAND);
-    command.append((char)DETACH);
-    command.append((char)currentChannel);
-    connection.sendCommand(command);
+    if (currentTxChannel > -1)
+    {
+        command.clear();
+        command.append((char)currentTxChannel);
+        command.append((char)STARCOMMAND);
+        command.append((char)DETACH);
+        connection.sendCommand(command);
+        QThread::sleep(1);
+
+        command.clear();
+        command.append((char)currentTxChannel);
+        command.append((char)STOPXCVR);
+        connection.sendCommand(command);
+    }
+
+    for (int i=0;i<MAX_RECEIVERS;i++)
+    {
+        if (receivers_active[i])
+        {
+            command.clear();
+            command.append((char)receiver_channel[i]);
+            command.append((char)STARCOMMAND);
+            command.append((char)DETACH);
+            connection.sendCommand(command);
+            QThread::sleep(1);
+
+            command.clear();
+            command.append((char)receiver_channel[i]);
+            command.append((char)STOPXCVR);
+            connection.sendCommand(command);
+        }
+    }
 
     qDebug() << "actionDisconnect() QuickIP=" << QuickIP;
     if (QuickIP.length() > 6)
@@ -649,8 +676,8 @@ void UI::actionDisconnect()
         configure.removeHost(QuickIP);
         qDebug() << "actionDisconnect() removeHost(" << QuickIP <<")";
     }
+
     QuickIP = "";
- //   spectrumTimer->stop();
     widget.zoomSpectrumSlider->setValue(0);
 
     connection.disconnect();
@@ -659,6 +686,8 @@ void UI::actionDisconnect()
 
     configure.connected(false);
     isConnected = false;
+    currentRxChannel = -1;
+    currentTxChannel = -1;
 } // end actionDisconnect
 
 
@@ -673,191 +702,277 @@ void UI::actionQuick_Server_List()
 } // end actionQuick_Server_List
 
 
-void UI::connected(int channel)
+void UI::connected(bool *rx_active, int8_t *rxchannels, int8_t *txrxPair)
 {
     QByteArray command;
+    int8_t  channel = -1;
+    int i = 0;
 
-    qDebug() << "UI::connected";
-    isConnected = true;
-    configure.connected(true);
-    currentChannel = channel;
-
-    // let them know who we are
-    command.clear();
-    command.append((char)SETCLIENT);
-    command.append("QtRadio");
-    connection.sendCommand(command);
-    command.clear();
-
-    command.append((char)STARTXCVR);
-    command.append((char)channel);
-    connection.sendCommand(command);
-    command.clear();
-/*
-    command.append((char)STARTTRANSMITTER);
-    command.append((char)(63-0)); // start tx at max channel
-    connection.sendCommand(command);
-    */
-    command.clear();
-    command.append((char)STARCOMMAND);
-    command.append((char)ATTACH);
-    command.append((char)channel);
-    connection.sendCommand(command);
-
-    // send initial settings
-
-    spectrumConnection.connect(configure.getHost(), DSPSERVER_BASE_PORT+1);
-    audioConnection.connect(configure.getHost(), DSPSERVER_BASE_PORT+10);
-    micAudioConnection.connect(configure.getHost(), DSPSERVER_BASE_PORT+20);
-
-    frequency = band.getFrequency();
-
-    command.clear();
-    command.append((char)SETFREQ);
-    command.append((char)channel);
-    command.append(QString("%1").arg(frequency));
-    connection.sendCommand(command);
-    widget.spectrumView->setFrequency(frequency);
-
-    //    gvj code
-    widget.vfoFrame->setFrequency(frequency);
-
-    command.clear();
-    command.append((char)SETMODE);
-    command.append((char)channel);
-    command.append((char)band.getMode());
-    connection.sendCommand(command);
-
-    int low,high;
-    if (mode.getMode() == MODE_CWL)
+    if (txrxPair[1] > -1)
     {
-        low = -cwPitch-filters.getLow();
-        high = -cwPitch+filters.getHigh();
+        currentTxChannel = txrxPair[0];
+        qDebug("TX ch: %d\n", currentTxChannel);
+        widget.ctlFrame->HideTX(false);
     }
-    else
-        if (mode.getMode() == MODE_CWU)
+
+    for (i=0;i<MAX_RECEIVERS;i++)
+    {
+        receivers_active[i] = rx_active[i];
+        receiver_channel[i] = rxchannels[i];
+
+        if (!rx_active[i] || connection.channels[rxchannels[i]].dsp_channel == -1)
+            continue;
+
+        if (!connection.channels[rxchannels[i]].isTX)
         {
-            low = cwPitch-filters.getLow();
-            high = cwPitch+filters.getHigh();
+            currentRxChannel = rxchannels[i];
+            channel = rxchannels[i];
         }
         else
+            continue;
+
+        if (channel < 0) // We're being extra paranoid here.
         {
-            low = filters.getLow();
-            high = filters.getHigh();
+            qDebug("*********Invalid channel!\n");
+            continue;
         }
-    command.clear();
-    command.append((char)SETFILTER);
-    command.append((char)channel);
-    command.append(QString("%1,%2").arg(low).arg(high));
-    connection.sendCommand(command);
 
-    widget.spectrumView->setFilter(low,high);
+        qDebug() << "UI::connected";
+        qDebug("Setting up channel: %d\n", channel);
+        isConnected = true;
 
-    widget.actionConnectToServer->setDisabled(true);
-    widget.actionDisconnectFromServer->setDisabled(false);
-
-    audio->select_audio(audio_device, audio_sample_rate, audio_channels, audio_byte_order);
-
-    // start the audio
-    audio_buffers=0;
-    actionGain(gain);
-
-    if (!getenv("QT_RADIO_NO_LOCAL_AUDIO"))
-    {
+        // let them know who we are
         command.clear();
-        command.append((char)STARTAUDIO);
-        command.append(QString("%1,%2,%3,%4").arg(AUDIO_BUFFER_SIZE*(audio_sample_rate/8000)).arg(audio_sample_rate).arg(audio_channels).arg(audioinput->getMicEncoding()));
+        command.append((char)channel);
+        command.append((char)SETCLIENT);
+        command.append("QtRadio");
         connection.sendCommand(command);
-    }
 
-    // select audio encoding
-    command.clear();
-    command.append((char)SETENCODING);
-    command.append(audio->get_audio_encoding());
-    connection.sendCommand(command);
+        command.clear();
+        command.append((char)channel);
+        command.append((char)STARTXCVR);
+        connection.sendCommand(command);
 
-    command.clear();
-    command.append((char)SETPAN);
-    command.append(QString("%1").arg(0.5));
-    connection.sendCommand(command);
+        command.clear();
+        command.append((char)channel);
+        command.append((char)STARTIQ);
+        connection.sendCommand(command);
 
-    command.clear();
-    command.append((char)SETRXAAGCMODE);
-    command.append(agc);
-    connection.sendCommand(command);
+        qDebug() << "Sent STARTIQ command.";
 
-    command.clear();
-    command.append((char)SETANFVALS);
-    command.append(QString("%1,%2,%3,%4").arg(configure.getAnfTaps()).arg(configure.getAnfDelay()).arg(configure.getAnfGain(), 0, 'f').arg(configure.getAnfLeak(), 0, 'f'));
-    connection.sendCommand(command);
+        command.clear();
+        command.append((char)channel);
+        command.append((char)STARCOMMAND);
+        command.append((char)ATTACHRX);
+        connection.sendCommand(command);
 
-    command.clear();
-    command.append((char)SETNRVALS);
-    command.append(QString("%1,%2,%3,%4").arg(configure.getNrTaps()).arg(configure.getNrDelay()).arg(configure.getNrGain(), 0, 'f').arg(configure.getNrLeak(), 0, 'f'));
-    connection.sendCommand(command);
+        if (txrxPair[1] == channel && txrxPair[0] > -1)
+        {
+            command.clear();
+            command.append((char)currentTxChannel);
+            command.append((char)STARTXCVR);
+            connection.sendCommand(command);
 
-    command.clear();
-    command.append((char)SETNBVAL);
-    command.append(QString("%1").arg(configure.getNbThreshold()));
-    connection.sendCommand(command);
+            command.clear();
+            command.append((char)currentTxChannel);
+            command.append((char)STARTIQ);
+            connection.sendCommand(command);
 
-    command.clear();
-    command.append((char)SETSQUELCHVAL);
-    command.append(QString("%1").arg(squelchValue));
-    connection.sendCommand(command);
+            qDebug() << "Sent STARTIQ command.";
 
-    command.clear();
-    command.append((char)SETSQUELCHSTATE);
-    command.append((int)widget.actionSquelchEnable->isChecked());
-    connection.sendCommand(command);
+            command.clear();
+            command.append((char)currentTxChannel);
+            command.append((char)STARCOMMAND);
+            command.append((char)ATTACHTX);
+            connection.sendCommand(command);
 
-    command.clear();
-    command.append((char)SETANF);
-    command.append((int)widget.actionANF->isChecked());
-    connection.sendCommand(command);
+            command.clear();
+            command.append((char)currentTxChannel);
+            command.append((char)SETTXBPASSWIN);
+            command.append(QString("%1").arg(configure.getTxFilterWindow()));
+            connection.sendCommand(command);
 
-    command.clear();
-    command.append((char)SETNR);
-    command.append((int)widget.actionNR->isChecked());
-    connection.sendCommand(command);
+            command.clear();
+            command.append((char)currentTxChannel);
+            command.append((char)SETTXALCATTACK);
+            command.append(QString("%1").arg(configure.getALCAttackValue()));
+            connection.sendCommand(command);
 
-    command.clear();
-    command.append((char)SETNB);
-    command.append((int)widget.actionNB->isChecked());
-    connection.sendCommand(command);
+            command.clear();
+            command.append((char)currentTxChannel);
+            command.append((char)SETTXALCDECAY);
+            command.append(QString("%1").arg(configure.getALCDecayValue()));
+            connection.sendCommand(command);
 
-    command.clear();
-    command.append((char)SETRXBPASSWIN);
-    command.append(QString("%1").arg(configure.getRxFilterWindow()));
-    connection.sendCommand(command);
+            command.clear();
+            command.append((char)currentTxChannel);
+            command.append((char)SETTXALCMAXGAIN);
+            command.append(QString("%1").arg(configure.getALCMaxGainValue()));
+            connection.sendCommand(command);
 
-    command.clear();
-    command.append((char)SETTXBPASSWIN);
-    command.append(QString("%1").arg(configure.getTxFilterWindow()));
-    connection.sendCommand(command);
+            frequency = band.getFrequency();
 
-    windowTypeChanged(configure.getWindowType());
+            command.clear();
+            command.append((char)currentTxChannel);
+            command.append((char)SETFREQ);
+            command.append(QString("%1").arg(frequency));
+            connection.sendCommand(command);
 
-    printWindowTitle("Remote connected");
+            //    gvj code
+            widget.vfoFrame->setFrequency(frequency);
 
-    qDebug("Sending advanced setup commands.");
+            command.clear();
+            command.append((char)currentTxChannel);
+            command.append((char)SETMODE);
+            command.append((char)band.getMode());
+            connection.sendCommand(command);
 
-    command.clear();
-    command.append((char)SETTXALCATTACK);
-    command.append(QString("%1").arg(configure.getALCAttackValue()));
-    connection.sendCommand(command);
+            command.clear();
+            command.append((char)currentTxChannel);
+            command.append((char)SETFPS);
+            command.append(QString("2000,%1").arg(fps));
+            connection.sendCommand(command);
 
-    command.clear();
-    command.append((char)SETTXALCDECAY);
-    command.append(QString("%1").arg(configure.getALCDecayValue()));
-    connection.sendCommand(command);
+            connection.channels[channel].enabled = true;
+        }
 
-    command.clear();
-    command.append((char)SETTXALCMAXGAIN);
-    command.append(QString("%1").arg(configure.getALCMaxGainValue()));
-    connection.sendCommand(command);
+        frequency = band.getFrequency();
 
-/*
+        command.clear();
+        command.append((char)channel);
+        command.append((char)SETFREQ);
+        command.append(QString("%1").arg(frequency));
+        connection.sendCommand(command);
+
+        //    gvj code
+        widget.vfoFrame->setFrequency(frequency);
+
+        command.clear();
+        command.append((char)channel);
+        command.append((char)SETMODE);
+        command.append((char)band.getMode());
+        connection.sendCommand(command);
+
+        int low,high;
+        if (mode.getMode() == MODE_CWL)
+        {
+            low = -cwPitch-filters.getLow();
+            high = -cwPitch+filters.getHigh();
+        }
+        else
+            if (mode.getMode() == MODE_CWU)
+            {
+                low = cwPitch-filters.getLow();
+                high = cwPitch+filters.getHigh();
+            }
+            else
+            {
+                low = filters.getLow();
+                high = filters.getHigh();
+            }
+        command.clear();
+        command.append((char)channel);
+        command.append((char)SETFILTER);
+        command.append(QString("%1,%2").arg(low).arg(high));
+        connection.sendCommand(command);
+
+        widget.spectrumView->setFilter(low,high);
+
+        // start the audio
+        audio_buffers=0;
+        actionGain(gain);
+
+        if (!getenv("QT_RADIO_NO_LOCAL_AUDIO"))  //FIXME: this probably needs to be changed. Not exactly sure which audio this refers to.
+        {
+            command.clear();
+            command.append((char)channel);
+            command.append((char)STARTAUDIO);
+            command.append(QString("%1,%2,%3,%4").arg(AUDIO_BUFFER_SIZE*(audio_sample_rate/8000)).arg(audio_sample_rate).arg(audio_channels).arg(audioinput->getMicEncoding()));
+            connection.sendCommand(command);
+        }
+
+        setFPS();
+
+        // select audio encoding
+        command.clear();
+        command.append((char)channel);
+        command.append((char)SETENCODING);
+        command.append(audio->get_audio_encoding());
+        connection.sendCommand(command);
+
+        command.clear();
+        command.append((char)channel);
+        command.append((char)SETPAN);
+        command.append(QString("%1").arg(0.5));
+        connection.sendCommand(command);
+
+        command.clear();
+        command.append((char)channel);
+        command.append((char)SETRXAAGCMODE);
+        command.append(agc);
+        connection.sendCommand(command);
+
+        command.clear();
+        command.append((char)channel);
+        command.append((char)SETANFVALS);
+        command.append(QString("%1,%2,%3,%4").arg(configure.getAnfTaps()).arg(configure.getAnfDelay()).arg(configure.getAnfGain(), 0, 'f').arg(configure.getAnfLeak(), 0, 'f'));
+        connection.sendCommand(command);
+
+        command.clear();
+        command.append((char)channel);
+        command.append((char)SETNRVALS);
+        command.append(QString("%1,%2,%3,%4").arg(configure.getNrTaps()).arg(configure.getNrDelay()).arg(configure.getNrGain(), 0, 'f').arg(configure.getNrLeak(), 0, 'f'));
+        connection.sendCommand(command);
+
+        command.clear();
+        command.append((char)channel);
+        command.append((char)SETNBVAL);
+        command.append(QString("%1").arg(configure.getNbThreshold()));
+        connection.sendCommand(command);
+
+        command.clear();
+        command.append((char)channel);
+        command.append((char)SETSQUELCHVAL);
+        command.append(QString("%1").arg(squelchValue));
+        connection.sendCommand(command);
+
+        command.clear();
+        command.append((char)channel);
+        command.append((char)SETSQUELCHSTATE);
+        command.append((int)widget.actionSquelchEnable->isChecked());
+        connection.sendCommand(command);
+
+        command.clear();
+        command.append((char)channel);
+        command.append((char)SETANF);
+        command.append((int)widget.actionANF->isChecked());
+        connection.sendCommand(command);
+
+        command.clear();
+        command.append((char)channel);
+        command.append((char)SETNR);
+        command.append((int)widget.actionNR->isChecked());
+        connection.sendCommand(command);
+
+        command.clear();
+        command.append((char)channel);
+        command.append((char)SETNB);
+        command.append((int)widget.actionNB->isChecked());
+        connection.sendCommand(command);
+
+        command.clear();
+        command.append((char)channel);
+        command.append((char)SETRXBPASSWIN);
+        command.append(QString("%1").arg(configure.getRxFilterWindow()));
+        connection.sendCommand(command);
+
+        windowTypeChanged(configure.getWindowType());
+
+        printWindowTitle("Remote connected");
+
+        qDebug("Sending advanced setup commands.");
+
+        /*
     command.clear();
     QTextStream(&command) << "setrxagcmaxgain " << configure.getRxAGCMaxGainValue();
     connection.sendCommand(command);
@@ -899,43 +1014,55 @@ void UI::connected(int channel)
     QTextStream(&command) << "settxalcdecay " << configure.getALCDecayValue();
     connection.sendCommand(command);
 */
-    //
-    // hardware special command
-    // queries hardware name from remote server
-    //
-//    command.clear();
-//    command.append((char)STARCOMMAND);
-//    command.append((char)STARHARDWARE);
-//    connection.sendCommand(command);
-    /*
+        //
+        // hardware special command
+        // queries hardware name from remote server
+        //
+        //    command.clear();
+        //    command.append((char)STARCOMMAND);
+        //    command.append((char)STARHARDWARE);
+        //    connection.sendCommand(command);
+        /*
     // start the spectrum
     //qDebug() << "starting spectrum timer";
     connection.SemSpectrum.release();
     */
-    command.clear();
-    command.append((char)STARTIQ);
-    command.append((char)currentChannel);
-    connection.sendCommand(command);
+        command.clear();
+        command.append((char)channel);
+        command.append((char)QUESTION);
+        command.append((char)QINFO);
+        connection.sendCommand(command);
 
-    qDebug() << "Sent STARTIQ command.";
+        connection.channels[channel].enabled = true;
+    }
 
-    command.clear();
-    command.append((char)QUESTION);
-    command.append((char)QINFO);
-    connection.sendCommand(command);
+    configure.connected(true);
+
+    spectrumConnection.connect(configure.getHost(), DSPSERVER_BASE_PORT+1);
+    audioConnection.connect(configure.getHost(), DSPSERVER_BASE_PORT+10);
+    micAudioConnection.connect(configure.getHost(), DSPSERVER_BASE_PORT+20);
+
+    widget.actionConnectToServer->setDisabled(true);
+    widget.actionDisconnectFromServer->setDisabled(false);
+
+    audio->select_audio(audio_device, audio_sample_rate, audio_channels, audio_byte_order);
 
     sampleRateChanged(connection.sample_rate);
 
- //   spectrumTimer->start(1000/fps);
+    //   spectrumTimer->start(1000/fps);
     connection_valid = true;
     if ((mode.getStringMode() == "CWU") || (mode.getStringMode() == "CWL"))
         frequencyChanged(frequency); //gvj dummy call to set Rx offset for cw
 
+    widget.spectrumView->currentChannel = currentRxChannel;
+    widget.spectrumView->setFrequency(frequency);
     widget.spectrumView->enableNotchFilter(false);
 
     widget.zoomSpectrumSlider->setValue(1);
     on_zoomSpectrumSlider_sliderMoved(1);
     widget.spectrumView->panadapterScene->waterfallItem->bConnected = true;
+
+    hardwareSet(connection.channels[currentRxChannel].radio.radio_type);
 } // end connected
 
 
@@ -973,19 +1100,21 @@ void UI::disconnected(QString message)
     }
     configure.connected(false);
     widget.spectrumView->panadapterScene->waterfallItem->bConnected = false;
+    widget.ctlFrame->HideTX(true);
 } // end disconnected
 
 
-void UI::spectrumBuffer(spectrum spec)
+void UI::spectrumBuffer(CHANNEL channel)
 {
    //qDebug()<<Q_FUNC_INFO << "spectrumBuffer";
 
-    sampleRate = spec.sample_rate;
+    sampleRate = channel.spectrum.sample_rate;
+//    qDebug("SampR: %d  Meter: %f\n", sampleRate, channel.spectrum.meter);
     if (txNow)
-        txp->updateSpectrumFrame(spec);
+        txp->updateSpectrumFrame(channel.spectrum);
     else
-        widget.spectrumView->updateSpectrumFrame(spec);
-    spectrumConnection.freeBuffers(spec);
+        widget.spectrumView->updateSpectrumFrame(channel.spectrum);
+    spectrumConnection.freeBuffers(channel.spectrum);
 } // end spectrumBuffer
 
 
@@ -1024,7 +1153,7 @@ void UI::micSendAudio(QQueue<qint16>* queue)
                 //  the server side has Tx capability
                 if (connection_valid && configure.getTxAllowed() && (canTX == true))
                 {
-                    micAudioConnection.sendAudio(512, mic_encoded_buffer);
+                    micAudioConnection.sendAudio(currentTxChannel, 512, mic_encoded_buffer);
                 }
                 mic_buffer_count=0;
             }
@@ -1240,8 +1369,14 @@ void UI::bandChanged(int previousBand,int newBand)
 
     QByteArray command;
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETFREQ);
-    command.append((char)currentChannel);
+    command.append(QString("%1").arg(frequency));
+    connection.sendCommand(command);
+
+    command.clear();
+    command.append((char)currentTxChannel);
+    command.append((char)SETFREQ);
     command.append(QString("%1").arg(frequency));
     connection.sendCommand(command);
 
@@ -1354,8 +1489,13 @@ void UI::modeChanged(int previousMode,int newMode)
     widget.spectrumView->setMode(mode.getStringMode());
     //    widget.waterfallView->setMode(mode.getStringMode());
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETMODE);
-    command.append((char)currentChannel);
+    command.append((char)newMode);
+    connection.sendCommand(command);
+    command.clear();
+    command.append((char)currentTxChannel);
+    command.append((char)SETMODE);
     command.append((char)newMode);
     connection.sendCommand(command);
 } // end modeChanged
@@ -1753,8 +1893,8 @@ void UI::filterChanged(int previousFilter,int newFilter)
         }
 
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETFILTER);
-    command.append((char)currentChannel);
     command.append(QString("%1,%2").arg(low).arg(high));
     connection.sendCommand(command);
     widget.spectrumView->setFilter(low, high);
@@ -1806,8 +1946,8 @@ void UI::variableFilter(int low, int high)
     widget.actionFilter_10->setChecked(true);
 
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETFILTER);
-    command.append((char)currentChannel);
     command.append(QString("%1,%2").arg(low).arg(high));
     connection.sendCommand(command);
     if (filters.getFilter() != 10)
@@ -1834,15 +1974,24 @@ void UI::frequencyChanged(long long f)
     }
     //Send command to server
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETFREQ);
-    command.append((char)currentChannel);
     command.append(QString("%1").arg(freqOffset));
     connection.sendCommand(command);
+    command.clear();
+    if (currentTxChannel > -1)
+    {
+        command.append((char)currentTxChannel);
+        command.append((char)SETFREQ);
+        command.append(QString("%1").arg(freqOffset));
+        connection.sendCommand(command);
+    }
     //Adjust all frequency displays & Check for exiting current band
     band.setFrequency(frequency);
     widget.spectrumView->setFrequency(frequency);
     widget.vfoFrame->setFrequency(frequency);
     //    widget.waterfallView->setFrequency(frequency);
+    qDebug("Frequency changed for channel: %d\n", currentRxChannel);
 } // end frequencyChanged
 
 
@@ -1859,6 +2008,7 @@ void UI::sampleRateChanged(long rate)
     QByteArray command;
     //Send command to server
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETSAMPLERATE);
     command.append(QString("%1").arg(rate));
     connection.sendCommand(command);
@@ -1870,6 +2020,7 @@ void UI::actionANF()
 {
     QByteArray command;
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETANF);
     command.append(widget.actionANF->isChecked());
     connection.sendCommand(command);
@@ -1880,6 +2031,7 @@ void UI::actionNR()
 {
     QByteArray command;
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETNR);
     command.append(widget.actionNR->isChecked());
     connection.sendCommand(command);
@@ -1890,6 +2042,7 @@ void UI::actionNB()
 {
     QByteArray command;
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETNB);
     command.append(widget.actionNB->isChecked());
     connection.sendCommand(command);
@@ -1900,6 +2053,7 @@ void UI::actionSDROM()
 {
     QByteArray command;
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETNB2);
     command.append(widget.actionSDROM->isChecked());
     connection.sendCommand(command);
@@ -1952,6 +2106,7 @@ void UI::actionFixed()
     agc = AGC_FIXED;
 
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETRXAAGCMODE);
     command.append((char)agc);
     connection.sendCommand(command);
@@ -1984,6 +2139,7 @@ void UI::actionSlow()
     agc = AGC_SLOW;
 
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETRXAAGCMODE);
     command.append((char)agc);
     connection.sendCommand(command);
@@ -2016,6 +2172,7 @@ void UI::actionMedium()
     agc = AGC_MEDIUM;
 
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETRXAAGCMODE);
     command.append((char)agc);
     connection.sendCommand(command);
@@ -2047,6 +2204,7 @@ void UI::actionFast()
     agc = AGC_FAST;
 
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETRXAAGCMODE);
     command.append((char)agc);
     connection.sendCommand(command);
@@ -2077,6 +2235,7 @@ void UI::actionLong()
     }
     agc = AGC_LONG;
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETRXAAGCMODE);
     command.append((char)agc);
     connection.sendCommand(command);
@@ -2110,6 +2269,8 @@ void UI::actionBandscope()
             bandscope = new Bandscope(&spectrumConnection);
         connect(bandscope, SIGNAL(closeBandScope()), this, SLOT(closeBandScope()));
         bandscope->setWindowTitle("QtRadioII Bandscope");
+        bandscope->channel = MAX_CHANNELS - 1 - connection.channels[currentRxChannel].radio.radio_id;
+        bandscope->radio_id = connection.channels[currentRxChannel].radio.radio_id;
         bandscope->show();
         bandscope->connect();
     }
@@ -2147,6 +2308,7 @@ void UI::actionGain(int g)
     gain = g;
     //    setGain(true);
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETRXOUTGAIN);
     command.append(QString("%1").arg(g));
     connection.sendCommand(command);
@@ -2179,6 +2341,7 @@ void UI::nrValuesChanged(int taps, int delay, double gain, double leakage)
     QByteArray command;
 
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETNRVALS);
     command.append(QString("%1,%2,%3,%4").arg(taps).arg(delay).arg(gain, 0, 'f').arg(leakage, 0, 'f'));
     connection.sendCommand(command);
@@ -2190,6 +2353,7 @@ void UI::anfValuesChanged(int taps, int delay, double gain, double leakage)
     QByteArray command;
 
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETANFVALS);
     command.append(QString("%1,%2,%3,%4").arg(taps).arg(delay).arg(gain, 0, 'f').arg(leakage, 0, 'f'));
     connection.sendCommand(command);
@@ -2201,6 +2365,7 @@ void UI::nbThresholdChanged(double threshold)
     QByteArray command;
 
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETNBVAL);
     command.append(QString("%1").arg(threshold));
     connection.sendCommand(command);
@@ -2212,6 +2377,7 @@ void UI::cessbOvershootChanged(bool enable)
     QByteArray command;
 
     command.clear();
+    command.append((char)currentTxChannel);
     command.append((char)SETTXAOSCTRLRUN);
     command.append((char)enable);
     connection.sendCommand(command);
@@ -2223,6 +2389,7 @@ void UI::aeFilterChanged(bool enable)
     QByteArray command;
 
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETRXAEMNREARUN);
     command.append((char)enable);
     connection.sendCommand(command);
@@ -2234,6 +2401,7 @@ void UI::nrGainMethodChanged(int method)
     QByteArray command;
 
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETRXAEMNRGAINMETHOD);
     command.append((char)method);
     connection.sendCommand(command);
@@ -2245,6 +2413,7 @@ void UI::nrNpeMethodChanged(int method)
     QByteArray command;
 
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETRXAEMNRNPEMETHOD);
     command.append((char)method);
     connection.sendCommand(command);
@@ -2258,28 +2427,34 @@ void UI::preAGCFiltersChanged(bool tmp)
     command.clear();
     if (tmp)
     {
+        command.append((char)currentRxChannel);
         command.append((char)SETRXAANFPOSITION);
         command.append((char)!tmp);
         connection.sendCommand(command);
         command.clear();
+        command.append((char)currentRxChannel);
         command.append((char)SETRXAANRPOSITION);
         command.append((char)!tmp);
         connection.sendCommand(command);
         command.clear();
+        command.append((char)currentRxChannel);
         command.append((char)SETRXAEMNRPOSITION);
         command.append((char)!tmp);
         connection.sendCommand(command);
     }
     else
     {
+        command.append((char)currentRxChannel);
         command.append((char)SETRXAANFPOSITION);
         command.append((char)!tmp);
         connection.sendCommand(command);
         command.clear();
+        command.append((char)currentRxChannel);
         command.append((char)SETRXAANRPOSITION);
         command.append((char)!tmp);
         connection.sendCommand(command);
         command.clear();
+        command.append((char)currentRxChannel);
         command.append((char)SETRXAEMNRPOSITION);
         command.append((char)!tmp);
         connection.sendCommand(command);
@@ -2470,10 +2645,12 @@ void UI::selectXVTR(QAction* action)
 }
 
 
-void UI::getMeterValue(float m, float s)
+void UI::getMeterValue(float s, float f, float r)
 {
-    widget.sMeterFrame->meter1 = m;
-    widget.sMeterFrame->meter2 = s;
+ //   qDebug("sMeter: %f\n", m);
+    widget.sMeterFrame->meter0 = s;
+    widget.sMeterFrame->meter1 = f;
+    widget.sMeterFrame->meter2 = r;
     widget.sMeterFrame->update();
 }
 
@@ -2664,12 +2841,14 @@ void UI::pttChange(int caller, bool ptt)
                 if ((dspversion >= 20120201)  && canTX && chkTX)
                 {
                     command.clear();
+                    command.append((char)currentTxChannel);
                     command.append((char)SETTXAMCARLEV);
      //////               command.append(QString("%1 %2 %3").arg(widget.ctlFrame->getTunePwr()).arg(configure.thisuser).arg(configure.thispass));
                 }
                 else
                 {
                     command.clear();
+                    command.append((char)currentTxChannel);
                     command.append((char)SETTXAMCARLEV);
     //////                command.append(QString("%1").arg(widget.ctlFrame->getTunePwr()));
                 }
@@ -2680,6 +2859,7 @@ void UI::pttChange(int caller, bool ptt)
                 if ((dspversion >= 20130901) && canTX && chkTX)
                 {
                     command.clear();
+                    command.append((char)currentTxChannel);
                     command.append((char)MOX);
                     command.append(QString("%1 %2 %3").arg(1).arg(configure.thisuser).arg(configure.thispass));
                     //QTextStream(&command) << "Mox " << "on " << configure.thisuser << " " << configure.thispass;
@@ -2687,6 +2867,7 @@ void UI::pttChange(int caller, bool ptt)
                 else
                 {
                     command.clear();
+                    command.append((char)currentTxChannel);
                     command.append((char)MOX);
                     command.append(QString("%1").arg(1));
                     //QTextStream(&command) << "Mox " << "on";
@@ -2700,12 +2881,14 @@ void UI::pttChange(int caller, bool ptt)
                 if ((dspversion >= 20130901) && canTX && chkTX)
                 {
                     command.clear();
+                    command.append((char)currentTxChannel);
                     command.append((char)MOX);
                     command.append(QString("%1 %2 %3").arg(1).arg(configure.thisuser).arg(configure.thispass));
                 }
                 else
                 {
                     command.clear();
+                    command.append((char)currentTxChannel);
                     command.append((char)MOX);
                     command.append(QString("%1").arg(1));
                 }
@@ -2725,12 +2908,14 @@ void UI::pttChange(int caller, bool ptt)
                 if ((dspversion >= 20130901) && canTX && chkTX)
                 {
                     command.clear();
+                    command.append((char)currentTxChannel);
                     command.append((char)MOX);
                     command.append(QString("%1 %2 %3").arg(0).arg(configure.thisuser).arg(configure.thispass));
                 }
                 else
                 {
                     command.clear();
+                    command.append((char)currentTxChannel);
                     command.append((char)MOX);
                     command.append(QString("%1").arg(0));
                 }
@@ -2741,12 +2926,14 @@ void UI::pttChange(int caller, bool ptt)
                 if ((dspversion >= 20120201) && canTX && chkTX)
                 {
                     command.clear();
+                    command.append((char)currentTxChannel);
                     command.append((char)SETTXAMCARLEV);
                     command.append(QString("%1 %2 %3").arg(currentPwr).arg(configure.thisuser).arg(configure.thispass));
                 }
                 else
                 {
                     command.clear();
+                    command.append((char)currentTxChannel);
                     command.append((char)SETTXAMCARLEV);
                     command.append(QString("%1").arg(currentPwr));
                 }
@@ -2775,12 +2962,14 @@ void UI::pttChange(int caller, bool ptt)
                 if ((dspversion >= 20130901)  && canTX && chkTX)
                 {
                     command.clear();
+                    command.append((char)currentTxChannel);
                     command.append((char)MOX);
                     command.append(QString("%1 %2 %3").arg(0).arg(configure.thisuser).arg(configure.thispass));
                 }
                 else
                 {
                     command.clear();
+                    command.append((char)currentTxChannel);
                     command.append((char)MOX);
                     command.append(QString("%1").arg(0));
                 }
@@ -2793,7 +2982,7 @@ void UI::pttChange(int caller, bool ptt)
             connection.setMuted(false);
             widget.vfoFrame->pttChange(ptt); //Set band select buttons etc. to Rx state on VFO
             disconnect(audioinput, SIGNAL(mic_update_level(qreal)),widget.ctlFrame, SLOT(update_mic_level(qreal)));
-            spectrum spec;
+            SPECTRUM spec;
             spec.length = 0;
             txp->updateSpectrumFrame(spec);
         }
@@ -2829,6 +3018,7 @@ void UI::actionSquelch()
         squelch = false;
         QByteArray command;
         command.clear();
+        command.append((char)currentRxChannel);
         command.append((char)SETSQUELCHSTATE);
         command.append((char)0);
         connection.sendCommand(command);
@@ -2840,10 +3030,12 @@ void UI::actionSquelch()
         squelch = true;
         QByteArray command;
         command.clear();
+        command.append((char)currentRxChannel);
         command.append((char)SETSQUELCHVAL);
         command.append(QString("%1").arg(squelchValue));
         connection.sendCommand(command);
         command.clear();
+        command.append((char)currentRxChannel);
         command.append((char)SETSQUELCHSTATE);
         command.append((char)1);
         connection.sendCommand(command);
@@ -2861,6 +3053,7 @@ void UI::actionSquelchReset()
     {
         QByteArray command;
         command.clear();
+        command.append((char)currentRxChannel);
         command.append((char)SETSQUELCHVAL);
         command.append(QString("%1").arg(squelchValue));
         connection.sendCommand(command);
@@ -2876,6 +3069,7 @@ void UI::squelchValueChanged(int val)
     {
         QByteArray command;
         command.clear();
+        command.append((char)currentRxChannel);
         command.append((char)SETSQUELCHVAL);
         command.append(QString("%1").arg(squelchValue));
         connection.sendCommand(command);
@@ -2989,9 +3183,18 @@ void UI::windowTypeChanged(int type)
     QByteArray command;
 
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETWINDOW);
     command.append(QString("%1").arg(type));
     connection.sendCommand(command);
+    if (currentTxChannel > -1)
+    {
+        command.clear();
+        command.append((char)currentTxChannel);
+        command.append((char)SETWINDOW);
+        command.append(QString("%1").arg(type));
+        connection.sendCommand(command);
+    }
     qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
 } // end windowTypeChanged
 
@@ -3026,6 +3229,7 @@ void UI::AGCTLevelChanged(int level)
 {
     QByteArray command;
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETRXAGCFIXED);
     command.append(QString("%1").arg(level));
     qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
@@ -3039,6 +3243,7 @@ void UI::enableRxEq(bool enable)
 
     QByteArray command;
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)ENABLERXEQ);
     command.append((char)enable);
     connection.sendCommand(command);
@@ -3052,6 +3257,7 @@ void UI::enableTxEq(bool enable)
 
     QByteArray command;
     command.clear();
+    command.append((char)currentTxChannel);
     command.append((char)ENABLETXEQ);
     command.append((char)enable);
     connection.sendCommand(command);
@@ -3116,6 +3322,7 @@ void UI::agcSlopeChanged(int value)
 
     QByteArray command;
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETRXAGCSLOPE);
     command.append(QString("%1").arg(value));
     connection.sendCommand(command);
@@ -3129,6 +3336,7 @@ void UI::agcMaxGainChanged(double value)
 
     QByteArray command;
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETRXAGCTOP);
     command.append(QString("%1").arg(value));
     connection.sendCommand(command);
@@ -3142,6 +3350,7 @@ void UI::agcAttackChanged(int value)
 
     QByteArray command;
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETRXAGCATTACK);
     command.append(QString("%1").arg(value));
     connection.sendCommand(command);
@@ -3155,6 +3364,7 @@ void UI::agcDecayChanged(int value)
 
     QByteArray command;
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETRXAGCDECAY);
     command.append(QString("%1").arg(value));
     connection.sendCommand(command);
@@ -3168,6 +3378,7 @@ void UI::agcHangChanged(int value)
 
     QByteArray command;
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETRXAGCHANG);
     command.append(QString("%1").arg(value));
     connection.sendCommand(command);
@@ -3181,6 +3392,7 @@ void UI::agcHangThreshChanged(int value)
 
     QByteArray command;
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETRXAGCHANGTHRESH);
     command.append(QString("%1").arg(value));
     connection.sendCommand(command);
@@ -3194,6 +3406,7 @@ void UI::agcFixedGainChanged(double value)
 
     QByteArray command;
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETRXAGCFIXED);
     command.append(QString("%1").arg(value));
     connection.sendCommand(command);
@@ -3207,6 +3420,7 @@ void UI::levelerStateChanged(int value)
 
     QByteArray command;
     command.clear();
+    command.append((char)currentTxChannel);
     command.append((char)SETTXLEVELERST);
     command.append(QString("%1").arg(value));
     connection.sendCommand(command);
@@ -3220,14 +3434,17 @@ void UI::rxFilterWindowChanged(int value)
 
     QByteArray command;
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETRXBPASSWIN);
     command.append(QString("%1").arg(value));
     connection.sendCommand(command);
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)RXANBPSETWINDOW);
     command.append((char)value);
     connection.sendCommand(command);
     command.clear();
+    command.append((char)currentRxChannel);
     command.append((char)SETRXAEQWINTYPE);
     command.append((char)value);
     connection.sendCommand(command);
@@ -3241,10 +3458,12 @@ void UI::txFilterWindowChanged(int value)
 
     QByteArray command;
     command.clear();
+    command.append((char)currentTxChannel);
     command.append((char)SETTXBPASSWIN);
     command.append(QString("%1").arg(value));
     connection.sendCommand(command);
     command.clear();
+    command.append((char)currentTxChannel);
     command.append((char)SETTXAEQWINTYPE);
     command.append((char)value);
     connection.sendCommand(command);
@@ -3258,6 +3477,7 @@ void UI::levelerAttackChanged(int value)
 
     QByteArray command;
     command.clear();
+    command.append((char)currentTxChannel);
     command.append((char)SETTXLEVELERATTACK);
     command.append(QString("%1").arg(value));
     connection.sendCommand(command);
@@ -3271,6 +3491,7 @@ void UI::levelerDecayChanged(int value)
 
     QByteArray command;
     command.clear();
+    command.append((char)currentTxChannel);
     command.append((char)SETTXLEVELERDECAY);
     command.append(QString("%1").arg(value));
     connection.sendCommand(command);
@@ -3284,6 +3505,7 @@ void UI::levelerTopChanged(double value)
 
     QByteArray command;
     command.clear();
+    command.append((char)currentTxChannel);
     command.append((char)SETTXLEVELERTOP);
     command.append(QString("%1").arg(value));
     connection.sendCommand(command);
@@ -3297,6 +3519,7 @@ void UI::TXalcStateChanged(int value)
 
     QByteArray command;
     command.clear();
+    command.append((char)currentTxChannel);
     command.append((char)SETTXALCST);
     command.append(QString("%1").arg(value));
     connection.sendCommand(command);
@@ -3310,6 +3533,7 @@ void UI::TXalcMaxGainChanged(double value)
 
     QByteArray command;
     command.clear();
+    command.append((char)currentTxChannel);
     command.append((char)SETTXALCMAXGAIN);
     command.append(QString("%1").arg(value));
     connection.sendCommand(command);
@@ -3323,6 +3547,7 @@ void UI::TXalcDecayChanged(int value)
 
     QByteArray command;
     command.clear();
+    command.append((char)currentTxChannel);
     command.append((char)SETTXALCDECAY);
     command.append(QString("%1").arg(value));
     connection.sendCommand(command);
@@ -3336,6 +3561,7 @@ void UI::TXalcAttackChanged(int value)
 
     QByteArray command;
     command.clear();
+    command.append((char)currentTxChannel);
     command.append((char)SETTXALCATTACK);
     command.append(QString("%1").arg(value));
     connection.sendCommand(command);
@@ -3345,10 +3571,10 @@ void UI::TXalcAttackChanged(int value)
 
 void UI::hardwareSet(QString hardware)
 {
-    QStringList hwList = hardware.split(" ");
+    //QStringList hwList = hardware.split(" ");
 
-    if (hwList.length() < 2) return;
-    if (hwList.at(0) == "hermes")
+    //if (hwList.length() < 2) return;
+    if (hardware == "hermes")
     {
         HermesFrame *hf = new HermesFrame(this);
         widget.RadioScrollAreaWidgetContents->layout()->addWidget((HermesFrame*)hf);
@@ -3356,9 +3582,11 @@ void UI::hardwareSet(QString hardware)
         hardwareType = "hermes";
         connect((HermesFrame*)hf, SIGNAL(hhcommand(QByteArray)), this, SLOT(sendHardwareCommand(QByteArray)));
         connect((HermesFrame*)hf, SIGNAL(pttTuneChange(int,bool)), this, SLOT(pttChange(int,bool)));
+        hf->currentRxChannel = currentRxChannel;
+        hf->currentTxChannel = currentTxChannel;
         hf->initialize();
     }
-    if (hwList.at(1) == "1")
+    if (connection.channels[currentRxChannel].radio.bandscope_capable)
         widget.actionBandscope->setEnabled(true);
     else
         widget.actionBandscope->setEnabled(false);
@@ -3374,6 +3602,6 @@ void UI::sendHardwareCommand(QByteArray command)
 
 void UI::setCurrentChannel(int channel)
 {
-    currentChannel = channel;
+    currentRxChannel = channel;
     widget.ctlFrame->setCurrentChannel(channel+1);
 } // end setCurrentChannel

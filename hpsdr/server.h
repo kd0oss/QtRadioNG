@@ -81,52 +81,52 @@ void* client_thread(void* arg);
 
 typedef struct _rcvr {
     int socket;
-    unsigned int iq_length;
+    unsigned int       iq_length;
     struct sockaddr_in iq_addr;
-    pthread_t thread_id;
-    RECEIVER_STATE receiver_state;
-    TRANSMITTER_STATE transmitter_state;
-    int radio_id;
-    int receiver;
-    int isTx;
-    int iq_port;
-    int bs_port;
-    int audio_port;
-    int mox;
+    pthread_t          thread_id;
+    RECEIVER_STATE     receiver_state;
+    TRANSMITTER_STATE  transmitter_state;
+    int8_t  radio_id;
+    int8_t  receiver;
+    uint8_t isTx;
+    int     iq_port;
+    int     bs_port;
+    int     audio_port;
+    uint8_t mox;
 } CLIENT;
 
 typedef struct _buffer {
     unsigned short chunk;
-    unsigned short radio_id;
-    unsigned short receiver;
+    int8_t         radio_id;
+    int8_t         receiver;
     unsigned short length;
-    double data[512];
+    double         data[512];
 } BUFFER;
 
 typedef struct _bufferl {
     unsigned short chunk;
-    unsigned short radio_id;
-    unsigned short receiver;
+    int8_t         radio_id;
+    int8_t         receiver;
     unsigned short length;
-    double data[2048];
+    double         data[2048];
 } BUFFERL;
 
 typedef struct _bufferwb {
     unsigned short chunk;
-    unsigned short radio_id;
-    unsigned short receiver;
+    int8_t         radio_id;
+    int8_t         receiver;
     unsigned short length;
-    int16_t data[16384];
+    int16_t        data[16384];
 } BUFFERWB;
 
 typedef struct _mic_buffer
 {
-    unsigned short radio_id;
-    unsigned short tx;
-    unsigned short length;
-    float          fwd_pwr;
-    float          rev_pwr;
-    float          data[512];
+    int8_t    radio_id;
+    int8_t    tx;
+    short int length;
+    float     fwd_pwr;
+    float     rev_pwr;
+    float     data[512];
 } MIC_BUFFER;
 
 typedef struct _txiq_entry {

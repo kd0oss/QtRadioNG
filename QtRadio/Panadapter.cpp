@@ -459,7 +459,7 @@ void TxPanadapter::drawSpectrum(void)
         qDebug() << "sampleRate is 0";
         return;
     }
-    emit meterValue(meter2, meter3);
+    emit meterValue(meter1, meter2, meter3);
 //    qDebug() << "drawSpectrum";
 
     if (txpanadapterScene->spectrumPlot != NULL)
@@ -478,13 +478,13 @@ void TxPanadapter::drawSpectrum(void)
 } // end drawSpectrum
 
 
-void TxPanadapter::updateSpectrumFrame(spectrum spec)
+void TxPanadapter::updateSpectrumFrame(SPECTRUM spec)
 {
     int i;
 //    int version,subversion;
     static int lastWidth;
     static int lastHeight;
-    static int lastSampRate;
+//    static int lastSampRate;
 
 //    version = 2;
 //    subversion = 1;
@@ -497,7 +497,7 @@ void TxPanadapter::updateSpectrumFrame(spectrum spec)
         initialized = false;
         return;
     }
-    meter1 = spec.rx_meter;
+    meter1 = spec.meter;
     meter2 = spec.fwd_pwr;
     meter3 = spec.rev_pwr;
 
@@ -507,7 +507,7 @@ void TxPanadapter::updateSpectrumFrame(spectrum spec)
 size = 254;//    size = spec.length;
 //    if (sampleRate != lastSampRate)
 //        initialized = false;
-    lastSampRate = sampleRate;
+//    lastSampRate = sampleRate;
 
     // do not rotate Panadapter display.  LO_offset rotation done in dspserver
     for (i = 873; i < 1127; i++)
@@ -1377,11 +1377,11 @@ void Panadapter::drawSpectrum(void)
     }
     if (panadapterScene->bMox)
     {
-        emit meterValue(meter2, meter3);
+ //       emit meterValue(meter2, meter3);
     }
     else
     {
-        emit meterValue(meter1, 0.0f);
+        emit meterValue(meter1, 0.0f, 0.0f);
     }
 //    qDebug() << "drawSpectrum";
 
@@ -1407,14 +1407,14 @@ void Panadapter::drawSpectrum(void)
 void Panadapter::setZoom(int value)
 {
     // KD0OSS ***************************
-    static int vzoom;
+//    static int vzoom;
 
     if (sampleZoom)
         zoom = value;
     else
     {
         setMatrix(QMatrix((value * 0.01)+1, 0.0, 0.0, 1.0, 1.0, 1.0));
-        vzoom = value;
+//        vzoom = value;
     }
 
     if (width() < 2000)
@@ -1447,8 +1447,10 @@ void Panadapter::setFrequency(long long f)
         return;
 
     command.clear();
+    command.append((char)currentChannel);
     command.append((char)SETNOTCHFILTERTUNE);
     command.append(QString("%1").arg(frequency/1000000.0f));
+    qDebug("Spec: ch: %d  Comm: %d\n", (char)command[0], (char)command[1]);
     connection->sendCommand(command);
 
     drawFrequencyLines();
@@ -1510,17 +1512,17 @@ void Panadapter::setFilter(QString f) {
 }
 
 
-void Panadapter::updateSpectrumFrame(spectrum spec)
+void Panadapter::updateSpectrumFrame(SPECTRUM spec)
 {
     int i;
 //    int version,subversion;
     static int lastWidth;
     static int lastHeight;
-    static int lastSampRate;
+//    static int lastSampRate;
 
 //    version = 2;
 //    subversion = 1;
-    meter1 = spec.rx_meter;
+    meter1 = spec.meter;
     meter2 = spec.fwd_pwr;
     meter3 = spec.rev_pwr;
 
@@ -1530,7 +1532,7 @@ void Panadapter::updateSpectrumFrame(spectrum spec)
     size = spec.length;
 //    if (sampleRate != lastSampRate)
 //        initialized = false;
-    lastSampRate = sampleRate;
+//    lastSampRate = sampleRate;
 
     // do not rotate Panadapter display.  LO_offset rotation done in dspserver
     for (i = 0; i < size; i++)
@@ -1615,6 +1617,7 @@ int Panadapter::addNotchFilter(int index)   // KD0OSS
     double audio_freq = abs((notchFilterFO[notchFilterIndex]/* - frequency*/)); // Convert to audio frequency in Hz
     line.sprintf("%lf %lf", audio_freq, notchFilterBW[notchFilterIndex]);
     command.clear();
+    command.append((char)currentChannel);
     command.append((char)SETNOTCHFILTER);
     command.append((char)index+1);
     command.append(line);
@@ -1653,6 +1656,7 @@ void Panadapter::updateNotchFilter(int index)   // KD0OSS
                 audio_freq = abs((notchFilterFO[i]/* - frequency*/)); // Convert to audio frequency in Hz
                 line.sprintf("%lf %lf", audio_freq, notchFilterBW[i]);
                 command.clear();
+                command.append((char)currentChannel);
                 command.append((char)EDITNOTCHFILTER);
                 command.append((char)i+1);
                 command.append(line);
@@ -1674,6 +1678,7 @@ void Panadapter::updateNotchFilter(int index)   // KD0OSS
         audio_freq = abs((notchFilterFO[index]/* - frequency*/)); // Convert to audio frequency in Hz
         line.sprintf("%lf %lf", audio_freq, notchFilterBW[index]);
         command.clear();
+        command.append((char)currentChannel);
         command.append((char)EDITNOTCHFILTER);
         command.append((char)index+1);
         command.append(line);
@@ -1691,11 +1696,13 @@ void Panadapter::enableNotchFilter(bool enable)   // KD0OSS
     {
 //        if (notchFilterBand[index] != band && enable) continue;
         command.clear();
+        command.append((char)currentChannel);
         command.append((char)ENABLENOTCHFILTER);
         command.append((char)enable);
         connection->sendCommand(command);
 
         command.clear();
+        command.append((char)currentChannel);
         command.append((char)SETNOTCHFILTERTUNE);
         command.append(QString("%1").arg(frequency/1000000.0f));
         connection->sendCommand(command);
@@ -1731,6 +1738,7 @@ void Panadapter::deleteNotchFilter(void)   // KD0OSS
     notchFilterBand[notchFilterSelected] = "na";
     notchFilterEnabled[notchFilterSelected] = false;
     command.clear();
+    command.append((char)currentChannel);
     command.append((char)DELNOTCHFILTER);
     command.append((char)notchFilterSelected);
     connection->sendCommand(command);
@@ -1747,6 +1755,7 @@ void Panadapter::deleteAllNotchFilters(void)   // KD0OSS
 //        enableNotchFilter(index, false);
         notchFilterEnabled[index] = false;
         notchFilterBand[index] = "na";
+        command.append((char)currentChannel);
         command.append((char)DELNOTCHFILTER);
         command.append((char)index);
         connection->sendCommand(command);

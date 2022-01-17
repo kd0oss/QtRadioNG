@@ -13,7 +13,7 @@ Bandscope::Bandscope(SpectrumConnection *pConn, QWidget *parent):QFrame(parent),
     isConnected = false;
     connection = new WidebandConnection();
 
-    QObject::connect(connection, SIGNAL(bandscopeBuffer(spectrum)), this, SLOT(bandscopeBuffer(spectrum)));
+    QObject::connect(connection, SIGNAL(bandscopeBuffer(SPECTRUM)), this, SLOT(bandscopeBuffer(SPECTRUM)));
     QObject::connect(connection, SIGNAL(bsConnected()), this, SLOT(connected()));
 
     bandscopeHigh = 0;
@@ -112,9 +112,11 @@ void Bandscope::connected()
 {
     QByteArray command;
 
-    qDebug("Connected:  BS width: %d", width());
+    qDebug("Connected:  BS width: %d  Radio Id: %d", width(), (char)radio_id);
     command.clear();
+    command.append((char)channel);
     command.append((char)STARTBANDSCOPE);
+    command.append((char)radio_id);
     command.append(QString("%1").arg(width()));
     isConnected = true;
     connection->sendCommand(command);
@@ -125,8 +127,12 @@ void Bandscope::disconnected()
 {
     QByteArray command;
 
+    command.clear();
+    command.append((char)channel);
     command.append((char)STOPBANDSCOPE);
+    command.append((char)radio_id);
     connection->sendCommand(command);
+    isConnected = false;
     qDebug() << "bandscope disabled";
 }
 
@@ -138,13 +144,15 @@ void Bandscope::updateBandscope()
     if (!isConnected) return;
     qDebug("Resize:  BS width: %d", width());
     command.clear();
+    command.append((char)channel);
     command.append((char)UPDATEBANDSCOPE);
+    command.append((char)radio_id);
     command.append(QString("%1").arg(width()));
     connection->sendCommand(command);
 }
 
 
-void Bandscope::bandscopeBuffer(spectrum spec)
+void Bandscope::bandscopeBuffer(SPECTRUM spec)
 {
     int i;
 
