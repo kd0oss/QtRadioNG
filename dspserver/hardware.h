@@ -112,7 +112,7 @@ extern int mox;
 extern int receiver;
 extern double LO_offset;
 extern int rxOnly;
-extern char *manifest_xml[4];
+extern char *manifest_xml[5];
 
 // values saved from last change to send to slaves
 long long lastFreq;
@@ -211,7 +211,7 @@ void setSpeed(int channel, int s);
 
 extern int hwSetSampleRate(int, long);
 
-int hwSetRecord(char* state);
+int hwSetRecord(int8_t, char* state);
 
 void hw_set_canTx(char);
 
@@ -228,9 +228,9 @@ void hw_set_local_audio(int state);
 void hw_set_port_audio(int state);
 void hw_set_debug(int state);
 int  hwSetTxMode(int mode);
-int  hwSetMox(int state);
+int  hwSetMox(int8_t ch, int state);
 void hw_send(unsigned char* data, int length, int rd);
-int  hwSendStarCommand(unsigned char *command, int);
+int  hwSendStarCommand(int8_t, unsigned char *command, int);
 void hw_set_src_ratio(void);
 void hw_startIQ(int);
 void hw_stopIQ(void);

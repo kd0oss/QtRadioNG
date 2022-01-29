@@ -6,6 +6,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+//#include <sys/ioctl.h>
+#include <sys/fcntl.h>
+#include <errno.h>
 #include <netdb.h>
 #include <pthread.h>
 #include <getopt.h>
@@ -28,17 +31,25 @@
 
 
 RECEIVER *receiver[MAX_RECEIVERS];
-TRANSMITTER *transmitter;
+TRANSMITTER *transmitter; // FIXME: change to allow multiple attached transmitters
+
+static RFUNIT rfunit[35]; // max channels defined in dspserver
 
 TAILQ_HEAD(, _txiq_entry) txiq_buffer;
-static sem_t txiq_semaphore;
+
+static sem_t txiq_semaphore[MAX_DEVICES];
+static sem_t client_semaphore;
+
 static pthread_t txiq_id;
 static pthread_t tx_thread_id;
+static pthread_t ka_thread_id;
 
-static int attached_rcvrs = 0;
-static int attached_xmits = 0;
+static _Bool radioStarted[MAX_DEVICES];
 
-static CLIENT iqclient[MAX_RECEIVERS];
+static int attached_rcvrs[MAX_DEVICES];
+static int attached_xmits[MAX_DEVICES];
+
+static CLIENT client;
 //static struct sockaddr_in cli_addr;
 //static socklen_t cli_length;
 bool send_manifest = false;
@@ -49,109 +60,107 @@ void* listener_thread(void* arg);
 void* client_thread(void* arg);
 void* tx_IQ_thread(void* arg);
 void* txiq_send(void* arg);
-void  init_transmitter(unsigned int, int);
+void  init_transmitter(int8_t);
+void* keepalive_thread(void* arg);
 
 static char dsp_server_address[17] = "127.0.0.1";
 
 
-char* attach_receiver(int radio_id, int rx, CLIENT* client)
+char* attach_receiver(int8_t idx)
 {
-    DISCOVERED *d = &discovered[radio_id];
+    DISCOVERED *radio = &discovered[rfunit[idx].radio_id];
 
-    if (client->receiver_state == RECEIVER_ATTACHED)
+    if (rfunit[idx].attached)
     {
-        return CLIENT_ATTACHED;
+        return RECEIVER_IN_USE;
     }
 
-    if (rx - 1 >= d->supported_receivers)
+    if (attached_rcvrs[rfunit[idx].radio_id] >= radio->supported_receivers)
     {
         return RECEIVER_INVALID;
     }
 
- //   if (receiver[rx]->client != (CLIENT *)NULL)
- //   {
- //       return RECEIVER_IN_USE;
-//    }
-
-    client->receiver_state = RECEIVER_ATTACHED;
-    client->radio_id = radio_id;
-    d->wideband->channel = radio_id;
-    client->receiver = rx;
-    init_receivers(radio_id, rx);
-    receiver[rx]->client = client;
-
-    sprintf(resp,"%s %d", OK, receiver[rx]->sample_rate);
-    attached_rcvrs++;
-    fprintf(stderr, "Receiver attached: radio id = %d  rx = %d\n", radio_id, rx);
+    rfunit[idx].attached = true;
+    rfunit[idx].isTx = false;
+    radio->wideband->channel = rfunit[idx].radio_id;
+    receiver[idx]->client = &client;
+    attached_rcvrs[rfunit[idx].radio_id]++;
+    sprintf(resp,"%s %d", OK, receiver[idx]->sample_rate);
+    fprintf(stderr, "Receiver attached: radio id = %u  index = %u\n", rfunit[idx].radio_id, idx);
 
     return resp;
 } // end attach_receiver
 
 
-char* detach_receiver(int radio_id, int rx, CLIENT* client)
+char* detach_receiver(int8_t idx)
 {
-    if (client->receiver_state == RECEIVER_DETACHED)
+    if (!rfunit[idx].attached)
     {
-        return CLIENT_DETACHED;
+        return RECEIVER_NOT_ATTACHED;
     }
 
-    if (rx >= active_receivers)
-    {
-        return RECEIVER_INVALID;
-    }
-
-    if (receiver[rx]->client != client)
+    // FIXME: this is probably not needed
+    if (receiver[idx]->client != &client)
     {
         return RECEIVER_NOT_OWNER;
     }
 
-    if (attached_rcvrs > 0) attached_rcvrs--;
-    if (attached_rcvrs == 0)
+    if (attached_rcvrs[rfunit[idx].radio_id] > 0) attached_rcvrs[rfunit[idx].radio_id]--;
+    if (attached_rcvrs[rfunit[idx].radio_id] == 0)
+        receiver[idx]->client = (CLIENT*)NULL;
+
+    close(rfunit[idx].client.socket);
+    rfunit[idx].client.socket = -1;
+    rfunit[idx].attached = false;
+    fprintf(stderr, "Receiver detached: radio id = %u  index = %u\n", rfunit[idx].radio_id, idx);
+    return OK;
+} // end detach_receiver
+
+
+char* detach_transmitter(int8_t idx)
+{
+    if (!rfunit[idx].attached)
     {
-        client->receiver_state = RECEIVER_DETACHED;
-        receiver[rx]->client = (CLIENT*)NULL;
+        return TRANSMITTER_NOT_ATTACHED;
     }
 
-    //FIX-ME: Handle transmitter cleanup in a better way.
-    if (attached_xmits > 0 && attached_rcvrs == 0)
+    fprintf(stderr, "Attempting to detach transmitter...\n");
+    if (attached_xmits[rfunit[idx].radio_id] > 0)
     {
-        //pthread_kill(tx_thread_id, SIGKILL);
-        attached_xmits = 0;
+        attached_xmits[rfunit[idx].radio_id]--;
+
+        pthread_join(txiq_id, NULL);
+        pthread_join(tx_thread_id, NULL);
+
         struct _txiq_entry *item;
-        sem_wait(&txiq_semaphore);
+        sem_wait(&txiq_semaphore[idx]);
         for (item = TAILQ_FIRST(&txiq_buffer); item != NULL; item = TAILQ_NEXT(item, entries))
         {
             TAILQ_REMOVE(&txiq_buffer, item, entries);
             free(item->buffer);
             free(item);
         }
-        sem_post(&txiq_semaphore);
-        client->transmitter_state = TRANSMITTER_DETACHED;
-        fprintf(stderr, "Transmitter detached: radio id = %d  ch = %d\n", radio_id, rx);
+        sem_post(&txiq_semaphore[idx]);
+        close(rfunit[idx].client.socket);
+        rfunit[idx].client.socket = -1;
+        rfunit[idx].attached = false;
+        fprintf(stderr, "Transmitter detached: radio id = %u  index = %u\n", rfunit[idx].radio_id, idx);
     }
-    fprintf(stderr, "Receiver detached: radio id = %d  ch = %d\n", radio_id, rx);
     return OK;
-} // end detach_receiver
+} // end detach_transmitter
 
 
-char* attach_transmitter(CLIENT* client)
+char* attach_transmitter(int8_t idx)
 {
-    if (client->receiver_state != RECEIVER_ATTACHED)
-    {
-        return RECEIVER_NOT_ATTACHED;
-    }
-
-    if (client->transmitter_state == TRANSMITTER_ATTACHED)
+    if (rfunit[idx].attached)
         return OK;
 
-    client->transmitter_state = TRANSMITTER_ATTACHED;
+    rfunit[idx].attached = true;
 
     sprintf(resp, "%s", OK);
-    attached_xmits++;
-    sem_init(&txiq_semaphore, 0, 1);
-    TAILQ_INIT(&txiq_buffer);
-    init_transmitter(client->radio_id, client->receiver);
-    fprintf(stderr, "Transmitter attached: radio id = %d\n", radio_id);
+    rfunit[idx].isTx = true;
+    attached_xmits[rfunit[idx].radio_id]++;
+    fprintf(stderr, "Transmitter attached: radio id = %u  index = %u  Attached XMTRS = %d\n", rfunit[idx].radio_id, idx, attached_xmits[rfunit[idx].radio_id]);
     return resp;
 } // end attach_transmitter
 
@@ -159,46 +168,68 @@ char* attach_transmitter(CLIENT* client)
 char* parse_command(CLIENT* client, char* command)
 {
     _Bool  bDone = false;
+    int8_t index = command[0];
 
-    fprintf(stderr, "parse_command(Rx%d): [%02X] %u %u\n", client->receiver, (uint8_t)command[0], (uint8_t)command[1], (uint8_t)command[2]);
+    fprintf(stderr, "parse_command(idx): %u [%u] %u\n", (uint8_t)command[0], (uint8_t)command[1], (uint8_t)command[2]);
 
-    if (attached_rcvrs <= 0 && (uint8_t)command[0] < HQHARDWARE) return INVALID_COMMAND; // No valid receivers so abort commmand.
+    if (attached_rcvrs[0] <= 0 && (uint8_t)command[1] < HQHARDWARE && (uint8_t)command[1] != STARTRADIO && (uint8_t)command[1] != STOPRADIO)
+        return INVALID_COMMAND; // No valid receivers so abort commmand.
 
-    switch ((unsigned char)command[0])
+    switch ((uint8_t)command[1])
     {
-    case HATTACH:
+    case STARTRADIO:
+        bDone = true;
+        if (!radioStarted[(int8_t)command[2]])
+        {
+            radio = &discovered[(int8_t)command[2]]; // FIXME: radio may need to be an array
+            start_radio((int8_t)command[2]);
+            start_receivers((int8_t)command[2]);
+            radioStarted[(int8_t)command[2]] = true;
+        }
+        break;
+
+    case STOPRADIO:
+        bDone = true;
+        if (radioStarted[(int8_t)command[2]])
+        {
+            attached_xmits[(int8_t)command[2]] = 0;
+            attached_rcvrs[(int8_t)command[2]] = 0;
+            main_delete((int8_t)command[2]);
+            radioStarted[(int8_t)command[2]] = false;
+        }
+        break;
+
+    case HATTACHRX:
     {
         bDone = true;
-        command[0] = 0;
-        if ((unsigned char)command[1] == HTX)
-        {
-            if (client->radio_id == (int8_t)command[2])
-                return attach_transmitter(client);
-        }
-        else
-        {
-            int rx = (int)command[1];
-            radio_id = (short int)command[2];
-            if (client->receiver_state == RECEIVER_DETACHED)
-            {
-                radio = &discovered[radio_id];
-                start_radio(radio_id);
-            }
-            return attach_receiver(radio_id, rx, client);
-        }
+        uint8_t radio_id = (uint8_t)command[2];
+        rfunit[index].radio_id = radio_id;
+        init_receiver(index);
+        return attach_receiver(index);
+    }
+        break;
+
+    case HATTACHTX:
+    {
+        bDone = true;
+        uint8_t radio_id = (uint8_t)command[2];
+        rfunit[index].radio_id = radio_id;
+        attach_transmitter(index);
+        usleep(5000);
+        init_transmitter(index);
+        return OK;
     }
         break;
 
     case HDETACH:
     {
         bDone = true;
-        command[0] = 0;
-        int rx = (int)command[1];
-        radio_id = (short int)command[2];
-        fprintf(stderr, "Detach Rid: %d  Rx: %d\n", radio_id, rx);
-        fprintf(stderr, "%s\n", detach_receiver(radio_id, rx, client));
-        if (attached_rcvrs == 0)
-            main_delete(radio_id);
+        uint8_t radio_id = (uint8_t)command[2];
+        fprintf(stderr, "Detach Rid: %u  idx: %d\n", radio_id, index);
+        if (rfunit[index].isTx)
+            fprintf(stderr, "%s\n", detach_transmitter(index));
+        else
+            fprintf(stderr, "%s\n", detach_receiver(index));
     }
         break;
 
@@ -206,7 +237,6 @@ char* parse_command(CLIENT* client, char* command)
     {
      //   strcpy(command, "OK Hermes");
         fprintf(stderr, "Sending manifest.\n");
-        command[0] = 0;
         send_manifest = true;
         bDone = true;
         return 0;
@@ -215,48 +245,42 @@ char* parse_command(CLIENT* client, char* command)
 
     case SETPREAMP:
     {
-        preamp_cb((int)command[1]);
-        command[0] = 0;
+        preamp_cb(index, (int)command[2]);
         bDone = true;
     }
         break;
 
     case SETDITHER:
     {
-        dither_cb((int)command[1]);
-        command[0] = 0;
+        dither_cb(index, (int)command[2]);
         bDone = true;
     }
         break;
 
     case SETRANDOM:
     {
-        random_cb((int)command[1]);
-        command[0] = 0;
+        random_cb(index, (int)command[2]);
         bDone = true;
     }
         break;
 
     case SETPOWEROUT:
     {
-        set_tx_power((int)command[1]);
-        command[0] = 0;
+        set_tx_power((int8_t)command[2]);
         bDone = true;
     }
         break;
 
     case SETMICBOOST:
     {
-        mic_boost_cb((int)command[1]);
-        command[0] = 0;
+        mic_boost_cb((int)command[2]);
         bDone = true;
     }
         break;
 
     case SETRXANT:
     {
-        set_alex_rx_antenna((int)command[1]);
-        command[0] = 0;
+        set_alex_rx_antenna(index, (int)command[2]);
         bDone = true;
     }
         break;
@@ -264,12 +288,10 @@ char* parse_command(CLIENT* client, char* command)
     case HSETSAMPLERATE:
     {
         fprintf(stderr, "Setting sample rate.\n");
-        int rx = 0;
         long int r = 0;
         bDone = true;
-        command[0] = 0;
-        sscanf((const char*)(command+1), "%d %ld", &rx, &r);
-        receiver_change_sample_rate(receiver[rx], r);
+        sscanf((const char*)(command+2), "%ld", &r);
+        receiver_change_sample_rate(receiver[index], r);
     }
         break;
 
@@ -277,24 +299,22 @@ char* parse_command(CLIENT* client, char* command)
     {
         // set frequency
         bDone = true;
-        command[0] = 0;
         long long f = atol(command+2);
-        setFrequency(command[1], f);
+        setFrequency(index, f);
     }
         break;
 
     case HMOX:
     {
         bDone = true;
-        if (client->transmitter_state == TRANSMITTER_ATTACHED)
+        if (rfunit[index].attached)
         {
-            command[0] = 0;
-            if ((int)command[1] == mox) return INVALID_COMMAND;
-            if ((unsigned char)command[1] == 0 || (unsigned char)command[1] == 1)
+            if ((uint8_t)command[2] == mox) return INVALID_COMMAND;
+            if ((int8_t)command[2] == 0 || (int8_t)command[2] == 1)
             {
-                client->mox = (int)command[1];
-                mox = client->mox;
-                fprintf(stderr, "MOX received: %d\n", client->mox);
+                rfunit[index].mox = (uint8_t)command[2];
+                mox = rfunit[index].mox;
+                fprintf(stderr, "MOX received: %d\n", mox);
                 if (protocol == NEW_PROTOCOL)
                 {
                     schedule_high_priority();
@@ -304,7 +324,7 @@ char* parse_command(CLIENT* client, char* command)
                     else // prime FIFO
                     {
                         struct _txiq_entry *item;
-                        sem_wait(&txiq_semaphore);
+                        sem_wait(&txiq_semaphore[index]);
                         for (unsigned int i=0;i<3;i++)
                         {
                             item = malloc(sizeof(*item));
@@ -312,7 +332,7 @@ char* parse_command(CLIENT* client, char* command)
                             memset(item->buffer, 0, 512);
                             TAILQ_INSERT_TAIL(&txiq_buffer, item, entries);
                         }
-                        sem_post(&txiq_semaphore);
+                        sem_post(&txiq_semaphore[index]);
                     }
                 }
                 return OK;
@@ -332,7 +352,6 @@ char* parse_command(CLIENT* client, char* command)
     case SETLINEIN:
     {
         bDone = true;
-        command[0] = 0;
         if ((unsigned char)command[1] == 0 || (unsigned char)command[1] == 1)
             //////////         ozy_set_hermes_linein((unsigned char)command[1]);
             ;
@@ -344,7 +363,6 @@ char* parse_command(CLIENT* client, char* command)
     case SETLINEINGAIN:
     {
         bDone = true;
-        command[0] = 0;
  //       int a = atoi(command+1);
  //       linein_gain_cb(a);
         ////////        ozy_set_hermes_lineingain((unsigned char)atoi(command+1));
@@ -353,16 +371,14 @@ char* parse_command(CLIENT* client, char* command)
 
     case SETTXRELAY:
     {
-        command[0] = 0;
         bDone = true;
-        set_alex_tx_antenna((int)command[1]);
+        set_alex_tx_antenna((int)command[2]);
         ////////       ozy_set_alex_tx_relay((unsigned int)command[1]);
     }
         break;
 
     case SETOCOUTPUT:
     {
-        command[0] = 0;
         bDone = true;
         /////////       ozy_set_open_collector_outputs((int)command[1]);
     }
@@ -371,10 +387,8 @@ char* parse_command(CLIENT* client, char* command)
     case HSTARGETSERIAL:
     {
         static char buf[50];
-        command[0] = 0;
         bDone = true;
         ///////////     snprintf(buf, sizeof(buf), "OK %s\"- firmware %d\"", metis_ip_address(0), ozy_get_hermes_sw_ver());
-        command[0] = 0;
         return buf;
     }
         break;
@@ -382,7 +396,6 @@ char* parse_command(CLIENT* client, char* command)
     case GETADCOVERFLOW:
     {
         static char buf[50];
-        command[0] = 0;
         bDone = true;
         /////////snprintf(buf, sizeof(buf), "OK %d", ozy_get_adc_overflow());
         return buf;
@@ -391,11 +404,10 @@ char* parse_command(CLIENT* client, char* command)
 
     case SETATTENUATOR:
     {
-        command[0] = 0;
         bDone = true;
-        int a = atoi(command+1);
+        int a = atoi(command+2);
     //    adc[0].attenuation = -a;
-        set_alex_attenuation(0, a);
+        set_alex_attenuation(index, a);
         fprintf(stderr, "Att: %d\n", a);
         return OK;
     }
@@ -404,14 +416,13 @@ char* parse_command(CLIENT* client, char* command)
     case HSETRECORD:
     {
         bDone = true;
-        command[0] = 0;
-        if ((unsigned char)command[1] == 0 || (unsigned char)command[1] == 1)
+        if ((unsigned char)command[0] == 0 || (unsigned char)command[0] == 1)
         {
-            if ((unsigned char)command[1] == 1)
+            if ((unsigned char)command[2] == 1)
                 ////////                ozy_set_record("hpsdr.iq");
                 ;
             else
-                if ((unsigned char)command[1] == 0)
+                if ((unsigned char)command[2] == 0)
                     ////////               ozy_stop_record();
                     ;
                 else
@@ -431,8 +442,7 @@ char* parse_command(CLIENT* client, char* command)
     case HSTARTIQ:
     {
         bDone = true;
-        command[0] = 0;
-        client->iq_port = atoi(command+1);
+    //    client->iq_port = atoi(command+1);
         /*
         if (pthread_create(&receiver[client->receiver].audio_thread_id, NULL, audio_thread, client) != 0)
         {
@@ -449,16 +459,14 @@ char* parse_command(CLIENT* client, char* command)
     case HSTOPIQ:
     {
         bDone = true;
-        command[0] = 0;
-        client->iq_port = -1;
+//        client->iq_port = -1;
     }
         break;
 
     case HSTARTBANDSCOPE:
     {
         bDone = true;
-        command[0] = 0;
-        client->bs_port = atoi(command+1);
+//        client->bs_port = atoi(command+1);
         /////       attach_bandscope(client);
     }
         break;
@@ -466,8 +474,7 @@ char* parse_command(CLIENT* client, char* command)
     case HSTOPBANDSCOPE:
     {
         bDone = true;
-        command[0] = 0;
-        client->bs_port = -1;
+//        client->bs_port = -1;
         //////     detach_bandscope(client);
     }
         break;
@@ -475,7 +482,7 @@ char* parse_command(CLIENT* client, char* command)
     default:
         bDone = false;
         break;
-    }
+    } // switch
 
     if (bDone)
         return OK;
@@ -485,7 +492,7 @@ char* parse_command(CLIENT* client, char* command)
 } // parse_command
 
 
-void create_listener_thread(char *dsp_server_addr)
+void create_client_thread(char *dsp_server_addr)
 {
     pthread_t thread_id;
     int rc;
@@ -506,24 +513,40 @@ void* client_thread(void* arg)
 {
 //    CLIENT* client=(CLIENT*)arg;
     CLIENT* client;
-    char command[80];
+    char command[64];
     int bytes_read;
     char* response;
-    int s, rc, on;
+    char byte[1];
+    int8_t len = 0;
+    bool packet_started = false;
+    int csocket, rc, on, i = -1;
     struct sockaddr_in address;
     socklen_t command_length = sizeof(address);
 
-    for (int i=0;i<MAX_RECEIVERS;i++)
-        iqclient[i].socket = 0;
+    for (int i=0;i<35;i++) // max channels as defined dspserver
+        rfunit[i].client.socket = -1;
 
-    s = socket(AF_INET, SOCK_STREAM, 0);
-    if (s < 0)
+    TAILQ_INIT(&txiq_buffer);
+
+    sem_init(&client_semaphore, 0, 1);
+
+    for (int i=0;i<MAX_DEVICES;i++)
+    {
+        radioStarted[i] = false;
+        attached_rcvrs[i] = 0;
+        attached_xmits[i] = 0;
+        sem_init(&txiq_semaphore[i], 0, 1);
+    }
+
+    csocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (csocket < 0)
     {
         perror("Open socket failed.");
         exit(1);
     }
 
-    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+    setsockopt(csocket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+    fcntl(csocket, F_SETFL, O_NONBLOCK);  // set to non-blocking
 
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
@@ -531,83 +554,105 @@ void* client_thread(void* arg)
     address.sin_port = htons(COMMAND_PORT);
 
     // connect
-    rc = connect(s, (struct sockaddr*)&address, command_length);
-    if (rc < 0)
+    rc = connect(csocket, (struct sockaddr*)&address, command_length);
+    if (rc < 0 && errno != EINPROGRESS)
     {
         perror("command channel connect to DSP server failed.");
         exit(1);
     }
 
     client = malloc(sizeof(CLIENT));
-    client->socket = s;
+    client->socket = csocket;
     client->iq_length = command_length;
     client->iq_addr = address;
-    client->iq_port = -1;
-    client->bs_port = -1;
-    client->audio_port = -1;
-
-    client->receiver_state = RECEIVER_DETACHED;
-    client->transmitter_state = TRANSMITTER_DETACHED;
-    client->receiver = -1;
-    client->mox = 0;
-
+/*
+    rc = pthread_create(&ka_thread_id, NULL, keepalive_thread, (void*)(intptr_t)client->socket);
+    if (rc < 0)
+    {
+        perror("pthread_create keep-alive failed");
+        exit(1);
+    }
+*/
     fprintf(stderr, "command channel connected: %s:%d\n", inet_ntoa(client->iq_addr.sin_addr), ntohs(client->iq_addr.sin_port));
 
-    while (1)
+    while (1)  // To infinity and beyond!
     {
-        bytes_read = recv(client->socket, command, sizeof(command), 0);
+//        command[0] = -1;
+        sem_wait(&client_semaphore);
+        bytes_read = recv(client->socket, byte, 1, 0);
         if (bytes_read < 0)
-        {
-            break;
+        {  // recv error, exit program.
+            if (errno != EWOULDBLOCK)
+            {
+                sem_post(&client_semaphore);
+                fprintf(stderr, "command channel error: %s  (%d)\n", strerror(errno), errno);
+                break;
+            }
         }
-        if (command[0] == 0)
+        sem_post(&client_semaphore);
+
+        if (bytes_read == 0) // || command[0] < 0)
         {
-            fprintf(stderr, "Command byte 0\n");
-   //         continue;
+            usleep(1000);
+            continue;
         }
-        command[bytes_read] = 0;
+//fprintf(stderr,"%u ", (uint8_t)byte[0]);
+        if (packet_started)
+        {
+            if (i == -1)
+            {
+                len = (int8_t)byte[0];
+                i++;
+            }
+            else
+            {
+                command[i++] = (char)byte[0];
+            }
+            if (i < len)
+                continue;
+        }
+
+        if (byte[0] == 0x7f && !packet_started)
+        {
+            fprintf(stderr, "packet started\n");
+            i = -1;
+            packet_started = true;
+            continue;
+        }
+        if (!packet_started) continue;
+
+        packet_started = false;
+
         response = parse_command(client, command);
         if (send_manifest)
         {
             int len = strlen(discovered_xml)+1;
             fprintf(stderr, "XML Len: %d\n", len);
+            sem_wait(&client_semaphore);
             send(client->socket, (char*)&len, sizeof(int), 0);
-            send(client->socket, discovered_xml, strlen(discovered_xml)+1, 0);
+            send(client->socket, discovered_xml, len, 0);
+            sem_post(&client_semaphore);
             send_manifest = false;
         }
         else
         {
-            if (command[0] != 0)
-                send(client->socket, command, strlen(command), 0);
-            else
-                send(client->socket, response, strlen(response), 0);
+            sem_wait(&client_semaphore);
+            send(client->socket, response, strlen(response), 0);
+            sem_post(&client_semaphore);
             if (bytes_read > 0)
-                fprintf(stderr,"response(Rx%d): '%s'  '%s'\n", client->receiver, response, command);
+                fprintf(stderr,"response(idx): '%s'  '%u'\n", response, (uint8_t)command[1]);
         }
-    }
+        command[0] = -1;
+    } // while
 
-    if (client->receiver_state == RECEIVER_ATTACHED)
-    {
-  //      receiver[client->receiver]->client = (CLIENT*)NULL;
-    //    client->receiver_state = RECEIVER_DETACHED;
-       detach_receiver(client->radio_id, client->receiver, client);
-    }
-
-    if (client->transmitter_state == TRANSMITTER_ATTACHED)
-    {
-        client->transmitter_state = TRANSMITTER_DETACHED;
-    }
-
-    client->mox = 0;
-    client->bs_port = -1;
-    //    detach_bandscope(client);
+// Should only get here on recv error.
 
 #ifdef __linux__
-    close(client->socket);
+    close(csocket);
 #else
-    closesocket(client->socket);
+    closesocket(csocket);
 #endif
-    main_delete(radio_id);
+    main_delete(0);
 
     fprintf(stderr, "client disconnected: %s:%d\n\n\n", inet_ntoa(client->iq_addr.sin_addr), ntohs(client->iq_addr.sin_port));
 
@@ -617,51 +662,117 @@ void* client_thread(void* arg)
 } // end client_thread
 
 
-void init_receivers(int radio_id, int rx)
+void init_receiver(int8_t idx)
 {
     int on = 1;
     struct sockaddr_in cli_addr;
 
-    start_receivers(radio_id);
-
-    for (int i=0;i<active_receivers;i++)
+    rfunit[idx].client.socket = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (rfunit[idx].client.socket < 0)
     {
-        iqclient[i].socket = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
-        if (iqclient[i].socket < 0)
-        {
-            fprintf(stderr, "create rx_iq_socket failed for iq_socket: %d\n", i);
-            exit(1);
-        }
-
-        struct timeval read_timeout;
-        read_timeout.tv_sec = 0;
-        read_timeout.tv_usec = 10;
-        setsockopt(iqclient[i].socket, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
-        setsockopt(iqclient[i].socket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-
-        iqclient[i].iq_length = sizeof(cli_addr);
-        memset(&iqclient[i].iq_addr, 0, iqclient[i].iq_length);
-        iqclient[i].iq_addr.sin_family = AF_INET;
-        iqclient[i].iq_addr.sin_addr.s_addr = inet_addr(dsp_server_address);
-        iqclient[i].iq_addr.sin_port = htons(RX_IQ_PORT_0 + i);
-        iqclient[i].iq_port = RX_IQ_PORT_0 + i;
-        iqclient[i].bs_port = BANDSCOPE_PORT + radio_id;
-        fprintf(stderr, "Setup Rx%d IQ port: %d  Bandscope port: %d\n", i, iqclient[i].iq_port, iqclient[i].bs_port);
+        fprintf(stderr, "create rx_iq_socket failed for iq_socket: %d\n", idx);
+        exit(1);
     }
+
+    struct timeval read_timeout;
+    read_timeout.tv_sec = 0;
+    read_timeout.tv_usec = 10;
+    setsockopt(rfunit[idx].client.socket, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
+    setsockopt(rfunit[idx].client.socket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+
+    rfunit[idx].client.iq_length = sizeof(cli_addr);
+    memset(&rfunit[idx].client.iq_addr, 0, rfunit[idx].client.iq_length);
+    rfunit[idx].client.iq_addr.sin_family = AF_INET;
+    rfunit[idx].client.iq_addr.sin_addr.s_addr = inet_addr(dsp_server_address);
+    rfunit[idx].client.iq_addr.sin_port = htons(RX_IQ_PORT_0 + idx);
+    rfunit[idx].port = RX_IQ_PORT_0 + idx;
+    fprintf(stderr, "Setup Rx%d IQ port: %d  Bandscope port: %d\n", idx, rfunit[idx].port, BANDSCOPE_PORT + rfunit[idx].radio_id);
 } // end init_receivers
 
 
-void init_transmitter(unsigned int radio_id, int rx)
+/* Send RX IQ data to dspserver. */
+void send_IQ_buffer(int idx)
+{
+    struct sockaddr_in cli_addr;
+    socklen_t cli_length;
+    unsigned short offset = 0;
+    BUFFERL buffer;
+    int rc;
+
+    if (rfunit[idx].client.socket > -1)
+    {
+        // send the IQ buffer
+    //    fprintf(stderr, "Send to client: Rid: %d  rx: %d\n", rfunit[idx].radio_id, idx);
+        cli_length = sizeof(cli_addr);
+        memset((char*)&cli_addr, 0, cli_length);
+        cli_addr.sin_family = AF_INET;
+        cli_addr.sin_addr.s_addr = rfunit[idx].client.iq_addr.sin_addr.s_addr;
+        cli_addr.sin_port = htons(rfunit[idx].port);
+
+        buffer.radio_id = rfunit[idx].radio_id;
+        buffer.receiver = idx;
+        buffer.length = (receiver[idx]->buffer_size * 2) - offset; // FIXME: offset may not be needed
+        if (buffer.length > 2048) buffer.length = 2048;
+
+        memcpy((char*)buffer.data, (char*)receiver[idx]->iq_input_buffer, buffer.length*8);
+        rc = sendto(rfunit[idx].client.socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr*)&cli_addr, cli_length);
+        if (rc <= 0)
+        {
+            fprintf(stderr, "sendto failed for rx iq data: Rx%d ret=%d\n", idx, rc);
+            exit(1);
+        }
+    }
+} // end send_IQ_buffer
+
+
+/* Send Wideband IQ data to dspserver. */
+void send_WB_IQ_buffer(int idx)
+{
+    struct sockaddr_in cli_addr;
+    socklen_t cli_length;
+    BUFFERWB buffer;
+    int rc;
+    WIDEBAND *w = discovered[idx].wideband;
+
+    if (rfunit[idx].client.socket > -1)
+    {
+        // send the WB IQ buffer
+    //    printf("Send to client: %d  on port: %d\n", rx, rfunit[idx].client.bs_port);
+        cli_length = sizeof(cli_addr);
+        memset((char*)&cli_addr, 0, cli_length);
+        cli_addr.sin_family = AF_INET;
+        cli_addr.sin_addr.s_addr = rfunit[idx].client.iq_addr.sin_addr.s_addr;
+        cli_addr.sin_port = htons(BANDSCOPE_PORT + rfunit[idx].radio_id);
+
+        buffer.radio_id = rfunit[idx].radio_id;
+        buffer.receiver = idx;
+        buffer.length = 16384;
+
+        memcpy((char*)buffer.data, (char*)w->input_buffer, buffer.length*2);
+        rc = sendto(rfunit[idx].client.socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr*)&cli_addr, cli_length);
+        if (rc <= 0)
+        {
+            fprintf(stderr, "sendto failed for wb iq data\n");
+            exit(1);
+        }
+    }
+} // end send_WB_IQ_buffer
+
+
+void init_transmitter(int8_t idx)
 {
     int rc;
 
-    rc = pthread_create(&txiq_id, NULL, txiq_send, NULL);
+    // create thread that sends TX IQ stream to radio
+    rc = pthread_create(&txiq_id, NULL, txiq_send, (void*)(intptr_t)idx);
     if (rc < 0)
     {
         perror("pthread_create txiq_send thread failed");
         exit(1);
     }
-    rc = pthread_create(&tx_thread_id, NULL, tx_IQ_thread, (void*)(intptr_t)rx);
+
+    // create thread that receives TX IQ stream from dspserver
+    rc = pthread_create(&tx_thread_id, NULL, tx_IQ_thread, (void*)(intptr_t)idx);
     if (rc < 0)
     {
         perror("pthread_create mic_IQ_thread failed");
@@ -674,6 +785,7 @@ void init_transmitter(unsigned int radio_id, int rx)
 /* Send MIC audio to dspserver. */
 void send_Mic_buffer(float sample)
 {
+    // FIXME: may need to be changed to allow multiple attached transmitters
     struct sockaddr_in cli_addr;
     socklen_t cli_length;
     int mic_socket;
@@ -701,18 +813,18 @@ void send_Mic_buffer(float sample)
     memset((char*)&cli_addr, 0, cli_length);
     cli_addr.sin_family = AF_INET;
     cli_addr.sin_addr.s_addr = inet_addr(dsp_server_address);
-    cli_addr.sin_port = htons(MIC_AUDIO_PORT + radio_id);
+    cli_addr.sin_port = htons(MIC_AUDIO_PORT); // + rfunit[0].radio_id);
 
-    buffer.radio_id = radio_id;
+    buffer.radio_id = rfunit[0].radio_id;
     buffer.tx = 0;
     buffer.length = 512 * sizeof(float);
 
-    if (iqclient[0].socket != -1)
+    if (mic_socket > -1)
     {
         rc = sendto(mic_socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr*)&cli_addr, cli_length);
         if (rc <= 0)
         {
-            fprintf(stderr, "sendto failed for mic data on port %d", MIC_AUDIO_PORT + radio_id);
+            fprintf(stderr, "sendto failed for mic data on port %u", MIC_AUDIO_PORT);
             exit(1);
         }
     }
@@ -720,82 +832,11 @@ void send_Mic_buffer(float sample)
 } // end send_Mic_buffer
 
 
-/* Send RX IQ data to dspserver. */
-void send_IQ_buffer(int rx)
-{
-    struct sockaddr_in cli_addr;
-    socklen_t cli_length;
-    unsigned short offset = 0;
-    BUFFERL buffer;
-    int rc;
-
-    if (iqclient[rx].socket <= 0) return;
-    if (iqclient[rx].socket != -1)
-    {
-        // send the IQ buffer
-     //   fprintf(stderr, "Send to client: Rid: %d  rx: %d\n", radio_id, rx);
-        cli_length = sizeof(cli_addr);
-        memset((char*)&cli_addr, 0, cli_length);
-        cli_addr.sin_family = AF_INET;
-        cli_addr.sin_addr.s_addr = iqclient[rx].iq_addr.sin_addr.s_addr;
-        cli_addr.sin_port = htons(iqclient[rx].iq_port);
-
-        buffer.radio_id = radio_id;
-        buffer.receiver = rx;
-        buffer.length = (receiver[rx]->buffer_size * 2) - offset;
-        if (buffer.length > 2048) buffer.length = 2048;
-
-        memcpy((char*)buffer.data, (char*)receiver[rx]->iq_input_buffer, buffer.length*8);
-        rc = sendto(iqclient[rx].socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr*)&cli_addr, cli_length);
-        if (rc <= 0)
-        {
-            fprintf(stderr, "sendto failed for rx iq data: Rx%d ret=%d\n", rx, rc);
-            exit(1);
-        }
-    }
-} // end send_IQ_buffer
-
-
-/* Send Wideband IQ data to dspserver. */
-void send_WB_IQ_buffer(int rx)
-{
-    struct sockaddr_in cli_addr;
-    socklen_t cli_length;
-    BUFFERWB buffer;
-    int rc;
-    WIDEBAND *w = discovered[rx].wideband;
-
-    if (iqclient[rx].socket <= 0) return;
-    if (iqclient[rx].socket != -1)
-    {
-        // send the WB IQ buffer
-    //    printf("Send to client: %d  on port: %d\n", rx, iqclient[rx].bs_port);
-        cli_length = sizeof(cli_addr);
-        memset((char*)&cli_addr, 0, cli_length);
-        cli_addr.sin_family = AF_INET;
-        cli_addr.sin_addr.s_addr = iqclient[rx].iq_addr.sin_addr.s_addr;
-        cli_addr.sin_port = htons(iqclient[rx].bs_port);
-
-        buffer.radio_id = radio_id;
-        buffer.receiver = rx;
-        buffer.length = 16384;
-      //  if (buffer.length > 2048) buffer.length = 2048;
-
-        memcpy((char*)buffer.data, (char*)w->input_buffer, buffer.length*2);
-        rc = sendto(iqclient[rx].socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr*)&cli_addr, cli_length);
-        if (rc <= 0)
-        {
-            fprintf(stderr, "sendto failed for wb iq data\n");
-            exit(1);
-        }
-    }
-} // end send_WB_IQ_buffer
-
-
 /* Send TX IQ to radio */
 void* txiq_send(void* arg)
 {
     struct _txiq_entry *item;
+    int8_t idx = (intptr_t)arg;
     int old_state, old_type;
     double buffer[64];
     long isample;
@@ -816,13 +857,13 @@ void* txiq_send(void* arg)
          break;
     }
 
-    while (attached_xmits)
+    while (attached_xmits[rfunit[idx].radio_id] > 0)
     {
         double is, qs;
 
-        sem_wait(&txiq_semaphore);
+        sem_wait(&txiq_semaphore[idx]);
         item = TAILQ_FIRST(&txiq_buffer);
-        sem_post(&txiq_semaphore);
+        sem_post(&txiq_semaphore[idx]);
         if (item == NULL)
         {
             usleep(100);
@@ -836,7 +877,8 @@ void* txiq_send(void* arg)
             {
                 qs = buffer[j*2];
                 is = buffer[(j*2)+1];
-            } else
+            }
+            else
             {
                 is = buffer[j*2];
                 qs = buffer[(j*2)+1];
@@ -855,9 +897,9 @@ void* txiq_send(void* arg)
                 break;
             }
         }
-        sem_wait(&txiq_semaphore);
+        sem_wait(&txiq_semaphore[idx]);
         TAILQ_REMOVE(&txiq_buffer, item, entries);
-        sem_post(&txiq_semaphore);
+        sem_post(&txiq_semaphore[idx]);
         free(item->buffer);
         free(item);
     }
@@ -872,7 +914,7 @@ void* tx_IQ_thread(void* arg)
     struct sockaddr_in cli_addr;
     struct _txiq_entry *item;
     socklen_t cli_length;
-    int rx = (intptr_t)arg;
+    int8_t idx = (intptr_t)arg;
     int old_state, old_type;
     int bytes_read;
     BUFFER buffer;
@@ -881,26 +923,40 @@ void* tx_IQ_thread(void* arg)
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &old_state);
     pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &old_type);
 
-    if (iqclient[rx].socket != -1)
+    if (rfunit[idx].client.socket == -1)
     {
+        rfunit[idx].client.socket = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if (rfunit[idx].client.socket < 0)
+        {
+            fprintf(stderr, "create tx_iq_socket failed for iq_socket: %d\n", idx);
+            exit(1);
+        }
+        struct timeval read_timeout;
+        read_timeout.tv_sec = 0;
+        read_timeout.tv_usec = 10;
+        setsockopt(rfunit[idx].client.socket, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
+
         cli_length = sizeof(cli_addr);
         memset((char*)&cli_addr, 0, cli_length);
         cli_addr.sin_family = AF_INET;
-        cli_addr.sin_addr.s_addr = iqclient[rx].iq_addr.sin_addr.s_addr;
-        cli_addr.sin_port = htons(TX_IQ_PORT_0 + radio_id);
+        cli_addr.sin_addr.s_addr = inet_addr(dsp_server_address);
+        cli_addr.sin_port = htons(TX_IQ_PORT_0); // + attached_xmits[idx] - 1);
 
-        fprintf(stderr, "connection to rx %d tx IQ on port %d\n", rx, TX_IQ_PORT_0 + radio_id);
+        fprintf(stderr, "connection to TX index %u tx IQ on port %d\n", idx, TX_IQ_PORT_0);
     }
-    sendto(iqclient[rx].socket, (char*)&buf, sizeof(buf), 0, (struct sockaddr*)&cli_addr, cli_length);
-    sleep(2);
-    sendto(iqclient[rx].socket, (char*)&buf, sizeof(buf), 0, (struct sockaddr*)&cli_addr, cli_length);
 
-    while (attached_xmits)
+    // this will setup UDP port from dspserver. FIXME: I don't like this method as it can hang on the dspserver side.
+    sendto(rfunit[idx].client.socket, (char*)&buf, sizeof(buf), 0, (struct sockaddr*)&cli_addr, cli_length);
+    sleep(2);
+    sendto(rfunit[idx].client.socket, (char*)&buf, sizeof(buf), 0, (struct sockaddr*)&cli_addr, cli_length);
+    fprintf(stderr, "sent TX sync bytes to dspserver\n");
+
+    while (attached_xmits[rfunit[idx].radio_id] > 0)
     {
-        if (iqclient[rx].socket != -1)
+        if (rfunit[idx].client.socket > -1)
         {
-            // get audio from DSP server
-            bytes_read = recvfrom(iqclient[rx].socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr*)&cli_addr, &cli_length);
+            // get TX IQ from DSP server
+            bytes_read = recvfrom(rfunit[idx].client.socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr*)&cli_addr, &cli_length);
             if (bytes_read < 0)
             {
              //   perror("recvfrom socket failed for tx IQ buffer");
@@ -911,12 +967,55 @@ void* tx_IQ_thread(void* arg)
                 item = malloc(sizeof(*item));
                 item->buffer = malloc(512);
                 memcpy(item->buffer, (char*)&buffer.data, 512);
-                sem_wait(&txiq_semaphore);
+                sem_wait(&txiq_semaphore[idx]);
                 TAILQ_INSERT_TAIL(&txiq_buffer, item, entries);
-                sem_post(&txiq_semaphore);
+                sem_post(&txiq_semaphore[idx]);
             }
         }
     }
     fprintf(stderr, "tx iq thread closed.\n");
     return NULL;
 } // end tx_IQ_thread
+
+
+void* keepalive_thread(void* arg)
+{
+    int socket = (intptr_t)arg;
+    int bytes_read = 0;
+    char command[13], response[64];
+
+    sleep(10);
+    sprintf(command, "keepalive 0");
+    while (1)
+    {
+        sem_wait(&client_semaphore);
+        if (send(socket, response, strlen(response), 0) < 0)
+        {
+            sem_post(&client_semaphore);
+            fprintf(stderr, "keepalive failed, client vanished\n");
+            exit(1);
+        }
+
+        bytes_read = recv(socket, command, 13, 0);
+        if (bytes_read < 0)
+        {  // recv error, exit program.
+            if (errno != EWOULDBLOCK)
+            {
+                sem_post(&client_semaphore);
+                fprintf(stderr, "command channel error: %s  (%d)\n", strerror(errno), errno);
+                exit(1);
+            }
+        }
+        sem_post(&client_semaphore);
+
+        if (bytes_read > 0)
+        {
+            if (strcmp(command, "OK") != 0)
+            {
+                fprintf(stderr, "command channel error\n");
+                exit(1);
+            }
+        }
+        sleep(5);
+    }
+} // end keepalive_thread

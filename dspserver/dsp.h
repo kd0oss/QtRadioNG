@@ -27,6 +27,15 @@ extern float txfwd;
 extern float txref;
 extern float meter;
 
+extern void runXanbEXT(int8_t ch, double *data);
+extern void runXnobEXT(int8_t ch, double *data);
+extern int runFexchange0(int8_t ch, double *data, double *dataout);
+extern void runSpectrum0(int8_t ch, double *data);
+extern int runGetPixels(int8_t ch, float *data);
+extern void runRXAGetaSipF1(int8_t ch, float *data, int samples);
 extern void process_tx_iq_data(int channel, double *mic_buf, double *tx_IQ);
+extern void shutdown_client_channels(struct _client_entry *current_item);
+extern void shutdown_wideband_channels(struct _client_entry *item);
+extern void wb_destroy_analyzer(int8_t ch);
 extern char *dsp_command(struct _client_entry*, unsigned char*);
 #endif

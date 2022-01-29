@@ -10,6 +10,7 @@ HermesFrame::HermesFrame(UI *pUI, QWidget *parent) : QFrame(parent), ui(new Ui::
     tuning = false;
     pui = pUI;
 
+    radio_id = -1;
     currentRxChannel = -1;
     currentTxChannel = -1;
 
@@ -109,14 +110,33 @@ HermesFrame::HermesFrame(UI *pUI, QWidget *parent) : QFrame(parent), ui(new Ui::
     connect(ui->hhTxAnt1Radio, SIGNAL(released()), this, SLOT(setTxRelay()));
     connect(ui->hhTxAnt2Radio, SIGNAL(released()), this, SLOT(setTxRelay()));
     connect(pUI, SIGNAL(tuningEnable(bool)), this, SLOT(tuningEnabled(bool)));
+
+    itimer = new QTimer(this);
+    itimer->setSingleShot(true);
+    connect(itimer, SIGNAL(timeout()), this, SLOT(initialize()));
 } // end constructor
 
 
 HermesFrame::~HermesFrame()
 {
+    delete itimer;
     delete settings;
     delete ui;
 } // end destructor
+
+
+void HermesFrame::initializeRadio(void)
+{
+    QByteArray command;
+
+    command.clear();
+    command.append((char)currentRxChannel);
+    command.append((char)STARCOMMAND);
+    command.append((char)STARTRADIO);
+    command.append((char)radio_id);
+    emit hhcommand(command);
+    itimer->start(1000);
+} // end initializeRadio
 
 
 void HermesFrame::initialize(void)
@@ -125,6 +145,19 @@ void HermesFrame::initialize(void)
     setRxAntenna();
     setTxRelay();
 } // end initialize
+
+
+void HermesFrame::shutDown(void)
+{
+    QByteArray command;
+
+    command.clear();
+    command.append((char)currentRxChannel);
+    command.append((char)STARCOMMAND);
+    command.append((char)STOPRADIO);
+    command.append((char)radio_id);
+    emit hhcommand(command);
+} // end shutDown
 
 
 void HermesFrame::tuneClicked(void)

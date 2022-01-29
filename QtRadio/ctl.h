@@ -50,7 +50,6 @@ public:
     int audioGain;
     void loadSettings(QSettings* settings);
     void saveSettings(QSettings* settings);
-    void setCurrentChannel(int);
 
     QProgressBar *micBar;
 

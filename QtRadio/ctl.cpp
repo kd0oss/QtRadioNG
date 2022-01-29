@@ -146,8 +146,3 @@ void Ctl::setAudioMute(bool muted)
     ui->btnMute->setChecked(muted);
     ui->audioSlider->setEnabled(!muted);
 } // end setAudioMute
-
-void Ctl::setCurrentChannel(int channel)
-{
-    ui->currentChannelLabel->setText(QString("%1").arg(channel));
-} // end setCurrentChannel

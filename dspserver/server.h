@@ -202,6 +202,7 @@ typedef enum {
 typedef struct _xcvr
 {
     int8_t    radio_id;
+    int8_t    connection;
     char      radio_type[25];
     char      ip_address[16];
     char      mac_address[18];
@@ -230,7 +231,7 @@ typedef struct _spectrum
 typedef struct _channel
 {
     int8_t    id;
-    XCVR     radio;
+    XCVR      radio;
     SPECTRUM  spectrum;
     int8_t    dsp_channel;
     int8_t    index;
@@ -256,9 +257,9 @@ void tx_init(void);
 void spectrum_init(void);
 void initAnalyzer(int, int, int, int);
 void enable_wideband(int8_t, bool);
-void widebandInitAnalyzer(int, int);
-void spectrum_timer_init(void);
-void wideband_timer_init(void);
+int widebandInitAnalyzer(int, int);
+void spectrum_timer_init(int);
+void wideband_timer_init(int);
 void *spectrum_thread(void *);
 void *memory_thread(void *);
 void client_set_timing(void);

@@ -563,14 +563,14 @@ PanadapterScene::PanadapterScene(QObject *parent) : QGraphicsScene(parent)
 
 /*****************************************************************************/
 
+//Panadapter::Panadapter()
+//{
+//}
+
+
 Panadapter::Panadapter()
 {
-}
-
-
-Panadapter::Panadapter(QWidget*& widget)
-{
-    QGraphicsView::setParent(widget);
+//    QGraphicsView::setParent(widget);
 
     //qDebug() << "Panadapter::Panadapter " << width() << ":" << height();
 
@@ -638,14 +638,15 @@ Panadapter::Panadapter(QWidget*& widget)
     notchFilterDeleteAction->setToolTip("Delete selected notch filter.");
     connect(notchFilterDeleteAction, SIGNAL(triggered()), this, SLOT(deleteNotchFilter()));
 
-    panadapterScene->update();
-
     panadapterScene->spectrumPlot = new spectrumObject(2000, height()/2);
     panadapterScene->waterfallItem = new waterfallObject(2000, height()/2);
-    splitViewBoundary = panadapterScene->height()/2;
+    splitViewBoundary = height()/2;
+
+    panadapterScene->update();
 
     updateNfTimer = new QTimer(this);
     connect(updateNfTimer, SIGNAL(timeout()), this, SLOT(updateNotchFilter()));
+    setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
     QScrollBar *sb = horizontalScrollBar();
     connect(sb, SIGNAL(sliderReleased()), this, SLOT(drawdBmLines()));
@@ -668,6 +669,9 @@ void Panadapter::resizeEvent(QResizeEvent *event)
         splitViewBoundary = (height() / 2) - 3;
         if (!initialized) return;
     }
+    panadapterScene->spectrumPlot->plotHeight = height() / 2;
+    panadapterScene->waterfallItem->itemHeight = height() / 2;
+    panadapterScene->setSceneRect(0.0, 0.0, 2000.0, height());
     drawFrequencyLines();
     drawdBmLines();
     drawBandLimits();

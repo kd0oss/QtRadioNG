@@ -206,32 +206,13 @@
        <number>0</number>
       </property>
       <item>
-       <widget class="Panadapter" name="spectrumView">
-        <property name="minimumSize">
-         <size>
-          <width>775</width>
-          <height>365</height>
-         </size>
-        </property>
-        <property name="maximumSize">
-         <size>
-          <width>16777215</width>
-          <height>16777215</height>
-         </size>
-        </property>
-        <property name="frameShape">
-         <enum>QFrame::StyledPanel</enum>
-        </property>
-        <property name="frameShadow">
-         <enum>QFrame::Sunken</enum>
-        </property>
-       </widget>
+       <layout class="QVBoxLayout" name="spectrumLayout"/>
       </item>
       <item>
        <widget class="QSlider" name="zoomSpectrumSlider">
         <property name="minimumSize">
          <size>
-          <width>17</width>
+          <width>21</width>
           <height>0</height>
          </size>
         </property>
@@ -341,7 +322,7 @@
                 <x>0</x>
                 <y>0</y>
                 <width>461</width>
-                <height>215</height>
+                <height>284</height>
                </rect>
               </property>
               <layout class="QHBoxLayout" name="horizontalLayout_5">
@@ -488,34 +469,6 @@
            <string>+TNF</string>
           </property>
          </widget>
-         <widget class="QSlider" name="agcTLevelSlider">
-          <property name="geometry">
-           <rect>
-            <x>18</x>
-            <y>150</y>
-            <width>111</width>
-            <height>23</height>
-           </rect>
-          </property>
-          <property name="toolTip">
-           <string extracomment="AGC max gain">Variable fixed gain control.</string>
-          </property>
-          <property name="minimum">
-           <number>-20</number>
-          </property>
-          <property name="maximum">
-           <number>120</number>
-          </property>
-          <property name="value">
-           <number>31</number>
-          </property>
-          <property name="sliderPosition">
-           <number>31</number>
-          </property>
-          <property name="orientation">
-           <enum>Qt::Horizontal</enum>
-          </property>
-         </widget>
          <widget class="QWidget" name="widget" native="true">
           <property name="geometry">
            <rect>
@@ -537,38 +490,6 @@
             <height>16777215</height>
            </size>
           </property>
-          <widget class="QLabel" name="label">
-           <property name="geometry">
-            <rect>
-             <x>15</x>
-             <y>0</y>
-             <width>43</width>
-             <height>16</height>
-            </rect>
-           </property>
-           <property name="text">
-            <string>AGC-T:</string>
-           </property>
-          </widget>
-          <widget class="QLabel" name="agcTLevelLabel">
-           <property name="geometry">
-            <rect>
-             <x>70</x>
-             <y>0</y>
-             <width>41</width>
-             <height>16</height>
-            </rect>
-           </property>
-           <property name="toolTip">
-            <string extracomment="AGC max gain/threshold"/>
-           </property>
-           <property name="text">
-            <string>31</string>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignCenter</set>
-           </property>
-          </widget>
          </widget>
         </widget>
        </item>
@@ -1432,11 +1353,6 @@
    <extends>QFrame</extends>
    <header>ctl.h</header>
    <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>Panadapter</class>
-   <extends>QGraphicsView</extends>
-   <header location="global">Panadapter.h</header>
   </customwidget>
  </customwidgets>
  <resources/>

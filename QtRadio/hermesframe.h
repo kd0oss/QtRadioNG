@@ -23,16 +23,19 @@ class HermesFrame : public QFrame
 public:
     explicit HermesFrame(UI *pUI, QWidget *parent = 0);
     ~HermesFrame();
-    void initialize(void);
+    void initializeRadio(void);
+    void shutDown(void);
 
-    int currentRxChannel;
-    int currentTxChannel;
+    int8_t radio_id;
+    int8_t currentRxChannel;
+    int8_t currentTxChannel;
 
 private:
     Ui::HermesFrame *ui;
     bool tuning;
     UI *pui;
     QSettings *settings;
+    QTimer *itimer;
 
     void getSerial(void);
 
@@ -51,6 +54,7 @@ private slots:
     void setOCOutputs(void);
     void attSliderChanged(void);
     void tuneClicked(void);
+    void initialize(void);
 
 signals:
     void hhcommand(QByteArray);

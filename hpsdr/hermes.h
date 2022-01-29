@@ -20,7 +20,7 @@
 #define HERMES_H
 
 enum HCOMMAND_SET {
-    SETPREAMP = 0,
+    SETPREAMP = 1,
     SETMICBOOST,
     SETPOWEROUT,
     SETRXANT,
@@ -32,6 +32,8 @@ enum HCOMMAND_SET {
     SETOCOUTPUT,
     GETADCOVERFLOW,
     SETATTENUATOR,
+    STARTRADIO,
+    STOPRADIO,
 
     // Below commands shared in common.h. Do not change without changing there as well.
     HQHARDWARE = 239,
@@ -44,8 +46,8 @@ enum HCOMMAND_SET {
     HSETSAMPLERATE = 246,
     HSETRECORD = 247,
     HSETFREQ = 248,
-    HATTACH = 249,
-    HTX = 250,
+    HATTACHRX = 249,
+    HATTACHTX = 250,
     HDETACH = 251,
     HSTARTIQ = 252,
     HSTOPIQ = 253,

@@ -41,7 +41,15 @@ extern int sample_rate;
 extern int zoom;
 extern int low, high;
 extern sem_t bufferevent_semaphore,
+             iq_semaphore,
              audio_bufevent_semaphore;
+
+int8_t active_receivers = 0;
+int8_t active_transmitters = 0;
+
+extern timer_t spectrum_timerid[MAX_CHANNELS];
+extern float *widebandBuffer[5];
+
 
 float getFilterSizeCalibrationOffset()
 {
@@ -189,8 +197,16 @@ void initAnalyzer(int disp, int pixels, int frame_rate, int blocksize)
 } // end initAnalyzer
 
 
-void widebandInitAnalyzer(int disp, int pixels)
+int widebandInitAnalyzer(int disp, int pixels)
 {
+    int result=0;
+
+    XCreateAnalyzer(disp, &result, 262144, 1, 1, "");
+    if (result != 0)
+    {
+        printf("XCreateAnalyzer channel=%d failed: %d\n", disp, result);
+        return result;
+    }
     //maximum number of frames of pixels to average
     //   int frame_rate = 15;
     int frame_rate = 10;
@@ -237,18 +253,124 @@ void widebandInitAnalyzer(int disp, int pixels)
                 span_min_freq,
                 span_max_freq,
                 max_w);
+
+    SetDisplayDetectorMode(disp, 0, DETECTOR_MODE_AVERAGE/*display_detector_mode*/);
+    SetDisplayAverageMode(disp, 0,  AVERAGE_MODE_LOG_RECURSIVE/*display_average_mode*/);
     fprintf(stderr, "Wideband analyzer created.\n");
+    return 0;
 } // end windbandInitAnalyzer
+
+
+void wb_destroy_analyzer(int8_t ch)
+{
+    DestroyAnalyzer(ch);
+} // end wb_destroy_analyzer
+
+
+void shutdown_client_channels(struct _client_entry *current_item)
+{
+    for (int i=0;i<MAX_CHANNELS;i++)
+    {
+        if (current_item->channel_enabled[i])
+        {
+            sem_wait(&iq_semaphore);
+            if (channels[i].isTX)
+                active_transmitters--;
+            else
+                active_receivers--;
+            sem_post(&iq_semaphore);
+
+            sem_wait(&bufferevent_semaphore);
+            current_item->channel_enabled[i] = false;
+            if (channels[i].enabled)
+            {
+                DestroyAnalyzer(channels[i].dsp_channel);
+                CloseChannel(channels[i].dsp_channel);
+                channels[i].enabled = false;
+            }
+            sem_post(&bufferevent_semaphore);
+
+            if (active_receivers == 0 && active_transmitters == 0)
+                setStopIQIssued(1);
+            fprintf(stderr, "STOPALLCLIENT: Channel %d closed.\n", i);
+        }
+    }
+} // end shutdown_client_channels
+
+
+void shutdown_wideband_channels(struct _client_entry *item)
+{
+    for (int i=0;i<MAX_CHANNELS;i++)
+    {
+        if (item->channel_enabled[i] && channels[i].spectrum.type == BS)
+        {
+            channels[i].enabled = false;
+            DestroyAnalyzer(WIDEBAND_CHANNEL-channels[i].radio.radio_id);
+            if (widebandBuffer[channels[i].radio.radio_id] != NULL)
+            {
+                free(widebandBuffer[channels[i].radio.radio_id]);
+                widebandBuffer[channels[i].radio.radio_id] = NULL;
+            }
+        }
+    }
+} // end shutdown_wideband_channels
+
+
+void runXanbEXT(int8_t ch, double *data)
+{
+    xanbEXT(channels[ch].dsp_channel, data, data);
+} // end runXanbEXT
+
+
+void runXnobEXT(int8_t ch, double *data)
+{
+    xnobEXT(channels[ch].dsp_channel, data, data);
+} // end runNobEXT
+
+
+int runFexchange0(int8_t ch, double *data, double *dataout)
+{
+    int err=0;
+    fexchange0(channels[ch].dsp_channel, data, dataout, &err);
+    return err;
+} // endFexchange0
+
+
+void runSpectrum0(int8_t ch, double *data)
+{
+    Spectrum0(1, channels[ch].dsp_channel, 0, 0, data);
+} // end runSpectrum0
+
+
+int runGetPixels(int8_t ch, float *data)
+{
+    int flag=0;
+    GetPixels(channels[ch].dsp_channel, 0, data, &flag);
+    return flag;
+} // end runGetPixels
+
+
+void runRXAGetaSipF1(int8_t ch, float *data, int samples)
+{
+    RXAGetaSipF1(channels[ch].dsp_channel, data, samples);
+} // end runRXAGetaSipF1
 
 
 void process_tx_iq_data(int channel, double *mic_buf, double *tx_IQ)
 {
     int error = 0;
 
+    sem_wait(&iq_semaphore);
+    if (active_transmitters == 0)
+    {
+        sem_post(&iq_semaphore);
+        return;
+    }
     fexchange0(channels[channel].dsp_channel, mic_buf, tx_IQ, &error);
     if (error != 0)
         fprintf(stderr, "TX Error Ch: %d:  Error: %d\n", channel, error);
     Spectrum0(1, channels[channel].dsp_channel, 0, 0, tx_IQ);
+    sem_post(&iq_semaphore);
 } // end process_tx_iq_data
 
 
@@ -264,7 +386,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
     if (message[1] == STARCOMMAND)
     {
         fprintf(stderr,"HARDWARE DIRECTED: ");
-        fprintf(stderr, "Message for Ch: %d  [%X] [%d]\n", ch, (int8_t)message[1], (int8_t)message[2]);
+        fprintf(stderr, "Message for Ch: %d  [%u] [%u]\n", ch, (uint8_t)message[1], (uint8_t)message[2]);
         if (current_item->client_type[ch] == CONTROL)
         {
             // if privilged client, forward the message to the hardware
@@ -278,24 +400,13 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
                 {
                     unsigned char command[64];
                     command[0] = DETACH;
-                    command[1] = (char)channels[ch].index;
-                    command[2] = (char)channels[ch].radio.radio_id;
-                    hwSendStarCommand(command, 3);
-          /*          setStopIQIssued(1); //FIXME: Need a more selective method of doing this. This won't work with multiple clients.
-                    sleep(1);
-                    sem_wait(&bufferevent_semaphore);
-                    if (channels[ch].enabled)
-                    {
-                        DestroyAnalyzer(channels[ch].dsp_channel);
-                        CloseChannel(channels[ch].dsp_channel);
-                        channels[ch].enabled = false;
-                    }
-                    sem_post(&bufferevent_semaphore);
-           */
+                    //command[1] = (char)channels[ch].index;
+                    command[1] = (char)channels[ch].radio.radio_id;
+                    hwSendStarCommand(ch, command, 2);
                     fprintf(stderr, "** Channel %d detached. **\n", ch);
                 }
                 else
-                    hwSendStarCommand(message+1, 63);
+                    hwSendStarCommand(ch, message+2, 62);
             }
             /////                answer_question(message, role, bev);
         }
@@ -433,7 +544,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
     }
     else
     {
-        fprintf(stderr, "Message for ch: %d -> [%d] [%d] [%d]\n", (int8_t)message[0], (int8_t)message[1], (int8_t)message[2], (int8_t)message[3]);
+        fprintf(stderr, "Message for ch: %d -> [%u] [%u] [%u]\n", (uint8_t)message[0], (uint8_t)message[1], (uint8_t)message[2], (uint8_t)message[3]);
         switch ((uint8_t)message[1])
         {
         case SETMAIN:
@@ -513,9 +624,13 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
                 calculate_display_average(rx);
 
                 SetChannelState(rx, 1, 1);
+                sem_wait(&iq_semaphore);
                 channels[ch].enabled = true;
                 current_item->channel_enabled[ch] = true;
-                //active_channels++;
+                active_receivers++;
+                sem_post(&iq_semaphore);
+                spectrum_timer_init(ch);
+                hw_startIQ(ch);
             }
             else
             {
@@ -584,14 +699,28 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
                 SetDisplayAverageMode(tx, 0, AVERAGE_MODE_NONE/*display_average_mode*/);
 
                 channels[ch].spectrum.sample_rate = 48000;
+                sem_wait(&iq_semaphore);
                 channels[ch].enabled = true;
                 current_item->channel_enabled[ch] = true;
+                active_transmitters++;
+                sem_post(&iq_semaphore);
+                spectrum_timer_init(ch);
+                hw_startIQ(ch);
             }
         }
             break;
 
         case STOPXCVR:
         {
+            timer_delete(spectrum_timerid[ch]);
+            usleep(5000);
+            sem_wait(&iq_semaphore);
+            if (channels[ch].isTX)
+                active_transmitters--;
+            else
+                active_receivers--;
+            sem_post(&iq_semaphore);
+
             sem_wait(&bufferevent_semaphore);
             current_item->channel_enabled[ch] = false;
             if (channels[ch].enabled)
@@ -601,8 +730,8 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
                 channels[ch].enabled = false;
             }
             sem_post(&bufferevent_semaphore);
-            active_channels--;
-            if (active_channels == 0)
+
+            if (active_receivers == 0 && active_transmitters == 0)
                 setStopIQIssued(1);
             fprintf(stderr, "STOPXCVR: Channel %d closed.\n", ch);
         }
@@ -610,7 +739,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
 
         case STARTIQ:
         {
-            hw_startIQ(ch);
+    //        hw_startIQ(ch);
             fprintf(stderr, "************** IQ thread started for Channel: %d\n", ch);
         }
             break;
@@ -1646,7 +1775,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
 
             channels[ch].radio.mox = mox;
 
-            if (mox)
+            if (mox)  // FIXME: Need to make some changes for full duplex operation.
             {
                 for (int i=0;i<MAX_CHANNELS;i++)
                 {
@@ -1654,11 +1783,11 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
                         SetChannelState(channels[i].dsp_channel, 0, 1);
                 }
                 SetChannelState(channels[ch].dsp_channel, 1, 0);
-                hwSetMox(mox);
+                hwSetMox(ch, mox);
             }
             else
             {
-                hwSetMox(mox);
+                hwSetMox(ch, mox);
                 SetChannelState(channels[ch].dsp_channel, 0, 1);
                 for (int i=0;i<MAX_CHANNELS;i++)
                 {

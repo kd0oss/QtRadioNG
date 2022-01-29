@@ -81,6 +81,7 @@ public:
     QImage image;
     bool bMox;
     bool bConnected;
+    int itemHeight;
 
 public slots:
     void updateWaterfall(char*, int, int);
@@ -89,7 +90,6 @@ private:
     uint calculatePixel(int sample);
 
     int itemWidth;
-    int itemHeight;
 
     float* samples;
     int waterfallHigh;
@@ -120,10 +120,10 @@ public:
     QRectF  boundingRect() const;
     int     itemType;
     int8_t  currentChannel;
+    int plotHeight;
 
 private:
     int plotWidth;
-    int plotHeight;
 };
 
 class filterObject : public QObject, public QGraphicsItem
@@ -328,7 +328,7 @@ class Panadapter: public QGraphicsView
     Q_OBJECT
 public:
     Panadapter();
-    Panadapter(QWidget*& widget);
+//    Panadapter(QWidget* widget);
     virtual ~Panadapter();
 
     SpectrumConnection *connection;  // KD0OSS

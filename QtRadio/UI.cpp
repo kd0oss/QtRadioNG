@@ -98,9 +98,9 @@ UI::UI(const QString server)
     widget.actionBandscope->setEnabled(false);
     widget.actionRecord->setEnabled(false);
 
-    widget.spectrumView->connection = &spectrumConnection;
-    widget.spectrumView->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    widget.spectrumView->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    rxp[0] = new Panadapter();
+    rxp[0]->connection = &spectrumConnection;
+    widget.spectrumLayout->addWidget((QWidget*)rxp[0]);
 
     equalizer = new EqualizerDialog(&connection);
 
@@ -123,7 +123,7 @@ UI::UI(const QString server)
     connect(&connection, SIGNAL(setChkTX(bool)), this, SLOT(setChkTX(bool)));
     connect(&connection, SIGNAL(resetbandedges(double)), this, SLOT(resetbandedges(double)));
     connect(&connection, SIGNAL(setFPS()), this, SLOT(setFPS()));
-    connect(&connection, SIGNAL(setSampleRate(int)), this, SLOT(sampleRateChanged(long)));
+  //  connect(&connection, SIGNAL(setSampleRate(int)), this, SLOT(sampleRateChanged(long)));
     connect(&connection, SIGNAL(hardware(QString)), this, SLOT(hardwareSet(QString)));
 
     connect(&audioConnection, SIGNAL(audioBuffer(char*,char*)), this, SLOT(audioBuffer(char*,char*)));
@@ -188,25 +188,25 @@ UI::UI(const QString server)
     connect(widget.actionSlow, SIGNAL(triggered()), this, SLOT(actionSlow()));
     connect(widget.actionMedium, SIGNAL(triggered()), this, SLOT(actionMedium()));
     connect(widget.actionFast, SIGNAL(triggered()), this, SLOT(actionFast()));
-    connect(widget.agcTLevelSlider, SIGNAL(valueChanged(int)), this, SLOT(AGCTLevelChanged(int)));
+    //connect(widget.agcTLevelSlider, SIGNAL(valueChanged(int)), this, SLOT(AGCTLevelChanged(int)));
     connect(widget.rxEqEnableCB, SIGNAL(toggled(bool)), this, SLOT(enableRxEq(bool)));
     connect(widget.txEqEnableCB, SIGNAL(toggled(bool)), this, SLOT(enableTxEq(bool)));
-    connect(widget.tnfButton, SIGNAL(clicked(bool)), widget.spectrumView, SLOT(enableNotchFilter(bool)));
+    connect(widget.tnfButton, SIGNAL(clicked(bool)), rxp[0], SLOT(enableNotchFilter(bool)));
     connect(widget.tnfAddButton, SIGNAL(clicked()), this, SLOT(addNotchFilter(void)));
     connect(widget.actionBookmarkThisFrequency, SIGNAL(triggered()), this, SLOT(actionBookmark()));
     connect(widget.actionEditBookmarks, SIGNAL(triggered()), this, SLOT(editBookmarks()));
 
     // connect up spectrum view
-    connect(widget.spectrumView, SIGNAL(variableFilter(int,int)), this, SLOT(variableFilter(int,int)));
-    connect(widget.spectrumView, SIGNAL(frequencyMoved(int,int)), this, SLOT(frequencyMoved(int,int)));
-    connect(widget.spectrumView, SIGNAL(spectrumHighChanged(int)), this, SLOT(spectrumHighChanged(int)));
-    connect(widget.spectrumView, SIGNAL(spectrumLowChanged(int)), this, SLOT(spectrumLowChanged(int)));
-    connect(widget.spectrumView, SIGNAL(waterfallHighChanged(int)), this, SLOT(waterfallHighChanged(int)));
-    connect(widget.spectrumView, SIGNAL(waterfallLowChanged(int)), this, SLOT(waterfallLowChanged(int)));
-    connect(widget.spectrumView, SIGNAL(meterValue(float,float,float)), this, SLOT(getMeterValue(float,float,float)));
-    connect(widget.spectrumView, SIGNAL(squelchValueChanged(int)), this, SLOT(squelchValueChanged(int)));
-    connect(widget.spectrumView, SIGNAL(statusMessage(QString)), this, SLOT(statusMessage(QString)));
-    connect(widget.spectrumView, SIGNAL(removeNotchFilter()), this, SLOT(removeNotchFilter()));
+    connect(rxp[0], SIGNAL(variableFilter(int,int)), this, SLOT(variableFilter(int,int)));
+    connect(rxp[0], SIGNAL(frequencyMoved(int,int)), this, SLOT(frequencyMoved(int,int)));
+    connect(rxp[0], SIGNAL(spectrumHighChanged(int)), this, SLOT(spectrumHighChanged(int)));
+    connect(rxp[0], SIGNAL(spectrumLowChanged(int)), this, SLOT(spectrumLowChanged(int)));
+    connect(rxp[0], SIGNAL(waterfallHighChanged(int)), this, SLOT(waterfallHighChanged(int)));
+    connect(rxp[0], SIGNAL(waterfallLowChanged(int)), this, SLOT(waterfallLowChanged(int)));
+    connect(rxp[0], SIGNAL(meterValue(float,float,float)), this, SLOT(getMeterValue(float,float,float)));
+    connect(rxp[0], SIGNAL(squelchValueChanged(int)), this, SLOT(squelchValueChanged(int)));
+    connect(rxp[0], SIGNAL(statusMessage(QString)), this, SLOT(statusMessage(QString)));
+    connect(rxp[0], SIGNAL(removeNotchFilter()), this, SLOT(removeNotchFilter()));
     connect(&spectrumConnection, SIGNAL(spectrumBuffer(CHANNEL)), this, SLOT(spectrumBuffer(CHANNEL)));
 
     connect(widget.vfoFrame, SIGNAL(frequencyMoved(int,int)), this, SLOT(frequencyMoved(int,int)));
@@ -233,7 +233,7 @@ UI::UI(const QString server)
     connect(&configure, SIGNAL(spectrumHighChanged(int)), this, SLOT(spectrumHighChanged(int)));
     connect(&configure, SIGNAL(spectrumLowChanged(int)), this, SLOT(spectrumLowChanged(int)));
     connect(&configure, SIGNAL(fpsChanged(int)), this, SLOT(fpsChanged(int)));
-    connect(&configure, SIGNAL(avgSpinChanged(int)), widget.spectrumView, SLOT(setAvg(int)));
+    connect(&configure, SIGNAL(avgSpinChanged(int)), rxp[0], SLOT(setAvg(int)));
     connect(&configure, SIGNAL(waterfallHighChanged(int)), this, SLOT(waterfallHighChanged(int)));
     connect(&configure, SIGNAL(waterfallLowChanged(int)), this, SLOT(waterfallLowChanged(int)));
     connect(&configure, SIGNAL(waterfallAutomaticChanged(bool)), this, SLOT(waterfallAutomaticChanged(bool)));
@@ -255,22 +255,22 @@ UI::UI(const QString server)
 //    connect(&configure, SIGNAL(sdromThresholdChanged(double)), this, SLOT(sdromThresholdChanged(double)));
     connect(&configure, SIGNAL(windowTypeChanged(int)), this, SLOT(windowTypeChanged(int)));
     connect(&configure, SIGNAL(agcAttackChanged(int)), this, SLOT(agcAttackChanged(int)));
-    connect(&configure, SIGNAL(agcMaxGainChanged(int)), this, SLOT(agcMaxGainChanged(int)));
+//    connect(&configure, SIGNAL(agcMaxGainChanged(int)), this, SLOT(agcMaxGainChanged(int)));
     connect(&configure, SIGNAL(agcSlopeChanged(int)), this, SLOT(agcSlopeChanged(int)));
     connect(&configure, SIGNAL(agcDecayChanged(int)), this, SLOT(agcDecayChanged(int)));
     connect(&configure, SIGNAL(agcHangChanged(int)), this, SLOT(agcHangChanged(int)));
-    connect(&configure, SIGNAL(agcFixedGainChanged(double)), this, SLOT(agcFixedGainChanged(double)));
+//    connect(&configure, SIGNAL(agcFixedGainChanged(double)), this, SLOT(agcFixedGainChanged(double)));
     connect(&configure, SIGNAL(agcHangThreshChanged(int)), this, SLOT(agcHangThreshChanged(int)));
     connect(&configure, SIGNAL(preAGCChanged(bool)), this, SLOT(preAGCFiltersChanged(bool)));
     connect(&configure, SIGNAL(levelerStateChanged(int)), this, SLOT(levelerStateChanged(int)));
 //    connect(&configure, SIGNAL(levelerMaxGainChanged(double)), this, SLOT(levelerMaxGainChanged(double)));
     connect(&configure, SIGNAL(levelerAttackChanged(int)), this, SLOT(levelerAttackChanged(int)));
     connect(&configure, SIGNAL(levelerDecayChanged(int)), this, SLOT(levelerDecayChanged(int)));
-    connect(&configure, SIGNAL(levelerHangChanged(int)), this, SLOT(levelerHangChanged(int)));
-    connect(&configure, SIGNAL(alcStateChanged(int)), this, SLOT(alcStateChanged(int)));
-    connect(&configure, SIGNAL(alcAttackChanged(int)), this, SLOT(alcAttackChanged(int)));
-    connect(&configure, SIGNAL(alcDecayChanged(int)), this, SLOT(alcDecayChanged(int)));
-    connect(&configure, SIGNAL(alcMaxGainChanged(int)), this, SLOT(alcHangChanged(int)));
+//    connect(&configure, SIGNAL(levelerHangChanged(int)), this, SLOT(levelerHangChanged(int)));
+//    connect(&configure, SIGNAL(alcStateChanged(int)), this, SLOT(alcStateChanged(int)));
+//    connect(&configure, SIGNAL(alcAttackChanged(int)), this, SLOT(alcAttackChanged(int)));
+//    connect(&configure, SIGNAL(alcDecayChanged(int)), this, SLOT(alcDecayChanged(int)));
+//    connect(&configure, SIGNAL(alcMaxGainChanged(int)), this, SLOT(alcMaxGainChanged(int)));
     connect(&configure, SIGNAL(addXVTR(QString,long long,long long,long long,long long,int,int)), this, SLOT(addXVTR(QString,long long,long long,long long,long long,int,int)));
     connect(&configure, SIGNAL(deleteXVTR(int)), this, SLOT(deleteXVTR(int)));
     connect(&configure, SIGNAL(spinBox_cwPitchChanged(int)), this, SLOT(cwPitchChanged(int)));
@@ -306,7 +306,7 @@ UI::UI(const QString server)
     configure.updateXvtrList(&xvtr);
     xvtr.buildMenu(widget.menuXVTR);
 
-    widget.spectrumView->setHost(configure.getHost());
+    rxp[0]->setHost(configure.getHost());
 
     printWindowTitle("Remote disconnected"); //added by gvj
 
@@ -474,14 +474,14 @@ void UI::saveSettings()
 
 void UI::hostChanged(QString host)
 {
-    widget.spectrumView->setHost(host);
+    rxp[0]->setHost(host);
     printWindowTitle("Remote disconnected");
 } // end hostChanged
 
 
 void UI::receiverChanged(int rx)
 {
-    widget.spectrumView->setReceiver(rx);
+    rxp[0]->setReceiver(rx);
     printWindowTitle("Remote disconnected");
 } // end receiverChanged
 
@@ -524,7 +524,7 @@ void UI::spectrumHighChanged(int high)
 {
     //qDebug() << __FUNCTION__ << ": " << high;
 
-    widget.spectrumView->setHigh(high);
+    rxp[0]->setHigh(high);
     configure.setSpectrumHigh(high);
     band.setSpectrumHigh(high);
 } // end spectrumHighChanged
@@ -534,7 +534,7 @@ void UI::spectrumLowChanged(int low)
 {
     //qDebug() << __FUNCTION__ << ": " << low;
 
-    widget.spectrumView->setLow(low);
+    rxp[0]->setLow(low);
     configure.setSpectrumLow(low);
     band.setSpectrumLow(low);
 } // end spectrumLowChanged
@@ -569,7 +569,7 @@ void UI::waterfallHighChanged(int high)
 {
     //qDebug() << __LINE__ << __FUNCTION__ << ": " << high;
 
-    widget.spectrumView->panadapterScene->waterfallItem->setHigh(high);
+    rxp[0]->panadapterScene->waterfallItem->setHigh(high);
     configure.setWaterfallHigh(high);
     band.setWaterfallHigh(high);
 } // end waterfallHighChanged
@@ -579,7 +579,7 @@ void UI::waterfallLowChanged(int low)
 {
     //qDebug() << __FUNCTION__ << ": " << low;
 
-    widget.spectrumView->panadapterScene->waterfallItem->setLow(low);
+    rxp[0]->panadapterScene->waterfallItem->setLow(low);
     configure.setWaterfallLow(low);
     band.setWaterfallLow(low);
 } // end waterfallLowChanged
@@ -587,7 +587,7 @@ void UI::waterfallLowChanged(int low)
 
 void UI::waterfallAutomaticChanged(bool state)
 {
-    widget.spectrumView->panadapterScene->waterfallItem->setAutomatic(state);
+    rxp[0]->panadapterScene->waterfallItem->setAutomatic(state);
 } // end waterfallautomaticChanged
 
 
@@ -610,7 +610,7 @@ void UI::micDeviceChanged(QAudioDeviceInfo info,int rate,int channels,QAudioForm
 void UI::actionConnect()
 {
     connection.connect(configure.getHost(), DSPSERVER_BASE_PORT+configure.getReceiver());
-    widget.spectrumView->setReceiver(configure.getReceiver());
+    rxp[0]->setReceiver(configure.getReceiver());
     isConnected = true;
 } // end actionConnect
 
@@ -670,6 +670,8 @@ void UI::actionDisconnect()
         }
     }
 
+    shutdownRadio(currentRxChannel);
+
     qDebug() << "actionDisconnect() QuickIP=" << QuickIP;
     if (QuickIP.length() > 6)
     {    // Remove from saved host list or IPs will pile up forever. If empty string we did not connect via Quick Connect
@@ -714,6 +716,8 @@ void UI::connected(bool *rx_active, int8_t *rxchannels, int8_t *txrxPair)
         qDebug("TX ch: %d\n", currentTxChannel);
         widget.ctlFrame->HideTX(false);
     }
+    else
+        widget.ctlFrame->HideTX(true);
 
     for (i=0;i<MAX_RECEIVERS;i++)
     {
@@ -733,7 +737,7 @@ void UI::connected(bool *rx_active, int8_t *rxchannels, int8_t *txrxPair)
 
         if (channel < 0) // We're being extra paranoid here.
         {
-            qDebug("*********Invalid channel!\n");
+            qDebug("********* Invalid channel!\n");
             continue;
         }
 
@@ -747,6 +751,9 @@ void UI::connected(bool *rx_active, int8_t *rxchannels, int8_t *txrxPair)
         command.append((char)SETCLIENT);
         command.append("QtRadio");
         connection.sendCommand(command);
+
+        hardwareSet(connection.channels[currentRxChannel].radio.radio_type);
+        initializeRadio(channel);
 
         command.clear();
         command.append((char)channel);
@@ -876,7 +883,7 @@ void UI::connected(bool *rx_active, int8_t *rxchannels, int8_t *txrxPair)
         command.append(QString("%1,%2").arg(low).arg(high));
         connection.sendCommand(command);
 
-        widget.spectrumView->setFilter(low,high);
+        rxp[0]->setFilter(low,high);
 
         // start the audio
         audio_buffers=0;
@@ -1054,15 +1061,13 @@ void UI::connected(bool *rx_active, int8_t *rxchannels, int8_t *txrxPair)
     if ((mode.getStringMode() == "CWU") || (mode.getStringMode() == "CWL"))
         frequencyChanged(frequency); //gvj dummy call to set Rx offset for cw
 
-    widget.spectrumView->currentChannel = currentRxChannel;
-    widget.spectrumView->setFrequency(frequency);
-    widget.spectrumView->enableNotchFilter(false);
+    rxp[0]->currentChannel = currentRxChannel;
+    rxp[0]->setFrequency(frequency);
+    rxp[0]->enableNotchFilter(false);
 
     widget.zoomSpectrumSlider->setValue(1);
     on_zoomSpectrumSlider_sliderMoved(1);
-    widget.spectrumView->panadapterScene->waterfallItem->bConnected = true;
-
-    hardwareSet(connection.channels[currentRxChannel].radio.radio_type);
+    rxp[0]->panadapterScene->waterfallItem->bConnected = true;
 } // end connected
 
 
@@ -1071,13 +1076,14 @@ void UI::disconnected(QString message)
     qDebug() << "UI::disconnected: " << message;
     connection_valid = false;
     isConnected = false;
-//    spectrumTimer->stop();
     configure.thisuser = "none";
-    configure.thispass ="none";
+    configure.thispass = "none";
     servername = "";
     canTX = true;
     chkTX = false;
     loffset = 0;
+    currentRxChannel = -1;
+    currentTxChannel = -1;
 
     widget.actionBandscope->setEnabled(false);
 
@@ -1099,7 +1105,7 @@ void UI::disconnected(QString message)
         hardwareType.clear();
     }
     configure.connected(false);
-    widget.spectrumView->panadapterScene->waterfallItem->bConnected = false;
+    rxp[0]->panadapterScene->waterfallItem->bConnected = false;
     widget.ctlFrame->HideTX(true);
 } // end disconnected
 
@@ -1113,7 +1119,7 @@ void UI::spectrumBuffer(CHANNEL channel)
     if (txNow)
         txp->updateSpectrumFrame(channel.spectrum);
     else
-        widget.spectrumView->updateSpectrumFrame(channel.spectrum);
+        rxp[0]->updateSpectrumFrame(channel.spectrum);
     spectrumConnection.freeBuffers(channel.spectrum);
 } // end spectrumBuffer
 
@@ -1131,7 +1137,7 @@ void UI::audioBuffer(char* header, char* buffer)
 
 void UI::micSendAudio(QQueue<qint16>* queue)
 {
-    if (!txNow)
+    if (!txNow || currentTxChannel < 0)
     {
         queue->clear();
         return;
@@ -1358,14 +1364,14 @@ void UI::bandChanged(int previousBand,int newBand)
     qDebug()<<Q_FUNC_INFO<<":   The value of filters.getFilter is  "<<filters.getFilter();
 
 
-    widget.spectrumView->setBand(band.getStringBand());
+    rxp[0]->setBand(band.getStringBand());
 
     if (band.getFilter() != filters.getFilter())
     {
         emit filterChanged(filters.getFilter(), band.getFilter());
     }
     frequency=band.getFrequency();
-    int samplerate = widget.spectrumView->samplerate();
+    int samplerate = rxp[0]->samplerate();
 
     QByteArray command;
     command.clear();
@@ -1374,26 +1380,28 @@ void UI::bandChanged(int previousBand,int newBand)
     command.append(QString("%1").arg(frequency));
     connection.sendCommand(command);
 
-    command.clear();
-    command.append((char)currentTxChannel);
-    command.append((char)SETFREQ);
-    command.append(QString("%1").arg(frequency));
-    connection.sendCommand(command);
-
-    widget.spectrumView->setFrequency(frequency);
+    if (currentTxChannel > -1)
+    {
+        command.clear();
+        command.append((char)currentTxChannel);
+        command.append((char)SETFREQ);
+        command.append(QString("%1").arg(frequency));
+        connection.sendCommand(command);
+    }
+    rxp[0]->setFrequency(frequency);
 
     //    gvj code
     widget.vfoFrame->setFrequency(frequency);
     qDebug() << __FUNCTION__ << ": frequency, newBand = " << frequency << ", " << newBand;
-    widget.spectrumView->setHigh(band.getSpectrumHigh());
-    widget.spectrumView->setLow(band.getSpectrumLow());
+    rxp[0]->setHigh(band.getSpectrumHigh());
+    rxp[0]->setLow(band.getSpectrumLow());
     //    widget.waterfallView->setFrequency(frequency);
-    widget.spectrumView->panadapterScene->waterfallItem->setHigh(band.getWaterfallHigh());
-    widget.spectrumView->panadapterScene->waterfallItem->setLow(band.getWaterfallLow());
+    rxp[0]->panadapterScene->waterfallItem->setHigh(band.getWaterfallHigh());
+    rxp[0]->panadapterScene->waterfallItem->setLow(band.getWaterfallLow());
 
 
     BandLimit limits=band.getBandLimits(band.getFrequency()-(samplerate/2),band.getFrequency()+(samplerate/2));
-    widget.spectrumView->setBandLimits(limits.min() + loffset,limits.max()+loffset);
+    rxp[0]->setBandLimits(limits.min() + loffset,limits.max()+loffset);
     if ((mode.getStringMode() == "CWU") || (mode.getStringMode() == "CWL"))
         frequencyChanged(frequency); //gvj dummy call to set Rx offset for cw
 } // end bandChanged
@@ -1486,18 +1494,22 @@ void UI::modeChanged(int previousMode,int newMode)
         break;
     }
     qDebug()<<Q_FUNC_INFO<<":  1043: value of band.getFilter after filters.selectFilters has been called = "<<band.getFilter();
-    widget.spectrumView->setMode(mode.getStringMode());
+    rxp[0]->setMode(mode.getStringMode());
     //    widget.waterfallView->setMode(mode.getStringMode());
     command.clear();
     command.append((char)currentRxChannel);
     command.append((char)SETMODE);
     command.append((char)newMode);
     connection.sendCommand(command);
-    command.clear();
-    command.append((char)currentTxChannel);
-    command.append((char)SETMODE);
-    command.append((char)newMode);
-    connection.sendCommand(command);
+
+    if (currentTxChannel > -1)
+    {
+        command.clear();
+        command.append((char)currentTxChannel);
+        command.append((char)SETMODE);
+        command.append((char)newMode);
+        connection.sendCommand(command);
+    }
 } // end modeChanged
 
 
@@ -1610,7 +1622,7 @@ void UI::filtersChanged(FiltersBase* previousFilters, FiltersBase* newFilters)
     }
 
     filters.selectFilter(filters.getFilter());
-    widget.spectrumView->setFilter(filters.getText());
+    rxp[0]->setFilter(filters.getText());
     printStatusBar(" .. Initial frequency. ");    //added by gvj
 } // end filtersChanged
 
@@ -1897,9 +1909,9 @@ void UI::filterChanged(int previousFilter,int newFilter)
     command.append((char)SETFILTER);
     command.append(QString("%1,%2").arg(low).arg(high));
     connection.sendCommand(command);
-    widget.spectrumView->setFilter(low, high);
+    rxp[0]->setFilter(low, high);
     txp->setFilter(low, high);
-    widget.spectrumView->setFilter(filters.getText());
+    rxp[0]->setFilter(filters.getText());
     //    widget.waterfallView->setFilter(low,high);
     band.setFilter(newFilter);
 } // end filterChanged
@@ -1988,7 +2000,7 @@ void UI::frequencyChanged(long long f)
     }
     //Adjust all frequency displays & Check for exiting current band
     band.setFrequency(frequency);
-    widget.spectrumView->setFrequency(frequency);
+    rxp[0]->setFrequency(frequency);
     widget.vfoFrame->setFrequency(frequency);
     //    widget.waterfallView->setFrequency(frequency);
     qDebug("Frequency changed for channel: %d\n", currentRxChannel);
@@ -2110,7 +2122,7 @@ void UI::actionFixed()
     command.append((char)SETRXAAGCMODE);
     command.append((char)agc);
     connection.sendCommand(command);
-    AGCTLevelChanged(widget.agcTLevelSlider->value());
+    //AGCTLevelChanged(widget.agcTLevelSlider->value());
 } // end actionFixed
 
 
@@ -2376,11 +2388,14 @@ void UI::cessbOvershootChanged(bool enable)
 {
     QByteArray command;
 
-    command.clear();
-    command.append((char)currentTxChannel);
-    command.append((char)SETTXAOSCTRLRUN);
-    command.append((char)enable);
-    connection.sendCommand(command);
+    if (currentTxChannel > -1)
+    {
+        command.clear();
+        command.append((char)currentTxChannel);
+        command.append((char)SETTXAOSCTRLRUN);
+        command.append((char)enable);
+        connection.sendCommand(command);
+    }
 } // end cessOvershootChanged
 
 
@@ -2497,7 +2512,7 @@ void UI::selectBookmark(QAction* action)
     frequency = bookmarks.getFrequency();
     band.setFrequency(frequency);
 
-    widget.spectrumView->setFrequency(frequency);
+    rxp[0]->setFrequency(frequency);
 
     //    gvj code
     widget.vfoFrame->setFrequency(frequency);
@@ -2775,7 +2790,7 @@ void UI::slaveSetMode(int m)
 
 void UI::slaveSetFilter(int low, int high)
 {
-    widget.spectrumView->setFilter(low,high);
+    rxp[0]->setFilter(low,high);
     //    widget.waterfallView->setFilter(low,high);
 }
 
@@ -2783,7 +2798,7 @@ void UI::slaveSetFilter(int low, int high)
 void UI::slaveSetZoom(int position)
 {
     widget.zoomSpectrumSlider->setValue(position);
-    widget.spectrumView->setZoom(position);
+    rxp[0]->setZoom(position);
     //   widget.waterfallView->setZoom(position);
 }
 
@@ -2797,7 +2812,7 @@ void UI::getBandFrequency()
 void UI::vfoStepBtnClicked(int direction)
 {
     long long f;
-    int samplerate = widget.spectrumView->samplerate();
+    int samplerate = rxp[0]->samplerate();
 
     //qDebug()<<Q_FUNC_INFO<<": vfo up or down button clicked. Direction = "<<direction<<", samplerate = "<<samplerate;
     switch ( samplerate )
@@ -2821,6 +2836,9 @@ void UI::pttChange(int caller, bool ptt)
     static int workingMode;
 //    static double currentPwr;
 
+    if (currentTxChannel < 0)
+        return;
+
     if (caller == 1)
         emit tuningEnable(ptt);
 
@@ -2828,7 +2846,7 @@ void UI::pttChange(int caller, bool ptt)
     {
         if (ptt)
         {    // Going from Rx to Tx ................
-            widget.spectrumView->panadapterScene->bMox = true;
+            rxp[0]->panadapterScene->bMox = true;
             delete widget.sMeterFrame->sMeterMain;
             widget.sMeterFrame->sMeterMain = new Meter("Main Pwr", POWMETER);
             workingMode = mode.getMode(); //Save the current mode for restoration when we finish tuning
@@ -2920,7 +2938,7 @@ void UI::pttChange(int caller, bool ptt)
                     command.append(QString("%1").arg(0));
                 }
                 connection.sendCommand(command);
-                widget.spectrumView->panadapterScene->bMox = false;
+                rxp[0]->panadapterScene->bMox = false;
 
                 //Restore AM carrier level to previous level.
                 if ((dspversion >= 20120201) && canTX && chkTX)
@@ -2974,7 +2992,7 @@ void UI::pttChange(int caller, bool ptt)
                     command.append(QString("%1").arg(0));
                 }
                 connection.sendCommand(command);
-                widget.spectrumView->panadapterScene->bMox = false;
+                rxp[0]->panadapterScene->bMox = false;
             }
             txNow = false;
 
@@ -3000,7 +3018,7 @@ void UI::actionConnectNow(QString IP)
         QuickIP = IP;
         configure.addHost(IP);
         connection.connect(IP, DSPSERVER_BASE_PORT+configure.getReceiver());
-        widget.spectrumView->setReceiver(configure.getReceiver());
+        rxp[0]->setReceiver(configure.getReceiver());
     }
     else
     {
@@ -3022,7 +3040,7 @@ void UI::actionSquelch()
         command.append((char)SETSQUELCHSTATE);
         command.append((char)0);
         connection.sendCommand(command);
-        widget.spectrumView->setSquelch(false);
+        rxp[0]->setSquelch(false);
         widget.actionSquelchEnable->setChecked(false);
     }
     else
@@ -3039,8 +3057,8 @@ void UI::actionSquelch()
         command.append((char)SETSQUELCHSTATE);
         command.append((char)1);
         connection.sendCommand(command);
-        widget.spectrumView->setSquelch(true);
-        widget.spectrumView->setSquelchVal(squelchValue);
+        rxp[0]->setSquelch(true);
+        rxp[0]->setSquelchVal(squelchValue);
         widget.actionSquelchEnable->setChecked(true);
     }
 }
@@ -3057,7 +3075,7 @@ void UI::actionSquelchReset()
         command.append((char)SETSQUELCHVAL);
         command.append(QString("%1").arg(squelchValue));
         connection.sendCommand(command);
-        widget.spectrumView->setSquelchVal(squelchValue);
+        rxp[0]->setSquelchVal(squelchValue);
     }
 }
 
@@ -3073,7 +3091,7 @@ void UI::squelchValueChanged(int val)
         command.append((char)SETSQUELCHVAL);
         command.append(QString("%1").arg(squelchValue));
         connection.sendCommand(command);
-        widget.spectrumView->setSquelchVal(squelchValue);
+        rxp[0]->setSquelchVal(squelchValue);
     }
 }
 
@@ -3146,8 +3164,8 @@ void UI::setChkTX(bool chk)
 void UI::resetbandedges(double offset)
 {
     loffset= offset;
-    BandLimit limits=band.getBandLimits(band.getFrequency()-(widget.spectrumView->samplerate()/2),band.getFrequency()+(widget.spectrumView->samplerate()/2));
-    widget.spectrumView->setBandLimits(limits.min() + loffset,limits.max()+loffset);
+    BandLimit limits=band.getBandLimits(band.getFrequency()-(rxp[0]->samplerate()/2),band.getFrequency()+(rxp[0]->samplerate()/2));
+    rxp[0]->setBandLimits(limits.min() + loffset,limits.max()+loffset);
     qDebug()<<"loffset = "<<loffset;
 }
 
@@ -3155,7 +3173,7 @@ void UI::resetbandedges(double offset)
 void UI::on_zoomSpectrumSlider_sliderMoved(int position)
 {
     viewZoomLevel = position;
-    widget.spectrumView->setZoom(position);
+    rxp[0]->setZoom(position);
 }
 
 
@@ -3233,7 +3251,7 @@ void UI::AGCTLevelChanged(int level)
     command.append((char)SETRXAGCFIXED);
     command.append(QString("%1").arg(level));
     qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
-    widget.agcTLevelLabel->setText(QString("%1").arg(level));
+//    widget.agcTLevelLabel->setText(QString("%1").arg(level));
 }
 
 
@@ -3253,7 +3271,7 @@ void UI::enableRxEq(bool enable)
 
 void UI::enableTxEq(bool enable)
 {
-    if (!newDspServerCheck()) return;
+    if (!newDspServerCheck() || currentTxChannel < 0) return;
 
     QByteArray command;
     command.clear();
@@ -3275,7 +3293,7 @@ void UI::addNotchFilter(void)
         return;
     }
     widget.tnfButton->setChecked(true);
-    if (widget.spectrumView->addNotchFilter(notchFilterIndex++) < 0)
+    if (rxp[0]->addNotchFilter(notchFilterIndex++) < 0)
         notchFilterIndex--;;
 }
 
@@ -3416,7 +3434,7 @@ void UI::agcFixedGainChanged(double value)
 
 void UI::levelerStateChanged(int value)
 {
-    if (!newDspServerCheck()) return;
+    if (!newDspServerCheck() || currentTxChannel < 0) return;
 
     QByteArray command;
     command.clear();
@@ -3454,7 +3472,7 @@ void UI::rxFilterWindowChanged(int value)
 
 void UI::txFilterWindowChanged(int value)
 {
-    if (!newDspServerCheck()) return;
+    if (!newDspServerCheck() || currentTxChannel < 0) return;
 
     QByteArray command;
     command.clear();
@@ -3473,7 +3491,7 @@ void UI::txFilterWindowChanged(int value)
 
 void UI::levelerAttackChanged(int value)
 {
-    if (!newDspServerCheck()) return;
+    if (!newDspServerCheck() || currentTxChannel < 0) return;
 
     QByteArray command;
     command.clear();
@@ -3487,7 +3505,7 @@ void UI::levelerAttackChanged(int value)
 
 void UI::levelerDecayChanged(int value)
 {
-    if (!newDspServerCheck()) return;
+    if (!newDspServerCheck() || currentTxChannel < 0) return;
 
     QByteArray command;
     command.clear();
@@ -3501,7 +3519,7 @@ void UI::levelerDecayChanged(int value)
 
 void UI::levelerTopChanged(double value)
 {
-    if (!newDspServerCheck()) return;
+    if (!newDspServerCheck() || currentTxChannel < 0) return;
 
     QByteArray command;
     command.clear();
@@ -3515,7 +3533,7 @@ void UI::levelerTopChanged(double value)
 
 void UI::TXalcStateChanged(int value)
 {
-    if (!newDspServerCheck()) return;
+    if (!newDspServerCheck() || currentTxChannel < 0) return;
 
     QByteArray command;
     command.clear();
@@ -3529,7 +3547,7 @@ void UI::TXalcStateChanged(int value)
 
 void UI::TXalcMaxGainChanged(double value)
 {
-    if (!newDspServerCheck()) return;
+    if (!newDspServerCheck() || currentTxChannel < 0) return;
 
     QByteArray command;
     command.clear();
@@ -3543,7 +3561,7 @@ void UI::TXalcMaxGainChanged(double value)
 
 void UI::TXalcDecayChanged(int value)
 {
-    if (!newDspServerCheck()) return;
+    if (!newDspServerCheck() || currentTxChannel < 0) return;
 
     QByteArray command;
     command.clear();
@@ -3557,7 +3575,7 @@ void UI::TXalcDecayChanged(int value)
 
 void UI::TXalcAttackChanged(int value)
 {
-    if (!newDspServerCheck()) return;
+    if (!newDspServerCheck() || currentTxChannel < 0) return;
 
     QByteArray command;
     command.clear();
@@ -3582,9 +3600,10 @@ void UI::hardwareSet(QString hardware)
         hardwareType = "hermes";
         connect((HermesFrame*)hf, SIGNAL(hhcommand(QByteArray)), this, SLOT(sendHardwareCommand(QByteArray)));
         connect((HermesFrame*)hf, SIGNAL(pttTuneChange(int,bool)), this, SLOT(pttChange(int,bool)));
+        hf->radio_id = connection.channels[currentRxChannel].radio.radio_id;
         hf->currentRxChannel = currentRxChannel;
         hf->currentTxChannel = currentTxChannel;
-        hf->initialize();
+//        hf->initialize();
     }
     if (connection.channels[currentRxChannel].radio.bandscope_capable)
         widget.actionBandscope->setEnabled(true);
@@ -3600,8 +3619,28 @@ void UI::sendHardwareCommand(QByteArray command)
 } // end sendHardwareCommand
 
 
+void UI::initializeRadio(int8_t channel)
+{
+    QString radio_type = connection.channels[channel].radio.radio_type;
+    if (radio_type == "hermes")
+    {
+        static_cast<HermesFrame*>(hww)->initializeRadio();
+    }
+} // end initializeRadio
+
+
+void UI::shutdownRadio(int8_t channel)
+{
+    QString radio_type = connection.channels[channel].radio.radio_type;
+    if (radio_type == "hermes")
+    {
+        static_cast<HermesFrame*>(hww)->shutDown();
+    }
+} // end shutdownRadio
+
+
 void UI::setCurrentChannel(int channel)
 {
     currentRxChannel = channel;
-    widget.ctlFrame->setCurrentChannel(channel+1);
+    //widget.ctlFrame->setCurrentChannel(channel+1);
 } // end setCurrentChannel

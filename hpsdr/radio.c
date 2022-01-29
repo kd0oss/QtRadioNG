@@ -211,7 +211,7 @@ int main_delete(int radio_id)
         fprintf(stderr, "*** All radios shut down. ***\n");
     }
     receivers = active_receivers = 0;
-    return 0; ////    _exit(0);
+    return 0;
 } // end main_delete
 
 
@@ -742,6 +742,7 @@ void start_receivers(int radio_id)
         receiver[1]->sample_rate = receiver[0]->sample_rate;
     }
 
+    // FIXME: may not need these two lines
     active_receiver = receiver[0];
     active_receivers = receivers;
 
@@ -798,7 +799,7 @@ void start_transmitter(int radio_id, int tx)
                 break;
             }
         }
-        SetPSHWPeak(transmitter->id, pk);
+        SetPSHWPeak(transmitter[radio_id]->id, pk);
 #endif
     }
 
@@ -861,14 +862,14 @@ static int calcLevel(double d, double pa_calibration)
 } // end calcLevel
 
 
-void set_tx_power(int pow)
+void set_tx_power(int8_t pow)
 {
     transmitter->drive = pow;
     if (protocol == NEW_PROTOCOL)
     {
         schedule_high_priority();
     }
-    fprintf(stderr, "Set TX Power: %d\n", pow);
+    fprintf(stderr, "Set TX Power: %u\n", pow);
 } // end set_tx_power
 
 
@@ -987,15 +988,12 @@ int band_get_current()
 } // end band_get_current
 
 
-void set_alex_rx_antenna(int v)
+void set_alex_rx_antenna(int8_t idx, int v)
 {
-    if (active_receiver->id == 0)
+    receiver[0]->alex_antenna = v;  // FIXME: not sure if firmware allows antenna selection per receiver.
+    if (protocol == NEW_PROTOCOL)
     {
-        active_receiver->alex_antenna = v;
-        if (protocol == NEW_PROTOCOL)
-        {
-            schedule_high_priority();
-        }
+        schedule_high_priority();
     }
 } // end set_alex_rx_antenna
 
@@ -1019,14 +1017,14 @@ void set_alex_tx_antenna(int v)
 // This means, alex_attenuation should not be stored in thre
 // receiver, but separately (as is the case with adc_attenuation).
 //
-void set_alex_attenuation(int rx, int v)
+void set_alex_attenuation(int8_t idx, int v)
 {
-    receiver[rx]->alex_attenuation = v;
+    receiver[idx]->alex_attenuation = v;
     adc_attenuation[0] = 0;
     if (v == 1) {adc_attenuation[0] = 10; adc_attenuation[1] = 10;}
     if (v == 2) {adc_attenuation[0] = 20; adc_attenuation[1] = 20;}
     if (v == 3) {adc_attenuation[0] = 30; adc_attenuation[1] = 30;}
-    printf("Att: %d for RX: %d\n", receiver[rx]->alex_attenuation, rx);
+    printf("Att: %d for RX: %d\n", receiver[idx]->alex_attenuation, idx);
     if (protocol == NEW_PROTOCOL)
     {
         schedule_high_priority();
@@ -1034,9 +1032,9 @@ void set_alex_attenuation(int rx, int v)
 } // end set_alex_attenuation
 
 
-void dither_cb(bool enable)
+void dither_cb(int8_t idx, bool enable)
 {
-    active_receiver->dither = enable;
+    receiver[idx]->dither = enable;
     if (protocol == NEW_PROTOCOL)
     {
         schedule_high_priority();
@@ -1044,9 +1042,9 @@ void dither_cb(bool enable)
 } // end dither_cb
 
 
-void random_cb(bool enable)
+void random_cb(int8_t idx, bool enable)
 {
-    active_receiver->random = enable;
+    receiver[idx]->random = enable;
     if (protocol == NEW_PROTOCOL)
     {
         schedule_high_priority();
@@ -1054,9 +1052,9 @@ void random_cb(bool enable)
 } // end random_cb
 
 
-void preamp_cb(bool enable)
+void preamp_cb(int8_t idx, bool enable)
 {
-    active_receiver->preamp = enable;
+    receiver[idx]->preamp = enable;
     if (protocol == NEW_PROTOCOL)
     {
         schedule_high_priority();
@@ -1084,7 +1082,7 @@ void linein_gain_cb(int gain)
 } // end linein_gain_cb
 
 
-void setFrequency(int v, long long f)
+void setFrequency(int8_t idx, long long f)
 {
     ////////  int v=active_receiver->id;
     ///////// vfo[v].band=get_band_from_frequency(f);
@@ -1093,21 +1091,21 @@ void setFrequency(int v, long long f)
     {
     case NEW_PROTOCOL:
     case ORIGINAL_PROTOCOL:
-        if (vfo[v].ctun)
+        if (vfo[idx].ctun)
         {
-            long long minf = vfo[v].frequency - (long long)(active_receiver->sample_rate/2);
-            long long maxf = vfo[v].frequency + (long long)(active_receiver->sample_rate/2);
+            long long minf = vfo[idx].frequency - (long long)(receiver[idx]->sample_rate/2);
+            long long maxf = vfo[idx].frequency + (long long)(receiver[idx]->sample_rate/2);
             if (f < minf) f = minf;
             if (f > maxf) f = maxf;
-            vfo[v].ctun_frequency = f;
-            vfo[v].offset = f-vfo[v].frequency;
+            vfo[idx].ctun_frequency = f;
+            vfo[idx].offset = f-vfo[idx].frequency;
             ////////  set_offset(active_receiver,vfo[v].offset);
             return;
         }
         else
         {
-            vfo[v].frequency = f;
-            fprintf(stderr, "Set Freq: %lld  for %d\n", f, v);
+            vfo[idx].frequency = f;
+            fprintf(stderr, "Set Freq: %lld  for index %d\n", f, idx);
         }
         break;
     }
@@ -1152,12 +1150,12 @@ int main_start(char *dsp_server_address)
         }
     }
 
-    create_listener_thread(dsp_server_address);
+    create_client_thread(dsp_server_address);
 
     // loop until terminated with extreme prejudice
     while (1)
     {
-        sleep(1);
+        usleep(1000);
     }
 
     // "should" not get this far

@@ -36,6 +36,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <sys/queue.h>
+#include <stdbool.h>
 
 #define AUDIO_PORT 15000
 
@@ -79,21 +80,22 @@ void* client_thread(void* arg);
 #define MIC_AUDIO_PORT   10130
 #define BANDSCOPE_PORT   10140
 
-typedef struct _rcvr {
-    int socket;
+typedef struct _client {
+    int                socket;
     unsigned int       iq_length;
     struct sockaddr_in iq_addr;
     pthread_t          thread_id;
-    RECEIVER_STATE     receiver_state;
-    TRANSMITTER_STATE  transmitter_state;
-    int8_t  radio_id;
-    int8_t  receiver;
-    uint8_t isTx;
-    int     iq_port;
-    int     bs_port;
-    int     audio_port;
-    uint8_t mox;
 } CLIENT;
+
+typedef struct _rfunit
+{
+    int8_t  radio_id;
+    CLIENT  client;
+    bool    attached;
+    bool    isTx;
+    bool    mox;
+    int     port;
+} RFUNIT;
 
 typedef struct _buffer {
     unsigned short chunk;
@@ -134,8 +136,8 @@ typedef struct _txiq_entry {
         TAILQ_ENTRY(_txiq_entry) entries;
 } txiq_entry;
 
-extern void create_listener_thread(char*);
-extern void init_receivers(int, int);
+extern void create_client_thread(char*);
+extern void init_receiver(int8_t);
 extern void send_IQ_buffer(int);
 extern void send_WB_IQ_buffer(int);
 extern void send_Mic_buffer(float sample);

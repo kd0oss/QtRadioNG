@@ -81,6 +81,7 @@ typedef enum {
 typedef struct _xcvr
 {
     int8_t    radio_id;
+    int8_t    connection;
     char      radio_type[25];
     char      ip_address[16];
     char      mac_address[18];

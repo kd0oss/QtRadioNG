@@ -1,6 +1,24 @@
 QtRadioNG changes log by Rick Schnicker KD0OSS
 ==================================================
 
+2022/01/29   Up rev'd to version ALPHA 2.03
+    Change hpsdr code to manage most resources per
+    reciever and transmitter slots.
+
+    Continued changes to functions in dspserver to
+    allow for control per virtual channel.
+
+    Still cleaning up legacy code. Code still contains
+    some unused variables and functions. Since the
+    original code was designed to handle only one
+    radio at a time my changes have left some of the
+    source code a little ragged. This will take time
+    to clean up.
+
+    Changing QtRadio to handle multiple receivers.
+    This means having multiple panadapters that can
+    be added or removed as needed.
+
 2022/01/08   Up rev'd to version ALPHA 2.02
     Put most DSP related functions into new source dsp.c
     to make it easier to use a differenct DSP core in
@@ -28,7 +46,7 @@ QtRadioNG changes log by Rick Schnicker KD0OSS
     allowed to connect is 4. This is an abitrary number
     and may be increased in the furture.
 
-    We currently allow upto 7 receivers and 1 transmitter
+    We currently allow upto 8 receivers and 1 transmitter
     per radio. The transmitter may be paired with any
     active receiver.
 

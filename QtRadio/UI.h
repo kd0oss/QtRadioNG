@@ -102,6 +102,8 @@ public:
     SpectrumConnection spectrumConnection;
     AudioConnection audioConnection;
     MicAudioConnection micAudioConnection;
+    Panadapter *rxp[8];
+    QGraphicsView *rxg[8];
     TxPanadapter *txp;
     Mode mode;
     bool   receivers_active[7];
@@ -316,6 +318,8 @@ private:
     void initRigCtl();
     void setPwsMode(int mode);
     void appendBookmark(Bookmark* bookmark);
+    void initializeRadio(int8_t);
+    void shutdownRadio(int8_t);
     QString stringFrequency(long long frequency);
     QString getversionstring();
 
