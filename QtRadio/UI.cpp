@@ -57,9 +57,6 @@ UI::UI(const QString server)
 {
     widget.setupUi(this);
 
-    initRigCtl();
-    fprintf(stderr, "rigctl: Calling init\n");
-
     servers = 0;
     servername = "Unknown";
     configure.thisuser = "None";
@@ -70,8 +67,6 @@ UI::UI(const QString server)
 
     loffset = 0;
     viewZoomLevel = 0;
-    hardwareType.clear();
-    hww = NULL;
 
     audio = new Audio;
     configure.initAudioDevices(audio);
@@ -84,9 +79,9 @@ UI::UI(const QString server)
     connection_valid = false;
     currentRxChannel = -1;
     currentTxChannel = -1;
+    current_index = -1;
 
     isConnected = false;
-    modeFlag = false;
     infotick = 0;
     infotick2 = 0;
     dspversion = 0;
@@ -95,24 +90,16 @@ UI::UI(const QString server)
 
     widget.statusbar->showMessage("QtRadio NG branch: KD0OSS 2022");
 
-    widget.actionBandscope->setEnabled(false);
+//    widget.actionBandscope->setEnabled(false);
     widget.actionRecord->setEnabled(false);
 
-    rxp[0] = new Panadapter();
-    rxp[0]->connection = &spectrumConnection;
-    widget.spectrumLayout->addWidget((QWidget*)rxp[0]);
-
-    equalizer = new EqualizerDialog(&connection);
-
-    txp = new TxPanadapter();
-    widget.txSpectrumView->setScene(txp->txpanadapterScene);
-    connect(txp, SIGNAL(meterValue(float, float, float)), this, SLOT(getMeterValue(float, float, float)));
+    for (int r=0;r<MAX_RADIOS;r++)
+        radio[r] = NULL;
 
     // connect up all the menus
     connect(&connection, SIGNAL(isConnected(bool*, int8_t*, int8_t*)), this, SLOT(connected(bool*, int8_t*, int8_t*)));
     connect(&connection, SIGNAL(disconnected(QString)), this, SLOT(disconnected(QString)));
     connect(&connection, SIGNAL(printStatusBar(QString)), this, SLOT(printStatusBar(QString)));
-    connect(&connection, SIGNAL(slaveSetFreq(long long)), this, SLOT(frequencyChanged(long long)));
     connect(&connection, SIGNAL(slaveSetMode(int)), this, SLOT(slaveSetMode(int)));
     connect(&connection, SIGNAL(setCurrentChannel(int)), this, SLOT(setCurrentChannel(int)));
     connect(&connection, SIGNAL(slaveSetFilter(int,int)), this, SLOT(slaveSetFilter(int,int)));
@@ -121,30 +108,39 @@ UI::UI(const QString server)
     connect(&connection, SIGNAL(setservername(QString)), this, SLOT(setservername(QString)));
     connect(&connection, SIGNAL(setCanTX(bool)), this, SLOT(setCanTX(bool)));
     connect(&connection, SIGNAL(setChkTX(bool)), this, SLOT(setChkTX(bool)));
-    connect(&connection, SIGNAL(resetbandedges(double)), this, SLOT(resetbandedges(double)));
-    connect(&connection, SIGNAL(setFPS()), this, SLOT(setFPS()));
+    connect(&connection, SIGNAL(resetbandedges(double)), this, SLOT(resetBandedges(double)));
   //  connect(&connection, SIGNAL(setSampleRate(int)), this, SLOT(sampleRateChanged(long)));
-    connect(&connection, SIGNAL(hardware(QString)), this, SLOT(hardwareSet(QString)));
 
     connect(&audioConnection, SIGNAL(audioBuffer(char*,char*)), this, SLOT(audioBuffer(char*,char*)));
     connect(audioinput, SIGNAL(mic_send_audio(QQueue<qint16>*)), this, SLOT(micSendAudio(QQueue<qint16>*)));
 
+    // connect up band and frequency changes
+    connect(widget.vfoFrame, SIGNAL(receiverChanged(int)), this, SLOT(currentReceiverChanged(int)));
     connect(widget.vfoFrame, SIGNAL(getBandFrequency()), this, SLOT(getBandFrequency()));
+    connect(widget.vfoFrame, SIGNAL(bandBtnClicked(int)), this, SLOT(getBandBtn(int)));
+    connect(widget.vfoFrame, SIGNAL(frequencyMoved(int,int)), this, SLOT(frequencyMoved(int,int)));
+    connect(widget.vfoFrame, SIGNAL(rightBandClick()), this, SLOT(quickMemStore()));
+    connect(widget.vfoFrame, SIGNAL(vfoStepBtnClicked(int)), this, SLOT(vfoStepBtnClicked(int)));
+
+    connect(widget.ctlFrame, SIGNAL(audioMuted(bool)), this, SLOT(setAudioMuted(bool)));
+    connect(widget.ctlFrame, SIGNAL(audioGainChanged()), this, SLOT(audioGainChanged()));
+    connect(widget.ctlFrame, SIGNAL(pttChange(int,bool)), this, SLOT(pttChange(int,bool)));
+    connect(widget.ctlFrame, SIGNAL(masterBtnClicked()), this, SLOT(masterButtonClicked()));
+
+    connect(&keypad, SIGNAL(setKeypadFrequency(long long)), this, SLOT(setKeypadFrequency(long long)));
+
     connect(widget.actionAbout, SIGNAL(triggered()), this, SLOT(actionAbout()));
     connect(widget.actionConnectToServer, SIGNAL(triggered()), this, SLOT(actionConnect()));
     connect(widget.actionQuick_Server_List, SIGNAL(triggered()), this, SLOT(actionQuick_Server_List()));
     connect(widget.actionDisconnectFromServer, SIGNAL(triggered()), this, SLOT(actionDisconnect()));
-    connect(widget.actionBandscope, SIGNAL(triggered()), this, SLOT(actionBandscope()));
+//    connect(widget.actionBandscope, SIGNAL(triggered()), this, SLOT(actionBandscope()));
     connect(widget.actionRecord, SIGNAL(triggered()), this, SLOT(actionRecord()));
     connect(widget.actionConfig, SIGNAL(triggered()), this, SLOT(actionConfigure()));
     connect(widget.actionEqualizer, SIGNAL(triggered()), this, SLOT(actionEqualizer()));
     connect(widget.actionMuteMainRx, SIGNAL(triggered()), this, SLOT(actionMuteMainRx()));
-    connect(widget.ctlFrame, SIGNAL(audioMuted(bool)), this, SLOT(setAudioMuted(bool)));
-    connect(widget.ctlFrame, SIGNAL(audioGainChanged()), this, SLOT(audioGainChanged()));
     connect(widget.actionSquelchEnable, SIGNAL(triggered()), this, SLOT(actionSquelch()));
     connect(widget.actionSquelchReset, SIGNAL(triggered()), this, SLOT(actionSquelchReset()));
     connect(widget.actionKeypad, SIGNAL(triggered()), this, SLOT(actionKeypad()));
-    connect(widget.vfoFrame, SIGNAL(bandBtnClicked(int)), this, SLOT(getBandBtn(int)));
     connect(widget.action160, SIGNAL(triggered()), this, SLOT(action160()));
     connect(widget.action80, SIGNAL(triggered()), this, SLOT(action80()));
     connect(widget.action60, SIGNAL(triggered()), this, SLOT(action60()));
@@ -189,54 +185,19 @@ UI::UI(const QString server)
     connect(widget.actionMedium, SIGNAL(triggered()), this, SLOT(actionMedium()));
     connect(widget.actionFast, SIGNAL(triggered()), this, SLOT(actionFast()));
     //connect(widget.agcTLevelSlider, SIGNAL(valueChanged(int)), this, SLOT(AGCTLevelChanged(int)));
-    connect(widget.rxEqEnableCB, SIGNAL(toggled(bool)), this, SLOT(enableRxEq(bool)));
-    connect(widget.txEqEnableCB, SIGNAL(toggled(bool)), this, SLOT(enableTxEq(bool)));
-    connect(widget.tnfButton, SIGNAL(clicked(bool)), rxp[0], SLOT(enableNotchFilter(bool)));
-    connect(widget.tnfAddButton, SIGNAL(clicked()), this, SLOT(addNotchFilter(void)));
     connect(widget.actionBookmarkThisFrequency, SIGNAL(triggered()), this, SLOT(actionBookmark()));
     connect(widget.actionEditBookmarks, SIGNAL(triggered()), this, SLOT(editBookmarks()));
 
     // connect up spectrum view
-    connect(rxp[0], SIGNAL(variableFilter(int,int)), this, SLOT(variableFilter(int,int)));
-    connect(rxp[0], SIGNAL(frequencyMoved(int,int)), this, SLOT(frequencyMoved(int,int)));
-    connect(rxp[0], SIGNAL(spectrumHighChanged(int)), this, SLOT(spectrumHighChanged(int)));
-    connect(rxp[0], SIGNAL(spectrumLowChanged(int)), this, SLOT(spectrumLowChanged(int)));
-    connect(rxp[0], SIGNAL(waterfallHighChanged(int)), this, SLOT(waterfallHighChanged(int)));
-    connect(rxp[0], SIGNAL(waterfallLowChanged(int)), this, SLOT(waterfallLowChanged(int)));
-    connect(rxp[0], SIGNAL(meterValue(float,float,float)), this, SLOT(getMeterValue(float,float,float)));
-    connect(rxp[0], SIGNAL(squelchValueChanged(int)), this, SLOT(squelchValueChanged(int)));
-    connect(rxp[0], SIGNAL(statusMessage(QString)), this, SLOT(statusMessage(QString)));
-    connect(rxp[0], SIGNAL(removeNotchFilter()), this, SLOT(removeNotchFilter()));
     connect(&spectrumConnection, SIGNAL(spectrumBuffer(CHANNEL)), this, SLOT(spectrumBuffer(CHANNEL)));
 
-    connect(widget.vfoFrame, SIGNAL(frequencyMoved(int,int)), this, SLOT(frequencyMoved(int,int)));
-    connect(widget.vfoFrame, SIGNAL(frequencyChanged(long long)), this, SLOT(frequencyChanged(long long)));
-    connect(widget.vfoFrame, SIGNAL(vfoStepBtnClicked(int)), this, SLOT(vfoStepBtnClicked(int)));
-    connect(widget.ctlFrame, SIGNAL(pttChange(int,bool)), this, SLOT(pttChange(int,bool)));
-    connect(widget.vfoFrame, SIGNAL(rightBandClick()), this, SLOT(quickMemStore()));
-    connect(widget.ctlFrame, SIGNAL(masterBtnClicked()), this, SLOT(masterButtonClicked()));
-
-    connect(&keypad, SIGNAL(setKeypadFrequency(long long)), this, SLOT(setKeypadFrequency(long long)));
-
-    // connect up band and frequency changes
-    connect(&band, SIGNAL(bandChanged(int,int)), this, SLOT(bandChanged(int,int)));
-    connect(&band, SIGNAL(printStatusBar(QString)), this, SLOT(printStatusBar(QString)));
-
-    // connect up mode changes
-    connect(&mode, SIGNAL(modeChanged(int,int)), this, SLOT(modeChanged(int,int)));
-
-    // connect up filter changes
-    connect(&filters, SIGNAL(filtersChanged(FiltersBase*,FiltersBase*)), this, SLOT(filtersChanged(FiltersBase*,FiltersBase*)));
-    connect(&filters, SIGNAL(filterChanged(int,int)), this, SLOT(filterChanged(int,int)));
-
     // connect up configuration changes
-    connect(&configure, SIGNAL(spectrumHighChanged(int)), this, SLOT(spectrumHighChanged(int)));
-    connect(&configure, SIGNAL(spectrumLowChanged(int)), this, SLOT(spectrumLowChanged(int)));
+//    connect(&configure, SIGNAL(spectrumHighChanged(int)), this, SLOT(spectrumHighChanged(int))); FIXME: add configuration per radio/receiver
+//    connect(&configure, SIGNAL(spectrumLowChanged(int)), this, SLOT(spectrumLowChanged(int))); FIXME: add configuration per radio/receiver
     connect(&configure, SIGNAL(fpsChanged(int)), this, SLOT(fpsChanged(int)));
-    connect(&configure, SIGNAL(avgSpinChanged(int)), rxp[0], SLOT(setAvg(int)));
-    connect(&configure, SIGNAL(waterfallHighChanged(int)), this, SLOT(waterfallHighChanged(int)));
-    connect(&configure, SIGNAL(waterfallLowChanged(int)), this, SLOT(waterfallLowChanged(int)));
-    connect(&configure, SIGNAL(waterfallAutomaticChanged(bool)), this, SLOT(waterfallAutomaticChanged(bool)));
+//    connect(&configure, SIGNAL(waterfallHighChanged(int)), this, SLOT(waterfallHighChanged(int))); FIXME: add configuration per radio/receiver
+//    connect(&configure, SIGNAL(waterfallLowChanged(int)), this, SLOT(waterfallLowChanged(int))); FIXME: add configuration per radio/receiver
+//    connect(&configure, SIGNAL(waterfallAutomaticChanged(bool)), this, SLOT(waterfallAutomaticChanged(bool))); FIXME: add configuration per radio/receiver
 //    connect(&configure, SIGNAL(encodingChanged(int)), this, SLOT(encodingChanged(int)));
 //    connect(&configure, SIGNAL(encodingChanged(int)), audio, SLOT(set_audio_encoding(int)));
 //    connect(&configure, SIGNAL(micEncodingChanged(int)), audioinput, SLOT(setMicEncoding(int)));
@@ -287,33 +248,22 @@ UI::UI(const QString server)
     connect(this, SIGNAL(process_audio(char*,char*,int)), audio, SLOT(process_audio(char*,char*,int)));
 //    connect(this, SIGNAL(HideTX(bool)), widget.ctlFrame, SLOT(HideTX(bool)));
 
-    bandscope = NULL;
-    fps = 15;
     gain = 100;
     agc = AGC_SLOW;
-    cwPitch = configure.getCwPitch();
-    squelchValue = -100;
-    squelch = false;
-    notchFilterIndex = 0;
+//    cwPitch = configure.getCwPitch();
 
     audio->get_audio_device(&audio_device);
 
     // load any saved settings
     loadSettings();
 
-    fps = configure.getFps();
-
     configure.updateXvtrList(&xvtr);
     xvtr.buildMenu(widget.menuXVTR);
-
-    rxp[0]->setHost(configure.getHost());
 
     printWindowTitle("Remote disconnected"); //added by gvj
 
     //Configure statusBar
     widget.statusbar->addPermanentWidget(&modeInfo);
-
-    band.initBand(band.getBand());
 
     // automatically select a server and connect to it //IW0HDV
     if (server.length())
@@ -327,8 +277,6 @@ UI::UI(const QString server)
 UI::~UI()
 {
     connection.disconnect();
-    equalizer->deleteLater();
-    bandscope->deleteLater();
     saveSettings();
 } // end destructor
 
@@ -362,13 +310,33 @@ void UI::actionAbout()
 } // end actionAbout
 
 
+void UI::currentReceiverChanged(int index)
+{
+    if (current_index < 0) return;
+    current_index = index;
+    frequencyMoved(0, 0);
+
+    QByteArray command;
+    command.clear();
+    command.append((char)receiver_channel[current_index]);
+    command.append((char)ENABLEAUDIO);
+    command.append((char)true);
+    connection.sendCommand(command);
+
+    if (connection.channels[receiver_channel[current_index]].radio.bandscope_capable)
+        widget.actionBandscope->setEnabled(true);
+    else
+        widget.actionBandscope->setEnabled(false);
+    qDebug("Receiver index changed.\n");
+}
+
+
 void UI::loadSettings()
 {
     QSettings settings("FreeSDR", "QtRadioII");
     qDebug() << "loadSettings: " << settings.fileName();
 
     widget.ctlFrame->loadSettings(&settings);
-    band.loadSettings(&settings);
     xvtr.loadSettings(&settings);
     configure.loadSettings(&settings);
     configure.updateXvtrList(&xvtr);
@@ -376,45 +344,16 @@ void UI::loadSettings()
     bookmarks.buildMenu(widget.menuView_Bookmarks);
 
     settings.beginGroup("UI");
-    if(settings.contains("gain")) gain=settings.value("gain").toInt();
+    if (settings.contains("gain")) gain=settings.value("gain").toInt();
     emit widget.ctlFrame->audioGainInitalized(gain);
-    if(settings.contains("agc")) agc=settings.value("agc").toInt();
-    if(settings.contains("squelch")) squelchValue=settings.value("squelch").toInt();
-    if(settings.contains("pwsmode")) pwsmode=settings.value("pwsmode").toInt();
+    if (settings.contains("agc")) agc=settings.value("agc").toInt();
+    if (settings.contains("pwsmode")) pwsmode=settings.value("pwsmode").toInt();
     settings.endGroup();
 
     settings.beginGroup("mainWindow");
     if (configure.getGeometryState())
         restoreGeometry(settings.value("geometry").toByteArray());
     settings.endGroup();
-
-    settings.beginGroup("AudioEqualizer");
-    if (settings.contains("eqMode"))
-    {
-        if (settings.value("eqMode") == 3)
-            equalizer->loadSettings3Band();
-        else
-            equalizer->loadSettings10Band();
-
-        if (settings.value("rxEqEnabled") == 1)
-        {
-            widget.rxEqEnableCB->setChecked(true);
-            enableRxEq(true);
-        }
-
-        if (settings.value("txEqEnabled") == 1)
-        {
-            widget.txEqEnableCB->setChecked(true);
-            enableTxEq(true);
-        }
-    }
-    else
-    {
-        settings.setValue("eqMode", 10);
-        equalizer->set10BandEqualizer();
-    }
-    settings.endGroup();
-
     widget.vfoFrame->readSettings(&settings);
 
     switch(agc)
@@ -449,14 +388,14 @@ void UI::saveSettings()
     //  settings.clear();
     widget.ctlFrame->saveSettings(&settings);
     configure.saveSettings(&settings);
-    band.saveSettings(&settings);
+//    band.saveSettings(&settings);
     xvtr.saveSettings(&settings);
     bookmarks.saveSettings(&settings);
 
     settings.beginGroup("UI");
     settings.setValue("gain", gain);
     settings.setValue("agc", agc);
-    settings.setValue("squelch", squelchValue);
+//    settings.setValue("squelch", squelchValue);
     settings.endGroup();
 
     settings.beginGroup("mainWindow");
@@ -474,14 +413,14 @@ void UI::saveSettings()
 
 void UI::hostChanged(QString host)
 {
-    rxp[0]->setHost(host);
+//    rxp[0][0]->setHost(host);
     printWindowTitle("Remote disconnected");
 } // end hostChanged
 
 
 void UI::receiverChanged(int rx)
 {
-    rxp[0]->setReceiver(rx);
+//    rxp[0][0]->setReceiver(rx);
     printWindowTitle("Remote disconnected");
 } // end receiverChanged
 
@@ -516,79 +455,14 @@ void UI::actionConfigure()
 
 void UI::actionEqualizer()
 {
-    equalizer->show();
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->equalizer->show();
 } // end actionEqualizer
-
-
-void UI::spectrumHighChanged(int high)
-{
-    //qDebug() << __FUNCTION__ << ": " << high;
-
-    rxp[0]->setHigh(high);
-    configure.setSpectrumHigh(high);
-    band.setSpectrumHigh(high);
-} // end spectrumHighChanged
-
-
-void UI::spectrumLowChanged(int low)
-{
-    //qDebug() << __FUNCTION__ << ": " << low;
-
-    rxp[0]->setLow(low);
-    configure.setSpectrumLow(low);
-    band.setSpectrumLow(low);
-} // end spectrumLowChanged
-
-
-void UI::fpsChanged(int f)
-{
-    //qDebug() << "fpsChanged:" << f;
-    fps=f;
-} // end fpsChanged
-
-
-void UI::setFPS(void)
-{
-    QByteArray command;
-    command.clear();
-    command.append((char)currentRxChannel);
-    command.append((char)SETFPS);
-    command.append(QString("2000,%1").arg(fps));
-    connection.sendCommand(command);
-    spectrumConnection.sendCommand(command);
-} // end setFPS
 
 
 void UI::resizeEvent(QResizeEvent *)
 {
   //  setFPS();
 } // end resizeEvent
-
-
-void UI::waterfallHighChanged(int high)
-{
-    //qDebug() << __LINE__ << __FUNCTION__ << ": " << high;
-
-    rxp[0]->panadapterScene->waterfallItem->setHigh(high);
-    configure.setWaterfallHigh(high);
-    band.setWaterfallHigh(high);
-} // end waterfallHighChanged
-
-
-void UI::waterfallLowChanged(int low)
-{
-    //qDebug() << __FUNCTION__ << ": " << low;
-
-    rxp[0]->panadapterScene->waterfallItem->setLow(low);
-    configure.setWaterfallLow(low);
-    band.setWaterfallLow(low);
-} // end waterfallLowChanged
-
-
-void UI::waterfallAutomaticChanged(bool state)
-{
-    rxp[0]->panadapterScene->waterfallItem->setAutomatic(state);
-} // end waterfallautomaticChanged
 
 
 void UI::audioDeviceChanged(QAudioDeviceInfo info,int rate,int channels,QAudioFormat::Endian byteOrder)
@@ -609,9 +483,10 @@ void UI::micDeviceChanged(QAudioDeviceInfo info,int rate,int channels,QAudioForm
 
 void UI::actionConnect()
 {
+    current_index = -1;
     connection.connect(configure.getHost(), DSPSERVER_BASE_PORT+configure.getReceiver());
-    rxp[0]->setReceiver(configure.getReceiver());
-    isConnected = true;
+//    rxp[0][0]->setReceiver(configure.getReceiver()); // FIXME: not sure what this is doing
+//    isConnected = true;
 } // end actionConnect
 
 
@@ -634,9 +509,6 @@ void UI::actionDisconnect()
 {
     QByteArray command;
 
-    if (bandscope != NULL)
-        bandscope->close();
-
     if (currentTxChannel > -1)
     {
         command.clear();
@@ -652,25 +524,30 @@ void UI::actionDisconnect()
         connection.sendCommand(command);
     }
 
-    for (int i=0;i<MAX_RECEIVERS;i++)
+
+    for (int r=0;r<MAX_RADIOS;r++)
     {
-        if (receivers_active[i])
+        if (radio[r] == NULL) continue;
+        for (int i=0;i<MAX_RECEIVERS;i++)
         {
-            command.clear();
-            command.append((char)receiver_channel[i]);
-            command.append((char)STARCOMMAND);
-            command.append((char)DETACH);
-            connection.sendCommand(command);
-            QThread::sleep(1);
+            if (radio[r]->receiver_active[i])
+            {
+                command.clear();
+                command.append((char)radio[r]->receiver_channel[i]);
+                command.append((char)STARCOMMAND);
+                command.append((char)DETACH);
+                connection.sendCommand(command);
+                QThread::sleep(1);
 
-            command.clear();
-            command.append((char)receiver_channel[i]);
-            command.append((char)STOPXCVR);
-            connection.sendCommand(command);
+                command.clear();
+                command.append((char)radio[r]->receiver_channel[i]);
+                command.append((char)STOPXCVR);
+                connection.sendCommand(command);
+                radio[r]->receiver_active[i] = false;
+            }
         }
+        radio[r]->shutdownRadio();
     }
-
-    shutdownRadio(currentRxChannel);
 
     qDebug() << "actionDisconnect() QuickIP=" << QuickIP;
     if (QuickIP.length() > 6)
@@ -681,6 +558,14 @@ void UI::actionDisconnect()
 
     QuickIP = "";
     widget.zoomSpectrumSlider->setValue(0);
+
+//    widget.actionBandscope->setEnabled(false);
+
+    spectrumConnection.recv_mutex.lock();
+    spectrumConnection.disconnect();
+    spectrumConnection.recv_mutex.unlock();
+    audioConnection.disconnect();
+    micAudioConnection.disconnect();
 
     connection.disconnect();
     widget.actionConnectToServer->setDisabled(false);
@@ -709,6 +594,7 @@ void UI::connected(bool *rx_active, int8_t *rxchannels, int8_t *txrxPair)
     QByteArray command;
     int8_t  channel = -1;
     int i = 0;
+    int x = 0;
 
     if (txrxPair[1] > -1)
     {
@@ -719,11 +605,11 @@ void UI::connected(bool *rx_active, int8_t *rxchannels, int8_t *txrxPair)
     else
         widget.ctlFrame->HideTX(true);
 
-    for (i=0;i<MAX_RECEIVERS;i++)
-    {
-        receivers_active[i] = rx_active[i];
-        receiver_channel[i] = rxchannels[i];
+    spectrumConnection.connect(configure.getHost(), DSPSERVER_BASE_PORT+1);
+    widget.vfoFrame->resetSelectedReceiver();
 
+    for (i=0;i<MAX_RECEIVERS-1;i++)  // 8 receivers less 1 transmitter
+    {
         if (!rx_active[i] || connection.channels[rxchannels[i]].dsp_channel == -1)
             continue;
 
@@ -743,7 +629,66 @@ void UI::connected(bool *rx_active, int8_t *rxchannels, int8_t *txrxPair)
 
         qDebug() << "UI::connected";
         qDebug("Setting up channel: %d\n", channel);
-        isConnected = true;
+
+        int r = connection.channels[channel].radio.radio_id;
+        int index = connection.channels[channel].index;
+
+        receiver_channel[x] = rxchannels[i];
+        receiver_active[x] = rx_active[i];
+
+        if (radio[r] == NULL)
+        {
+            radio[r] = new Radio(r, &connection);
+            connect(radio[r], SIGNAL(send_command(QByteArray)), &connection, SLOT(sendCommand(QByteArray)));
+            connect(radio[r], SIGNAL(send_spectrum_command(QByteArray)), &spectrumConnection, SLOT(sendCommand(QByteArray)));
+            connect(radio[r], SIGNAL(updateVFO(long long)), this, SLOT(updateVFO(long long)));
+            connect(radio[r], SIGNAL(bandScopeClosed()), this, SLOT(bandScopeClosed()));
+            connect(radio[r], SIGNAL(ctlSetPTT(bool)), this, SLOT(ctlSetPTT(bool)));
+            connect(radio[r], SIGNAL(tnfSetChecked(bool)), this, SLOT(tnfSetChecked(bool)));
+            qDebug("**********Initialized radio structure -> %d\n", r);
+        }
+
+        if (!isConnected)
+        {
+            radio[r]->hardwareSet(widget.RadioScrollAreaWidgetContents);
+            qDebug("**********Initialized hardware specific interface.\n");
+        }
+
+        if (!connection.channels[channel].isTX)
+        {
+            radio[r]->initializeReceiver(&connection.channels[index]);
+
+            //        connect(&connection, SIGNAL(slaveSetFreq(int8_t,long long)), radio[r], SLOT(frequencyChanged(int8_t,long long)));
+            connect(widget.tnfButton, SIGNAL(clicked(bool)), radio[r]->rxp[x], SLOT(enableNotchFilter(bool)));
+            connect(radio[r]->rxp[x], SIGNAL(variableFilter(int8_t,int,int)), radio[r], SLOT(variableFilter(int8_t,int,int)));
+            connect(radio[r]->rxp[x], SIGNAL(spectrumHighChanged(int8_t,int)), radio[r], SLOT(spectrumHighChanged(int8_t,int)));
+            connect(radio[r]->rxp[x], SIGNAL(spectrumLowChanged(int8_t,int)), radio[r], SLOT(spectrumLowChanged(int8_t,int)));
+            connect(radio[r]->rxp[x], SIGNAL(waterfallHighChanged(int8_t,int)), radio[r], SLOT(waterfallHighChanged(int8_t,int)));
+            connect(radio[r]->rxp[x], SIGNAL(waterfallLowChanged(int8_t,int)), radio[r], SLOT(waterfallLowChanged(int8_t,int)));
+            connect(radio[r]->rxp[x], SIGNAL(meterValue(int8_t,float,float,float)), this, SLOT(getMeterValue(int8_t,float,float,float)));
+            connect(radio[r]->rxp[x], SIGNAL(squelchValueChanged(int8_t,int)), radio[r], SLOT(squelchValueChanged(int8_t,int)));
+            connect(radio[r]->rxp[x], SIGNAL(statusMessage(QString)), this, SLOT(statusMessage(QString)));
+            connect(radio[r]->rxp[x], SIGNAL(removeNotchFilter(int8_t)), radio[r], SLOT(removeNotchFilter(int8_t)));
+            connect(widget.rxEqEnableCB, SIGNAL(toggled(bool)), this, SLOT(enableRxEq(bool)));
+            connect(widget.actionBandscope, SIGNAL(triggered(bool)), this, SLOT(enableBandscope(bool)));
+            connect(widget.tnfAddButton, SIGNAL(clicked()), radio[r]->rxp[x], SLOT(addNotchFilter(void)));
+            connect(&configure, SIGNAL(avgSpinChanged(int)), radio[r]->rxp[x], SLOT(setAvg(int)));
+            connect(&radio[r]->band[x], SIGNAL(printStatusBar(QString)), this, SLOT(printStatusBar(QString)));
+            //    connect(connection, SIGNAL(setFPS()), this, SLOT(setFPS()));
+
+            widget.spectrumLayout->addWidget((QWidget*)radio[r]->rxp[x]);
+
+            widget.vfoFrame->setSelectedReceiver(QString("Receiver %1").arg(x));
+            widget.vfoFrame->setCurrentReceiver(x);
+
+            qDebug("***********Initialized receiver structure for channel: %d\n", channel);
+        }
+
+        if (!radio[r]->radio_started)
+        {
+            radio[r]->initializeRadio();
+            qDebug("**********Initialized radio hardware.\n");
+        }
 
         // let them know who we are
         command.clear();
@@ -751,9 +696,6 @@ void UI::connected(bool *rx_active, int8_t *rxchannels, int8_t *txrxPair)
         command.append((char)SETCLIENT);
         command.append("QtRadio");
         connection.sendCommand(command);
-
-        hardwareSet(connection.channels[currentRxChannel].radio.radio_type);
-        initializeRadio(channel);
 
         command.clear();
         command.append((char)channel);
@@ -765,7 +707,7 @@ void UI::connected(bool *rx_active, int8_t *rxchannels, int8_t *txrxPair)
         command.append((char)STARTIQ);
         connection.sendCommand(command);
 
-        qDebug() << "Sent STARTIQ command.";
+        qDebug() << "Sent RX STARTIQ command.";
 
         command.clear();
         command.append((char)channel);
@@ -773,54 +715,78 @@ void UI::connected(bool *rx_active, int8_t *rxchannels, int8_t *txrxPair)
         command.append((char)ATTACHRX);
         connection.sendCommand(command);
 
+        if (!isConnected)
+        {
+            connect(&radio[r]->band[x], SIGNAL(bandChanged(int8_t,int,int)), radio[r], SLOT(bandChanged(int8_t,int,int)));
+            connect(&radio[r]->mode[x], SIGNAL(modeChanged(int8_t,int,int)), radio[r], SLOT(modeChanged(int8_t,int,int)));
+            connect(radio[r], SIGNAL(updateFilterMenu(int)), this, SLOT(updateFilterMenu(int)));
+            connect(radio[r], SIGNAL(updateFiltersMenu(int, FiltersBase*)), this, SLOT(updateFiltersMenu(int, FiltersBase*)));
+            connect(radio[r], SIGNAL(updateModeMenu(int)), this, SLOT(updateModeMenu(int)));
+            connect(radio[r], SIGNAL(updateBandMenu(int)), this, SLOT(updateBandMenu(int)));
+            connect(&radio[r]->filters, SIGNAL(filtersChanged(int8_t,FiltersBase*,FiltersBase*)), radio[r], SLOT(filtersChanged(int8_t,FiltersBase*,FiltersBase*)));
+            connect(&radio[r]->filters, SIGNAL(filterChanged(int8_t,int,int)), radio[r], SLOT(filterChanged(int8_t,int,int)));
+        }
+
+        isConnected = true;
+
         if (txrxPair[1] == channel && txrxPair[0] > -1)
         {
+            memcpy((char*)&radio[r]->channels[8], (char*)&connection.channels[txrxPair[0]], sizeof(CHANNEL));
+            radio[r]->currentTxChannel = txrxPair[0];
+            radio[r]->txp = new TxPanadapter();
+            widget.txSpectrumView->setScene(radio[r]->txp->txpanadapterScene);
+            connect(radio[r]->txp, SIGNAL(meterValue(int8_t, float, float, float)), this, SLOT(getMeterValue(int8_t, float, float, float)));
+            connect(widget.txEqEnableCB, SIGNAL(toggled(bool)), this, SLOT(enableTxEq(bool)));
+            qDebug("Initialized transmit structure.\n");
+
             command.clear();
-            command.append((char)currentTxChannel);
+            command.append((char)txrxPair[0]);
             command.append((char)STARTXCVR);
             connection.sendCommand(command);
 
             command.clear();
-            command.append((char)currentTxChannel);
+            command.append((char)txrxPair[0]);
             command.append((char)STARTIQ);
             connection.sendCommand(command);
 
-            qDebug() << "Sent STARTIQ command.";
+            qDebug() << "Sent TX STARTIQ command.";
 
             command.clear();
-            command.append((char)currentTxChannel);
+            command.append((char)txrxPair[0]);
             command.append((char)STARCOMMAND);
             command.append((char)ATTACHTX);
             connection.sendCommand(command);
 
             command.clear();
-            command.append((char)currentTxChannel);
+            command.append((char)txrxPair[0]);
             command.append((char)SETTXBPASSWIN);
             command.append(QString("%1").arg(configure.getTxFilterWindow()));
             connection.sendCommand(command);
 
             command.clear();
-            command.append((char)currentTxChannel);
+            command.append((char)txrxPair[0]);
             command.append((char)SETTXALCATTACK);
             command.append(QString("%1").arg(configure.getALCAttackValue()));
             connection.sendCommand(command);
 
             command.clear();
-            command.append((char)currentTxChannel);
+            command.append((char)txrxPair[0]);
             command.append((char)SETTXALCDECAY);
             command.append(QString("%1").arg(configure.getALCDecayValue()));
             connection.sendCommand(command);
 
             command.clear();
-            command.append((char)currentTxChannel);
+            command.append((char)txrxPair[0]);
             command.append((char)SETTXALCMAXGAIN);
             command.append(QString("%1").arg(configure.getALCMaxGainValue()));
             connection.sendCommand(command);
 
-            frequency = band.getFrequency();
+            radio[r]->band[x].selectBand(BAND_15+100);
+            radio[r]->txFrequency = radio[r]->band[x].getFrequency();
+            txFrequency = radio[r]->band[x].getFrequency();
 
             command.clear();
-            command.append((char)currentTxChannel);
+            command.append((char)txrxPair[0]);
             command.append((char)SETFREQ);
             command.append(QString("%1").arg(frequency));
             connection.sendCommand(command);
@@ -829,21 +795,22 @@ void UI::connected(bool *rx_active, int8_t *rxchannels, int8_t *txrxPair)
             widget.vfoFrame->setFrequency(frequency);
 
             command.clear();
-            command.append((char)currentTxChannel);
+            command.append((char)txrxPair[0]);
             command.append((char)SETMODE);
-            command.append((char)band.getMode());
+            command.append((char)radio[r]->band[x].getMode());
             connection.sendCommand(command);
 
             command.clear();
-            command.append((char)currentTxChannel);
+            command.append((char)txrxPair[0]);
             command.append((char)SETFPS);
-            command.append(QString("2000,%1").arg(fps));
+            command.append(QString("2000,%1").arg(radio[r]->fps[x]));
             connection.sendCommand(command);
 
             connection.channels[channel].enabled = true;
         }
 
-        frequency = band.getFrequency();
+        radio[r]->band[x].selectBand(BAND_15+100);
+        frequency = radio[r]->band[x].getFrequency();
 
         command.clear();
         command.append((char)channel);
@@ -857,25 +824,27 @@ void UI::connected(bool *rx_active, int8_t *rxchannels, int8_t *txrxPair)
         command.clear();
         command.append((char)channel);
         command.append((char)SETMODE);
-        command.append((char)band.getMode());
+        command.append((char)radio[r]->band[x].getMode());
         connection.sendCommand(command);
 
+        radio[r]->filters.selectFilters(x, &lsbFilters);
+
         int low,high;
-        if (mode.getMode() == MODE_CWL)
+        if (radio[r]->mode[x].getMode() == MODE_CWL)
         {
-            low = -cwPitch-filters.getLow();
-            high = -cwPitch+filters.getHigh();
+            low = -radio[r]->cwPitch - radio[r]->filters.getLow();
+            high = -radio[r]->cwPitch + radio[r]->filters.getHigh();
         }
         else
-            if (mode.getMode() == MODE_CWU)
+            if (radio[r]->mode[x].getMode() == MODE_CWU)
             {
-                low = cwPitch-filters.getLow();
-                high = cwPitch+filters.getHigh();
+                low = radio[r]->cwPitch - radio[r]->filters.getLow();
+                high = radio[r]->cwPitch + radio[r]->filters.getHigh();
             }
             else
             {
-                low = filters.getLow();
-                high = filters.getHigh();
+                low = radio[r]->filters.getLow();
+                high = radio[r]->filters.getHigh();
             }
         command.clear();
         command.append((char)channel);
@@ -883,13 +852,13 @@ void UI::connected(bool *rx_active, int8_t *rxchannels, int8_t *txrxPair)
         command.append(QString("%1,%2").arg(low).arg(high));
         connection.sendCommand(command);
 
-        rxp[0]->setFilter(low,high);
+        radio[r]->rxp[x]->setFilter(low,high);
 
         // start the audio
         audio_buffers=0;
         actionGain(gain);
 
-        if (!getenv("QT_RADIO_NO_LOCAL_AUDIO"))  //FIXME: this probably needs to be changed. Not exactly sure which audio this refers to.
+ //       if (!getenv("QT_RADIO_NO_LOCAL_AUDIO"))  //FIXME: this probably needs to be changed. Not exactly sure which audio this refers to.
         {
             command.clear();
             command.append((char)channel);
@@ -898,7 +867,7 @@ void UI::connected(bool *rx_active, int8_t *rxchannels, int8_t *txrxPair)
             connection.sendCommand(command);
         }
 
-        setFPS();
+        radio[r]->setFPS(x);
 
         // select audio encoding
         command.clear();
@@ -940,8 +909,8 @@ void UI::connected(bool *rx_active, int8_t *rxchannels, int8_t *txrxPair)
         command.clear();
         command.append((char)channel);
         command.append((char)SETSQUELCHVAL);
-        command.append(QString("%1").arg(squelchValue));
-        connection.sendCommand(command);
+//        command.append(QString("%1").arg(squelchValue));
+//        connection.sendCommand(command);
 
         command.clear();
         command.append((char)channel);
@@ -1021,53 +990,47 @@ void UI::connected(bool *rx_active, int8_t *rxchannels, int8_t *txrxPair)
     QTextStream(&command) << "settxalcdecay " << configure.getALCDecayValue();
     connection.sendCommand(command);
 */
-        //
-        // hardware special command
-        // queries hardware name from remote server
-        //
-        //    command.clear();
-        //    command.append((char)STARCOMMAND);
-        //    command.append((char)STARHARDWARE);
-        //    connection.sendCommand(command);
-        /*
-    // start the spectrum
-    //qDebug() << "starting spectrum timer";
-    connection.SemSpectrum.release();
-    */
+
         command.clear();
         command.append((char)channel);
         command.append((char)QUESTION);
         command.append((char)QINFO);
         connection.sendCommand(command);
 
-        connection.channels[channel].enabled = true;
-    }
+        connection.channels[index].enabled = true;
 
-    configure.connected(true);
+        radio[r]->rxp[x]->currentChannel = currentRxChannel;
+        radio[r]->rxp[x]->setFrequency(frequency);
+        radio[r]->rxp[x]->enableNotchFilter(false);
+        radio[r]->rxp[x]->panadapterScene->waterfallItem->bConnected = true;
 
-    spectrumConnection.connect(configure.getHost(), DSPSERVER_BASE_PORT+1);
+        radio[r]->sampleRateChanged(x, connection.sample_rate);
+
+        radio[r]->frequencyChanged(x, frequency);
+
+        current_index = x;
+        x++;
+    } //for
+
     audioConnection.connect(configure.getHost(), DSPSERVER_BASE_PORT+10);
     micAudioConnection.connect(configure.getHost(), DSPSERVER_BASE_PORT+20);
+    audio->select_audio(audio_device, audio_sample_rate, audio_channels, audio_byte_order);
 
     widget.actionConnectToServer->setDisabled(true);
     widget.actionDisconnectFromServer->setDisabled(false);
 
-    audio->select_audio(audio_device, audio_sample_rate, audio_channels, audio_byte_order);
-
-    sampleRateChanged(connection.sample_rate);
-
-    //   spectrumTimer->start(1000/fps);
+    configure.connected(true);
     connection_valid = true;
-    if ((mode.getStringMode() == "CWU") || (mode.getStringMode() == "CWL"))
-        frequencyChanged(frequency); //gvj dummy call to set Rx offset for cw
-
-    rxp[0]->currentChannel = currentRxChannel;
-    rxp[0]->setFrequency(frequency);
-    rxp[0]->enableNotchFilter(false);
 
     widget.zoomSpectrumSlider->setValue(1);
     on_zoomSpectrumSlider_sliderMoved(1);
-    rxp[0]->panadapterScene->waterfallItem->bConnected = true;
+
+    command.clear();
+    command.append((char)currentRxChannel);
+    command.append((char)ENABLEAUDIO);
+    command.append((char)true);
+    connection.sendCommand(command);
+    qDebug("Radio fully initialized.\n");
 } // end connected
 
 
@@ -1084,12 +1047,7 @@ void UI::disconnected(QString message)
     loffset = 0;
     currentRxChannel = -1;
     currentTxChannel = -1;
-
-    widget.actionBandscope->setEnabled(false);
-
-    spectrumConnection.disconnect();
-    audioConnection.disconnect();
-    micAudioConnection.disconnect();
+    current_index = -1;
 
     audio->clear_decoded_buffer();
 
@@ -1098,14 +1056,35 @@ void UI::disconnected(QString message)
     widget.actionConnectToServer->setDisabled(false);
     widget.actionDisconnectFromServer->setDisabled(true);
 
-    if (hardwareType != "" && hww != NULL)
-    {
-        widget.RadioScrollAreaWidgetContents->layout()->removeWidget(hww);
-        hww->deleteLater();
-        hardwareType.clear();
-    }
     configure.connected(false);
-    rxp[0]->panadapterScene->waterfallItem->bConnected = false;
+
+    for (int r=0;r<MAX_RADIOS;r++)
+    {
+        if (radio[r] == NULL) continue;
+
+        if (radio[r]->bandscope != NULL)
+            radio[r]->bandscope->close();
+
+        if (radio[r]->hardwareType != "" && radio[r]->hww != NULL)
+        {
+            widget.RadioScrollAreaWidgetContents->layout()->removeWidget(radio[r]->hww);
+            radio[r]->hww->deleteLater();
+            radio[r]->hardwareType.clear();
+            radio[r]->rigCtl->deleteLater();
+        }
+
+        for (int i=0;i<MAX_RECEIVERS;i++)
+            if (radio[r]->rxp[i] != NULL)
+            {
+                radio[r]->rxp[i]->disconnect();
+                widget.spectrumLayout->removeWidget(radio[r]->rxp[i]);
+                widget.spectrumLayout->update();
+                delete radio[r]->rxp[i];
+            }
+        radio[r]->disconnect();
+        delete radio[r];
+        radio[r] = NULL;
+    }
     widget.ctlFrame->HideTX(true);
 } // end disconnected
 
@@ -1113,25 +1092,31 @@ void UI::disconnected(QString message)
 void UI::spectrumBuffer(CHANNEL channel)
 {
    //qDebug()<<Q_FUNC_INFO << "spectrumBuffer";
-
-    sampleRate = channel.spectrum.sample_rate;
-//    qDebug("SampR: %d  Meter: %f\n", sampleRate, channel.spectrum.meter);
-    if (txNow)
-        txp->updateSpectrumFrame(channel.spectrum);
+    if (current_index < 0) return;
+    int8_t index = radio[channel.radio.radio_id]->getInternalIndex(channel.index);
+    radio[channel.radio.radio_id]->sampleRate[index] = channel.spectrum.sample_rate;
+//    qDebug("Index: %d  SampR: %d  Meter: %f\n", index, channel.spectrum.sample_rate, channel.spectrum.meter);
+    if (txNow && channel.isTX &&  radio[channel.radio.radio_id]->txp != NULL)
+        radio[channel.radio.radio_id]->txp->updateSpectrumFrame(channel.spectrum);
     else
-        rxp[0]->updateSpectrumFrame(channel.spectrum);
+        if (radio[channel.radio.radio_id]->rxp[index] != NULL)
+            radio[channel.radio.radio_id]->rxp[index]->updateSpectrumFrame(channel.spectrum);
     spectrumConnection.freeBuffers(channel.spectrum);
 } // end spectrumBuffer
 
 
 void UI::audioBuffer(char* header, char* buffer)
 {
+    if (current_index < 0) return;
     //qDebug() << "audioBuffer";
     int length;
-
     // g0orx binary header
-    length = ((header[3] & 0xFF) << 8) + (header[4] & 0xFF);
-    emit process_audio(header, buffer, length);
+    if (header[2] == receiver_channel[current_index]) // only process currently selected receive channel.
+    {
+//        qDebug("channel: %d   ch: %d\n", header[2], receiver_channel[current_index]);
+        length = ((header[3] & 0xFF) << 8) + (header[4] & 0xFF);
+        emit process_audio(header, buffer, length);
+    }
 } // end audioBuffer
 
 
@@ -1172,6 +1157,19 @@ void UI::micSendAudio(QQueue<qint16>* queue)
 } // end micSendAudio
 
 
+void UI::enableBandscope(bool enable)
+{
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->enableBandscope(&spectrumConnection, enable);
+} // end enableBandscope
+
+
+void UI::bandScopeClosed()
+{
+    widget.actionBandscope->setChecked(false);
+} // end bandScopeClosed
+
+
 void UI::actionKeypad()
 {
     keypad.clear();
@@ -1179,140 +1177,383 @@ void UI::actionKeypad()
 } // end actionKeypad
 
 
-void UI::setKeypadFrequency(long long f)
+void UI::setKeypadFrequency(int8_t channel, long long f)
 {
-    frequencyChanged(f);
+    radio[connection.channels[channel].radio.radio_id]->frequencyChanged(channel, f);
 } // end setKeypadFrequency
 
 
 void UI::getBandBtn(int btn)
 {
-    band.selectBand(btn+100);// +100 is used as a flag to indicate call came from vfo band buttons
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].selectBand(btn+100);// +100 is used as a flag to indicate call came from vfo band buttons
 } // end getBandBtn
 
 
 void UI::quickMemStore()
 {
-    band.quickMemStore();
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].quickMemStore();
 } // end quickMemStore
 
 
 void UI::action160()
 {
-    band.selectBand(BAND_160);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].selectBand(BAND_160);
+//    band.selectBand(BAND_160);
 }
 
 void UI::action80()
 {
-    band.selectBand(BAND_80);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].selectBand(BAND_80);
+//    band.selectBand(BAND_80);
 }
 
 void UI::action60()
 {
-    band.selectBand(BAND_60);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].selectBand(BAND_60);
+//    band.selectBand(BAND_60);
 }
 
 void UI::action40()
 {
-    band.selectBand(BAND_40);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].selectBand(BAND_40);
+//    band.selectBand(BAND_40);
 }
 
 void UI::action30()
 {
-    band.selectBand(BAND_30);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].selectBand(BAND_30);
+//    band.selectBand(BAND_30);
 }
 
 void UI::action20()
 {
-    band.selectBand(BAND_20);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].selectBand(BAND_20);
+//    band.selectBand(BAND_20);
 }
 
 void UI::action17()
 {
-    band.selectBand(BAND_17);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].selectBand(BAND_17);
+//    band.selectBand(BAND_17);
 }
 
 void UI::action15()
 {
-    band.selectBand(BAND_15);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].selectBand(BAND_15);
+//    band.selectBand(BAND_15);
 }
 
 void UI::action12()
 {
-    band.selectBand(BAND_12);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].selectBand(BAND_12);
+//    band.selectBand(BAND_12);
 }
 
 void UI::action10()
 {
-    band.selectBand(BAND_10);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].selectBand(BAND_10);
+//    band.selectBand(BAND_10);
 }
 
 void UI::action6()
 {
-    band.selectBand(BAND_6);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].selectBand(BAND_6);
+//    band.selectBand(BAND_6);
 }
 
 void UI::actionGen()
 {
-    band.selectBand(BAND_GEN);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].selectBand(BAND_GEN);
+//    band.selectBand(BAND_GEN);
 }
 
 void UI::actionWWV()
 {
-    band.selectBand(BAND_WWV);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].selectBand(BAND_WWV);
+//    band.selectBand(BAND_WWV);
 }
 
-void UI::bandChanged(int previousBand,int newBand)
-{
-    qDebug()<<Q_FUNC_INFO<<":   previousBand, newBand = " << previousBand << "," << newBand;
-    qDebug()<<Q_FUNC_INFO<<":   band.getFilter = "<<band.getFilter();
 
-    // uncheck previous band
-    switch (previousBand)
+
+void UI::actionCWL()
+{
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->modeFlag[current_index] = true; //Signals menu selection of mode so we use the default filter
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->mode[current_index].setMode(current_index, MODE_CWL);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilters(current_index, &cwlFilters);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].setMode(MODE_CWL);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->modeFlag[current_index] = false;
+} // end actionCWL
+
+
+void UI::actionCWU()
+{
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->modeFlag[current_index] = true;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->mode[current_index].setMode(current_index, MODE_CWU);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilters(current_index, &cwuFilters);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].setMode(MODE_CWU);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->modeFlag[current_index] = false;
+} // end actionCWU
+
+
+void UI::actionLSB()
+{
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->modeFlag[current_index] = true;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->mode[current_index].setMode(current_index, MODE_LSB);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilters(current_index, &lsbFilters);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].setMode(MODE_LSB);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->modeFlag[current_index] = false;
+}
+
+
+void UI::actionUSB()
+{
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->modeFlag[current_index] = true;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->mode[current_index].setMode(current_index, MODE_USB);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilters(current_index, &usbFilters);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].setMode(MODE_USB);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->modeFlag[current_index] = false;
+}
+
+
+void UI::actionDSB()
+{
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->modeFlag[current_index] = true;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->mode[current_index].setMode(current_index, MODE_DSB);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilters(current_index, &dsbFilters);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].setMode(MODE_DSB);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->modeFlag[current_index] = false;
+}
+
+
+void UI::actionAM()
+{
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->modeFlag[current_index] = true;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->mode[current_index].setMode(current_index, MODE_AM);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilters(current_index, &amFilters);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].setMode(MODE_AM);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->modeFlag[current_index] = false;
+}
+
+
+void UI::actionSAM()
+{
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->modeFlag[current_index] = true;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->mode[current_index].setMode(current_index, MODE_SAM);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilters(current_index, &samFilters);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].setMode(MODE_SAM);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->modeFlag[current_index] = false;
+}
+
+
+void UI::actionFMN()
+{
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->modeFlag[current_index] = true;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->mode[current_index].setMode(current_index, MODE_FM);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilters(current_index, &fmnFilters);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].setMode(MODE_FM);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->modeFlag[current_index] = false;
+}
+
+
+void UI::actionDIGL()
+{
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->modeFlag[current_index] = true;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->mode[current_index].setMode(current_index, MODE_DIGL);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilters(current_index, &diglFilters);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].setMode(MODE_DIGL);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->modeFlag[current_index] = false;
+}
+
+
+void UI::actionDIGU()
+{
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->modeFlag[current_index] = true;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->mode[current_index].setMode(current_index, MODE_DIGU);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilters(current_index, &diguFilters);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].setMode(MODE_DIGU);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->modeFlag[current_index] = false;
+}
+
+
+void UI::actionFilter0()
+{
+//    filters.selectFilter(0);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilter(current_index, 0);
+}
+
+
+void UI::actionFilter1()
+{
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilter(current_index, 1);
+}
+
+
+void UI::actionFilter2()
+{
+//    filters.selectFilter(2);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilter(current_index, 2);
+}
+
+
+void UI::actionFilter3()
+{
+//    filters.selectFilter(3);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilter(current_index, 3);
+}
+
+
+void UI::actionFilter4()
+{
+//    filters.selectFilter(4);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilter(current_index, 4);
+}
+
+
+void UI::actionFilter5()
+{
+//    filters.selectFilter(5);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilter(current_index, 5);
+}
+
+
+void UI::actionFilter6()
+{
+//    filters.selectFilter(6);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilter(current_index, 6);
+}
+
+
+void UI::actionFilter7()
+{
+//    filters.selectFilter(7);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilter(current_index, 7);
+}
+
+
+void UI::actionFilter8()
+{
+//    filters.selectFilter(8);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilter(current_index, 8);
+}
+
+
+void UI::actionFilter9()
+{
+//    filters.selectFilter(9);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilter(current_index, 9);
+}
+
+
+void UI::actionFilter10()
+{
+//    filters.selectFilter(10);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilter(current_index, 10);
+}
+
+
+void UI::updateModeMenu(int mode)
+{
+    widget.actionCWL->setChecked(false);
+    widget.actionCWU->setChecked(false);
+    widget.actionLSB->setChecked(false);
+    widget.actionUSB->setChecked(false);
+    widget.actionDSB->setChecked(false);
+    widget.actionAM->setChecked(false);
+    widget.actionSAM->setChecked(false);
+    widget.actionFMN->setChecked(false);
+    widget.actionDIGL->setChecked(false);
+    widget.actionDIGU->setChecked(false);
+
+    switch (mode)
     {
-    case BAND_160:
-        widget.action160->setChecked(false);
+    case MODE_CWL:
+        widget.actionCWL->setChecked(true);
         break;
-    case BAND_80:
-        widget.action80->setChecked(false);
+    case MODE_CWU:
+        widget.actionCWU->setChecked(true);
         break;
-    case BAND_60:
-        widget.action60->setChecked(false);
+    case MODE_LSB:
+        widget.actionLSB->setChecked(true);
         break;
-    case BAND_40:
-        widget.action40->setChecked(false);
+    case MODE_USB:
+        widget.actionUSB->setChecked(true);
         break;
-    case BAND_30:
-        widget.action30->setChecked(false);
+    case MODE_DSB:
+        widget.actionDSB->setChecked(true);
         break;
-    case BAND_20:
-        widget.action20->setChecked(false);
+    case MODE_AM:
+        widget.actionAM->setChecked(true);
         break;
-    case BAND_17:
-        widget.action17->setChecked(false);
+    case MODE_SAM:
+        widget.actionSAM->setChecked(true);
         break;
-    case BAND_15:
-        widget.action15->setChecked(false);
+    case MODE_FM:
+        widget.actionFMN->setChecked(true);
         break;
-    case BAND_12:
-        widget.action12->setChecked(false);
+    case MODE_DIGL:
+        widget.actionDIGL->setChecked(true);
         break;
-    case BAND_10:
-        widget.action10->setChecked(false);
-        break;
-    case BAND_6:
-        widget.action6->setChecked(false);
-        break;
-    case BAND_GEN:
-        widget.actionGen->setChecked(false);
-        break;
-    case BAND_WWV:
-        widget.actionWWV->setChecked(false);
+    case MODE_DIGU:
+        widget.actionDIGU->setChecked(true);
         break;
     }
+} // end updateModeMenu
+
+
+void UI::updateBandMenu(int band)
+{
+    widget.action160->setChecked(false);
+    widget.action80->setChecked(false);
+    widget.action60->setChecked(false);
+    widget.action40->setChecked(false);
+    widget.action30->setChecked(false);
+    widget.action20->setChecked(false);
+    widget.action17->setChecked(false);
+    widget.action15->setChecked(false);
+    widget.action12->setChecked(false);
+    widget.action10->setChecked(false);
+    widget.action6->setChecked(false);
+    widget.actionGen->setChecked(false);
+    widget.actionWWV->setChecked(false);
 
     // check new band
-    switch (newBand)
+    switch (band)
     {
     case BAND_160:
         widget.action160->setChecked(true);
@@ -1355,217 +1596,23 @@ void UI::bandChanged(int previousBand,int newBand)
         break;
     }
     //Now select the correct band button in VFO
-    widget.vfoFrame->checkBandBtn(newBand);
-
-    // get the band setting
-    mode.setMode(band.getMode());
-
-    qDebug()<<Q_FUNC_INFO<<":   The value of band.getFilter is ... "<<band.getFilter();
-    qDebug()<<Q_FUNC_INFO<<":   The value of filters.getFilter is  "<<filters.getFilter();
+    widget.vfoFrame->checkBandBtn(band);
+} // end updateBandMenu
 
 
-    rxp[0]->setBand(band.getStringBand());
-
-    if (band.getFilter() != filters.getFilter())
-    {
-        emit filterChanged(filters.getFilter(), band.getFilter());
-    }
-    frequency=band.getFrequency();
-    int samplerate = rxp[0]->samplerate();
-
-    QByteArray command;
-    command.clear();
-    command.append((char)currentRxChannel);
-    command.append((char)SETFREQ);
-    command.append(QString("%1").arg(frequency));
-    connection.sendCommand(command);
-
-    if (currentTxChannel > -1)
-    {
-        command.clear();
-        command.append((char)currentTxChannel);
-        command.append((char)SETFREQ);
-        command.append(QString("%1").arg(frequency));
-        connection.sendCommand(command);
-    }
-    rxp[0]->setFrequency(frequency);
-
-    //    gvj code
-    widget.vfoFrame->setFrequency(frequency);
-    qDebug() << __FUNCTION__ << ": frequency, newBand = " << frequency << ", " << newBand;
-    rxp[0]->setHigh(band.getSpectrumHigh());
-    rxp[0]->setLow(band.getSpectrumLow());
-    //    widget.waterfallView->setFrequency(frequency);
-    rxp[0]->panadapterScene->waterfallItem->setHigh(band.getWaterfallHigh());
-    rxp[0]->panadapterScene->waterfallItem->setLow(band.getWaterfallLow());
-
-
-    BandLimit limits=band.getBandLimits(band.getFrequency()-(samplerate/2),band.getFrequency()+(samplerate/2));
-    rxp[0]->setBandLimits(limits.min() + loffset,limits.max()+loffset);
-    if ((mode.getStringMode() == "CWU") || (mode.getStringMode() == "CWL"))
-        frequencyChanged(frequency); //gvj dummy call to set Rx offset for cw
-} // end bandChanged
-
-
-void UI::modeChanged(int previousMode,int newMode)
+void UI::updateFiltersMenu(int filter, FiltersBase* newFilters)
 {
-    QByteArray command;
-
-    qDebug()<<Q_FUNC_INFO<< ":   previousMode, newMode" << previousMode << "," << newMode;
-    qDebug()<<Q_FUNC_INFO<< ":   band.getFilter = " << band.getFilter();
-
-    // uncheck previous mode
-    switch (previousMode)
-    {
-    case MODE_CWL:
-        widget.actionCWL->setChecked(false);
-        break;
-    case MODE_CWU:
-        widget.actionCWU->setChecked(false);
-        break;
-    case MODE_LSB:
-        widget.actionLSB->setChecked(false);
-        break;
-    case MODE_USB:
-        widget.actionUSB->setChecked(false);
-        break;
-    case MODE_DSB:
-        widget.actionDSB->setChecked(false);
-        break;
-    case MODE_AM:
-        widget.actionAM->setChecked(false);
-        break;
-    case MODE_SAM:
-        widget.actionSAM->setChecked(false);
-        break;
-    case MODE_FM:
-        widget.actionFMN->setChecked(false);
-        break;
-    case MODE_DIGL:
-        widget.actionDIGL->setChecked(false);
-        break;
-    case MODE_DIGU:
-        widget.actionDIGU->setChecked(false);
-        break;
-    }
-    qDebug()<<Q_FUNC_INFO<<":  999: value of band.getFilter before filters.selectFilters has been called = "<<band.getFilter();
-    // check the new mode and set the filters
-    switch (newMode)
-    {
-    case MODE_CWL:
-        widget.actionCWL->setChecked(true);
-        filters.selectFilters(&cwlFilters);
-        break;
-    case MODE_CWU:
-        widget.actionCWU->setChecked(true);
-        filters.selectFilters(&cwuFilters);
-        break;
-    case MODE_LSB:
-        widget.actionLSB->setChecked(true);
-        filters.selectFilters(&lsbFilters);
-        break;
-    case MODE_USB:
-        widget.actionUSB->setChecked(true);
-        filters.selectFilters(&usbFilters);
-        break;
-    case MODE_DSB:
-        widget.actionDSB->setChecked(true);
-        filters.selectFilters(&dsbFilters);
-        break;
-    case MODE_AM:
-        widget.actionAM->setChecked(true);
-        filters.selectFilters(&amFilters);
-        break;
-    case MODE_SAM:
-        widget.actionSAM->setChecked(true);
-        filters.selectFilters(&samFilters);
-        break;
-    case MODE_FM:
-        widget.actionFMN->setChecked(true);
-        filters.selectFilters(&fmnFilters);
-        break;
-    case MODE_DIGL:
-        widget.actionDIGL->setChecked(true);
-        filters.selectFilters(&diglFilters);
-        break;
-    case MODE_DIGU:
-        widget.actionDIGU->setChecked(true);
-        filters.selectFilters(&diguFilters);
-        break;
-    }
-    qDebug()<<Q_FUNC_INFO<<":  1043: value of band.getFilter after filters.selectFilters has been called = "<<band.getFilter();
-    rxp[0]->setMode(mode.getStringMode());
-    //    widget.waterfallView->setMode(mode.getStringMode());
-    command.clear();
-    command.append((char)currentRxChannel);
-    command.append((char)SETMODE);
-    command.append((char)newMode);
-    connection.sendCommand(command);
-
-    if (currentTxChannel > -1)
-    {
-        command.clear();
-        command.append((char)currentTxChannel);
-        command.append((char)SETMODE);
-        command.append((char)newMode);
-        connection.sendCommand(command);
-    }
-} // end modeChanged
-
-
-void UI::filtersChanged(FiltersBase* previousFilters, FiltersBase* newFilters)
-{
-    qDebug()<<Q_FUNC_INFO<<":   newFilters->getText, newFilters->getSelected = " << newFilters->getText()<<", "<<newFilters->getSelected();
-    qDebug()<<Q_FUNC_INFO<<":   band.getFilter = " <<band.getFilter();
-
-    // uncheck old filter
-    if (previousFilters!=NULL)
-    {
-        switch (previousFilters->getSelected())
-        {
-        case 0:
-            widget.actionFilter_0->setChecked(false);
-            break;
-        case 1:
-            widget.actionFilter_1->setChecked(false);
-            break;
-        case 2:
-            widget.actionFilter_2->setChecked(false);
-            break;
-        case 3:
-            widget.actionFilter_3->setChecked(false);
-            break;
-        case 4:
-            widget.actionFilter_4->setChecked(false);
-            break;
-        case 5:
-            widget.actionFilter_5->setChecked(false);
-            break;
-        case 6:
-            widget.actionFilter_6->setChecked(false);
-            break;
-        case 7:
-            widget.actionFilter_7->setChecked(false);
-            break;
-        case 8:
-            widget.actionFilter_8->setChecked(false);
-            break;
-        case 9:
-            widget.actionFilter_9->setChecked(false);
-            break;
-        case 10:
-            widget.actionFilter_10->setChecked(false);
-            break;
-        }
-    }
-
-    qDebug()<<Q_FUNC_INFO<<":   1092 band.getFilter = "<<band.getFilter()<<", modeFlag = "<<modeFlag;
-
-    if (!modeFlag)
-    {
-        newFilters->selectFilter(band.getFilter()); //TODO Still not there yet
-        qDebug()<<Q_FUNC_INFO<<":    Using the value from band.getFilter = "<<band.getFilter();
-    }
+    widget.actionFilter_0->setChecked(false);
+    widget.actionFilter_1->setChecked(false);
+    widget.actionFilter_2->setChecked(false);
+    widget.actionFilter_3->setChecked(false);
+    widget.actionFilter_4->setChecked(false);
+    widget.actionFilter_5->setChecked(false);
+    widget.actionFilter_6->setChecked(false);
+    widget.actionFilter_7->setChecked(false);
+    widget.actionFilter_8->setChecked(false);
+    widget.actionFilter_9->setChecked(false);
+    widget.actionFilter_10->setChecked(false);
 
     // set the filter menu text
     widget.actionFilter_0->setText(newFilters->getText(0));
@@ -1580,274 +1627,7 @@ void UI::filtersChanged(FiltersBase* previousFilters, FiltersBase* newFilters)
     widget.actionFilter_9->setText(newFilters->getText(9));
     widget.actionFilter_10->setText(newFilters->getText(10));
 
-    // check new filter
-    if (newFilters!=NULL)
-    {
-        switch (newFilters->getSelected())
-        {
-        case 0:
-            widget.actionFilter_0->setChecked(true);
-            break;
-        case 1:
-            widget.actionFilter_1->setChecked(true);
-            break;
-        case 2:
-            widget.actionFilter_2->setChecked(true);
-            break;
-        case 3:
-            widget.actionFilter_3->setChecked(true);
-            break;
-        case 4:
-            widget.actionFilter_4->setChecked(true);
-            break;
-        case 5:
-            widget.actionFilter_5->setChecked(true);
-            break;
-        case 6:
-            widget.actionFilter_6->setChecked(true);
-            break;
-        case 7:
-            widget.actionFilter_7->setChecked(true);
-            break;
-        case 8:
-            widget.actionFilter_8->setChecked(true);
-            break;
-        case 9:
-            widget.actionFilter_9->setChecked(true);
-            break;
-        case 10:
-            widget.actionFilter_10->setChecked(true);
-            break;
-        }
-    }
-
-    filters.selectFilter(filters.getFilter());
-    rxp[0]->setFilter(filters.getText());
-    printStatusBar(" .. Initial frequency. ");    //added by gvj
-} // end filtersChanged
-
-
-void UI::actionCWL()
-{
-    modeFlag = true; //Signals menu selection of mode so we use the default filter
-    mode.setMode(MODE_CWL);
-    filters.selectFilters(&cwlFilters);
-    band.setMode(MODE_CWL);
-    frequencyChanged(frequency);  //force a recalculation of frequency offset for CW receive
-    modeFlag = false;
-} // end actionCWL
-
-
-void UI::actionCWU()
-{
-    modeFlag = true;
-    mode.setMode(MODE_CWU);
-    filters.selectFilters(&cwuFilters);
-    band.setMode(MODE_CWU);
-    frequencyChanged(frequency);
-    modeFlag = false;
-} // end actionCWU
-
-
-void UI::actionLSB()
-{
-    modeFlag = true;
-    mode.setMode(MODE_LSB);
-    filters.selectFilters(&lsbFilters);
-    band.setMode(MODE_LSB);
-    frequencyChanged(frequency);
-    modeFlag = false;
-}
-
-
-void UI::actionUSB()
-{
-    modeFlag = true;
-    mode.setMode(MODE_USB);
-    filters.selectFilters(&usbFilters);
-    band.setMode(MODE_USB);
-    frequencyChanged(frequency);
-    modeFlag = false;
-}
-
-
-void UI::actionDSB()
-{
-    modeFlag = true;
-    mode.setMode(MODE_DSB);
-    filters.selectFilters(&dsbFilters);
-    band.setMode(MODE_DSB);
-    frequencyChanged(frequency);
-    modeFlag = false;
-}
-
-
-void UI::actionAM()
-{
-    modeFlag=true;
-    mode.setMode(MODE_AM);
-    filters.selectFilters(&amFilters);
-    band.setMode(MODE_AM);
-    frequencyChanged(frequency);
-    modeFlag = false;
-}
-
-
-void UI::actionSAM()
-{
-    modeFlag = true;
-    mode.setMode(MODE_SAM);
-    filters.selectFilters(&samFilters);
-    band.setMode(MODE_SAM);
-    frequencyChanged(frequency);
-    modeFlag = false;
-}
-
-
-void UI::actionFMN()
-{
-    modeFlag = true;
-    mode.setMode(MODE_FM);
-    filters.selectFilters(&fmnFilters);
-    band.setMode(MODE_FM);
-    frequencyChanged(frequency);
-    modeFlag = false;
-}
-
-
-void UI::actionDIGL()
-{
-    modeFlag = true;
-    mode.setMode(MODE_DIGL);
-    filters.selectFilters(&diglFilters);
-    band.setMode(MODE_DIGL);
-    frequencyChanged(frequency);
-    modeFlag = false;
-}
-
-
-void UI::actionDIGU()
-{
-    modeFlag = true;
-    mode.setMode(MODE_DIGU);
-    filters.selectFilters(&diguFilters);
-    band.setMode(MODE_DIGU);
-    frequencyChanged(frequency);
-    modeFlag = false;
-}
-
-
-void UI::actionFilter0()
-{
-    filters.selectFilter(0);
-}
-
-
-void UI::actionFilter1()
-{
-    filters.selectFilter(1);
-}
-
-
-void UI::actionFilter2()
-{
-    filters.selectFilter(2);
-}
-
-
-void UI::actionFilter3()
-{
-    filters.selectFilter(3);
-}
-
-
-void UI::actionFilter4()
-{
-    filters.selectFilter(4);
-}
-
-
-void UI::actionFilter5()
-{
-    filters.selectFilter(5);
-}
-
-
-void UI::actionFilter6()
-{
-    filters.selectFilter(6);
-}
-
-
-void UI::actionFilter7()
-{
-    filters.selectFilter(7);
-}
-
-
-void UI::actionFilter8()
-{
-    filters.selectFilter(8);
-}
-
-
-void UI::actionFilter9()
-{
-    filters.selectFilter(9);
-}
-
-
-void UI::actionFilter10()
-{
-    filters.selectFilter(10);
-}
-
-
-void UI::filterChanged(int previousFilter,int newFilter)
-{
-    QByteArray command;
-
-    qDebug()<<Q_FUNC_INFO<< ":   1252 previousFilter, newFilter" << previousFilter << ":" << newFilter;
-
-    int low, high;
-    switch (previousFilter)
-    {
-    case 0:
-        widget.actionFilter_0->setChecked(false);
-        break;
-    case 1:
-        widget.actionFilter_1->setChecked(false);
-        break;
-    case 2:
-        widget.actionFilter_2->setChecked(false);
-        break;
-    case 3:
-        widget.actionFilter_3->setChecked(false);
-        break;
-    case 4:
-        widget.actionFilter_4->setChecked(false);
-        break;
-    case 5:
-        widget.actionFilter_5->setChecked(false);
-        break;
-    case 6:
-        widget.actionFilter_6->setChecked(false);
-        break;
-    case 7:
-        widget.actionFilter_7->setChecked(false);
-        break;
-    case 8:
-        widget.actionFilter_8->setChecked(false);
-        break;
-    case 9:
-        widget.actionFilter_9->setChecked(false);
-        break;
-    case 10:
-        widget.actionFilter_10->setChecked(false);
-        break;
-    }
-
-    switch (newFilter)
+    switch (filter)
     {
     case 0:
         widget.actionFilter_0->setChecked(true);
@@ -1883,153 +1663,65 @@ void UI::filterChanged(int previousFilter,int newFilter)
         widget.actionFilter_10->setChecked(true);
         break;
     }
-
-    if (previousFilter != 10 && newFilter == 10)
-        return;
-
-    if (mode.getMode() == MODE_CWL)
-    {
-        low = -cwPitch - filters.getLow();
-        high = -cwPitch + filters.getHigh();
-    }
-    else
-        if (mode.getMode() == MODE_CWU)
-        {
-            low = cwPitch - filters.getLow();
-            high = cwPitch + filters.getHigh();
-        }
-        else
-        {
-            low = filters.getLow();
-            high = filters.getHigh();
-        }
-
-    command.clear();
-    command.append((char)currentRxChannel);
-    command.append((char)SETFILTER);
-    command.append(QString("%1,%2").arg(low).arg(high));
-    connection.sendCommand(command);
-    rxp[0]->setFilter(low, high);
-    txp->setFilter(low, high);
-    rxp[0]->setFilter(filters.getText());
-    //    widget.waterfallView->setFilter(low,high);
-    band.setFilter(newFilter);
-} // end filterChanged
+} // end updateFiltersMenu
 
 
-void UI::variableFilter(int low, int high)
+void UI::updateFilterMenu(int filter)
 {
-    QByteArray command;
+    widget.actionFilter_0->setChecked(false);
+    widget.actionFilter_1->setChecked(false);
+    widget.actionFilter_2->setChecked(false);
+    widget.actionFilter_3->setChecked(false);
+    widget.actionFilter_4->setChecked(false);
+    widget.actionFilter_5->setChecked(false);
+    widget.actionFilter_6->setChecked(false);
+    widget.actionFilter_7->setChecked(false);
+    widget.actionFilter_8->setChecked(false);
+    widget.actionFilter_9->setChecked(false);
+    widget.actionFilter_10->setChecked(false);
 
-    switch (filters.getFilter())
+    switch (filter)
     {
     case 0:
-        widget.actionFilter_0->setChecked(false);
+        widget.actionFilter_0->setChecked(true);
         break;
     case 1:
-        widget.actionFilter_1->setChecked(false);
+        widget.actionFilter_1->setChecked(true);
         break;
     case 2:
-        widget.actionFilter_2->setChecked(false);
+        widget.actionFilter_2->setChecked(true);
         break;
     case 3:
-        widget.actionFilter_3->setChecked(false);
+        widget.actionFilter_3->setChecked(true);
         break;
     case 4:
-        widget.actionFilter_4->setChecked(false);
+        widget.actionFilter_4->setChecked(true);
         break;
     case 5:
-        widget.actionFilter_5->setChecked(false);
+        widget.actionFilter_5->setChecked(true);
         break;
     case 6:
-        widget.actionFilter_6->setChecked(false);
+        widget.actionFilter_6->setChecked(true);
         break;
     case 7:
-        widget.actionFilter_7->setChecked(false);
+        widget.actionFilter_7->setChecked(true);
         break;
     case 8:
-        widget.actionFilter_8->setChecked(false);
+        widget.actionFilter_8->setChecked(true);
         break;
     case 9:
-        widget.actionFilter_9->setChecked(false);
+        widget.actionFilter_9->setChecked(true);
+        break;
+    case 10:
+        widget.actionFilter_10->setChecked(true);
         break;
     }
-
-    widget.actionFilter_10->setChecked(true);
-
-    command.clear();
-    command.append((char)currentRxChannel);
-    command.append((char)SETFILTER);
-    command.append(QString("%1,%2").arg(low).arg(high));
-    connection.sendCommand(command);
-    if (filters.getFilter() != 10)
-    {
-        band.setFilter(10);
-        filters.selectFilter(10);
-    }
-} // end variableFilter
-
-
-void UI::frequencyChanged(long long f)
-{
-    QByteArray command;
-    long long freqOffset = f; //Normally no offset (only for CW Rx mode)
-
-    frequency = f;
-    if ((mode.getStringMode() == "CWU") && (!widget.vfoFrame->getPtt()))
-    {
-        freqOffset -= cwPitch;
-    }
-    if ((mode.getStringMode() == "CWL") && (!widget.vfoFrame->getPtt()))
-    {
-        freqOffset += cwPitch;
-    }
-    //Send command to server
-    command.clear();
-    command.append((char)currentRxChannel);
-    command.append((char)SETFREQ);
-    command.append(QString("%1").arg(freqOffset));
-    connection.sendCommand(command);
-    command.clear();
-    if (currentTxChannel > -1)
-    {
-        command.append((char)currentTxChannel);
-        command.append((char)SETFREQ);
-        command.append(QString("%1").arg(freqOffset));
-        connection.sendCommand(command);
-    }
-    //Adjust all frequency displays & Check for exiting current band
-    band.setFrequency(frequency);
-    rxp[0]->setFrequency(frequency);
-    widget.vfoFrame->setFrequency(frequency);
-    //    widget.waterfallView->setFrequency(frequency);
-    qDebug("Frequency changed for channel: %d\n", currentRxChannel);
-} // end frequencyChanged
-
-
-void UI::frequencyMoved(int increment, int step)
-{
-    qDebug() << __FUNCTION__ << ": increment=" << increment << " step=" << step;
-
-    frequencyChanged(band.getFrequency() - (long long)(increment * step));
-} // end frequencyMoved
-
-
-void UI::sampleRateChanged(long rate)
-{
-    QByteArray command;
-    //Send command to server
-    command.clear();
-    command.append((char)currentRxChannel);
-    command.append((char)SETSAMPLERATE);
-    command.append(QString("%1").arg(rate));
-    connection.sendCommand(command);
-
-} // end sampleRateChanged
+} // end updateFilterMenu
 
 
 void UI::actionANF()
 {
+    if (current_index < 0) return;
     QByteArray command;
     command.clear();
     command.append((char)currentRxChannel);
@@ -2041,6 +1733,7 @@ void UI::actionANF()
 
 void UI::actionNR()
 {
+    if (current_index < 0) return;
     QByteArray command;
     command.clear();
     command.append((char)currentRxChannel);
@@ -2052,6 +1745,7 @@ void UI::actionNR()
 
 void UI::actionNB()
 {
+    if (current_index < 0) return;
     QByteArray command;
     command.clear();
     command.append((char)currentRxChannel);
@@ -2063,6 +1757,7 @@ void UI::actionNB()
 
 void UI::actionSDROM()
 {
+    if (current_index < 0) return;
     QByteArray command;
     command.clear();
     command.append((char)currentRxChannel);
@@ -2074,6 +1769,7 @@ void UI::actionSDROM()
 
 void UI::actionFixed()
 {
+    if (current_index < 0) return;
     if (!newDspServerCheck())
     {
         widget.actionFixed->setChecked(false);
@@ -2128,6 +1824,7 @@ void UI::actionFixed()
 
 void UI::actionSlow()
 {
+    if (current_index < 0) return;
     QByteArray command;
     // reset the current selection
     switch (agc)
@@ -2160,6 +1857,7 @@ void UI::actionSlow()
 
 void UI::actionMedium()
 {
+    if (current_index < 0) return;
     QByteArray command;
 
     // reset the current selection
@@ -2193,6 +1891,7 @@ void UI::actionMedium()
 
 void UI::actionFast()
 {
+    if (current_index < 0) return;
     QByteArray command;
     // reset the current selection
     switch (agc)
@@ -2225,6 +1924,7 @@ void UI::actionFast()
 
 void UI::actionLong()
 {
+    if (current_index < 0) return;
     QByteArray command;
     // reset the current selection
     switch (agc)
@@ -2273,37 +1973,6 @@ void UI::actionMuteMainRx()
 }
 
 
-void UI::actionBandscope()
-{
-    if (widget.actionBandscope->isChecked())
-    {
-        if (bandscope == NULL)
-            bandscope = new Bandscope(&spectrumConnection);
-        connect(bandscope, SIGNAL(closeBandScope()), this, SLOT(closeBandScope()));
-        bandscope->setWindowTitle("QtRadioII Bandscope");
-        bandscope->channel = MAX_CHANNELS - 1 - connection.channels[currentRxChannel].radio.radio_id;
-        bandscope->radio_id = connection.channels[currentRxChannel].radio.radio_id;
-        bandscope->show();
-        bandscope->connect();
-    }
-    else
-    {
-        if (bandscope != NULL)
-        {
-            bandscope->setVisible(false);
-            bandscope->disconnect();
-        }
-    }
-}
-
-
-void UI::closeBandScope(void)
-{
-    qDebug() << "Disable BandScope.";
-    widget.actionBandscope->setChecked(false);
-}
-
-
 void UI::actionRecord()
 {
     QString command;
@@ -2315,6 +1984,7 @@ void UI::actionRecord()
 
 void UI::actionGain(int g)
 {
+    if (current_index < 0) return;
     QByteArray command;
     //    setGain(false);
     gain = g;
@@ -2350,6 +2020,7 @@ void UI::audioGainChanged(void)
 
 void UI::nrValuesChanged(int taps, int delay, double gain, double leakage)
 {
+    if (current_index < 0) return;
     QByteArray command;
 
     command.clear();
@@ -2362,6 +2033,7 @@ void UI::nrValuesChanged(int taps, int delay, double gain, double leakage)
 
 void UI::anfValuesChanged(int taps, int delay, double gain, double leakage)
 {
+    if (current_index < 0) return;
     QByteArray command;
 
     command.clear();
@@ -2374,6 +2046,7 @@ void UI::anfValuesChanged(int taps, int delay, double gain, double leakage)
 
 void UI::nbThresholdChanged(double threshold)
 {
+    if (current_index < 0) return;
     QByteArray command;
 
     command.clear();
@@ -2386,6 +2059,7 @@ void UI::nbThresholdChanged(double threshold)
 
 void UI::cessbOvershootChanged(bool enable)
 {
+    if (current_index < 0) return;
     QByteArray command;
 
     if (currentTxChannel > -1)
@@ -2401,6 +2075,7 @@ void UI::cessbOvershootChanged(bool enable)
 
 void UI::aeFilterChanged(bool enable)
 {
+    if (current_index < 0) return;
     QByteArray command;
 
     command.clear();
@@ -2413,6 +2088,7 @@ void UI::aeFilterChanged(bool enable)
 
 void UI::nrGainMethodChanged(int method)
 {
+    if (current_index < 0) return;
     QByteArray command;
 
     command.clear();
@@ -2425,6 +2101,7 @@ void UI::nrGainMethodChanged(int method)
 
 void UI::nrNpeMethodChanged(int method)
 {
+    if (current_index < 0) return;
     QByteArray command;
 
     command.clear();
@@ -2437,6 +2114,7 @@ void UI::nrNpeMethodChanged(int method)
 
 void UI::preAGCFiltersChanged(bool tmp)
 {
+    if (current_index < 0) return;
     QByteArray command;
 
     command.clear();
@@ -2481,10 +2159,10 @@ void UI::actionBookmark()
 {
     QString strFrequency=stringFrequency(frequency);
     bookmarkDialog.setTitle(strFrequency);
-    bookmarkDialog.setBand(band.getStringBand());
+//    bookmarkDialog.setBand(band.getStringBand());
     bookmarkDialog.setFrequency(strFrequency);
-    bookmarkDialog.setMode(mode.getStringMode());
-    bookmarkDialog.setFilter(filters.getText());
+//    bookmarkDialog.setMode(mode.getStringMode());
+//    bookmarkDialog.setFilter(filters.getText());
     bookmarkDialog.show();
 }
 
@@ -2494,10 +2172,10 @@ void UI::addBookmark()
     qDebug() << "addBookmark";
     Bookmark* bookmark=new Bookmark();
     bookmark->setTitle(bookmarkDialog.getTitle());
-    bookmark->setBand(band.getBand());
-    bookmark->setFrequency(band.getFrequency());
-    bookmark->setMode(mode.getMode());
-    bookmark->setFilter(filters.getFilter());
+//    bookmark->setBand(band.getBand());
+//    bookmark->setFrequency(band.getFrequency());
+//    bookmark->setMode(mode.getMode());
+//    bookmark->setFilter(filters.getFilter());
     bookmarks.add(bookmark);
     bookmarks.buildMenu(widget.menuView_Bookmarks);
 }
@@ -2505,21 +2183,22 @@ void UI::addBookmark()
 
 void UI::selectBookmark(QAction* action)
 {
+    if (current_index < 0) return;
     bookmarks.select(action);
 
-    band.selectBand(bookmarks.getBand());
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].selectBand(bookmarks.getBand());
 
     frequency = bookmarks.getFrequency();
-    band.setFrequency(frequency);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].setFrequency(frequency);
 
-    rxp[0]->setFrequency(frequency);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->rxp[current_index]->setFrequency(frequency);
 
     //    gvj code
     widget.vfoFrame->setFrequency(frequency);
 
-    mode.setMode(bookmarks.getMode());
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->mode[current_index].setMode(current_index, bookmarks.getMode());
 
-    filters.selectFilter(bookmarks.getFilter());
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.selectFilter(current_index, bookmarks.getFilter());
     qDebug() << "Bookmark Filter: " << bookmarks.getFilter();
 }
 
@@ -2574,41 +2253,41 @@ void UI::bookmarkSelected(int entry)
         //TODO Get rid of message "warning: 'filters' may be used uninitialized in this function"
 
         bookmarksEditDialog->setTitle(bookmark->getTitle());
-        bookmarksEditDialog->setBand(band.getStringBand(bookmark->getBand()));
+//        bookmarksEditDialog->setBand(band.getStringBand(bookmark->getBand()));
         bookmarksEditDialog->setFrequency(stringFrequency(bookmark->getFrequency()));
-        bookmarksEditDialog->setMode(mode.getStringMode(bookmark->getMode()));
+//        bookmarksEditDialog->setMode(mode.getStringMode(bookmark->getMode()));
 
         switch(bookmark->getMode())
         {
         case MODE_CWL:
-            filters=&cwlFilters;
+//            filters=&cwlFilters;
             break;
         case MODE_CWU:
-            filters=&cwuFilters;
+//            filters=&cwuFilters;
             break;
         case MODE_LSB:
-            filters=&lsbFilters;
+//            filters=&lsbFilters;
             break;
         case MODE_USB:
-            filters=&usbFilters;
+//            filters=&usbFilters;
             break;
         case MODE_DSB:
-            filters=&dsbFilters;
+//            filters=&dsbFilters;
             break;
         case MODE_AM:
-            filters=&amFilters;
+//            filters=&amFilters;
             break;
         case MODE_SAM:
-            filters=&samFilters;
+//            filters=&samFilters;
             break;
         case MODE_FM:
-            filters=&fmnFilters;
+//            filters=&fmnFilters;
             break;
         case MODE_DIGL:
-            filters=&diglFilters;
+//            filters=&diglFilters;
             break;
         case MODE_DIGU:
-            filters=&diguFilters;
+//            filters=&diguFilters;
             break;
         }
         bookmarksEditDialog->setFilter(filters->getText(bookmark->getFilter()));
@@ -2660,8 +2339,9 @@ void UI::selectXVTR(QAction* action)
 }
 
 
-void UI::getMeterValue(float s, float f, float r)
+void UI::getMeterValue(int8_t index, float s, float f, float r)
 {
+    if (index != current_index) return;
  //   qDebug("sMeter: %f\n", m);
     widget.sMeterFrame->meter0 = s;
     widget.sMeterFrame->meter1 = f;
@@ -2686,6 +2366,7 @@ void UI::printWindowTitle(QString message)
 
 void UI::printStatusBar(QString message)
 {
+    if (current_index < 0) return;
     Frequency freqInfo;
     static QString description;
     static long long lastFreq;
@@ -2693,129 +2374,80 @@ void UI::printStatusBar(QString message)
     if (lastFreq != frequency)
         description = freqInfo.getFrequencyInfo(frequency).getDescription();
 
-    modeInfo.setText(description + "  " + band.getStringMem()+", "+mode.getStringMode()+", "+filters.getText()+message);
+    modeInfo.setText(description + "  " + radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].getStringMem()+
+            ", " + radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->mode[current_index].getStringMode()+", " +
+            radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->filters.getText()+message);
     lastFreq = frequency;
-}
-
-
-void UI::initRigCtl ()
-{
-    rigCtl = new RigCtlServer ( this, this );
-}
-
-
-long long UI::rigctlGetFreq()
-{
-    return(frequency);
-}
-
-
-QString UI::rigctlGetMode()
-{
-    QString  m = mode.getStringMode();
-    if(m == "CWU")
-    {
-        m="CW";
-    }
-    if(m == "CWL")
-    {
-        m="CWR";
-    }
-    return m;
-}
-
-
-QString UI::rigctlGetFilter()
-{
-    QString fwidth;
-    QString  m = mode.getStringMode();
-    
-    if (m == "CWU")
-    {
-        return fwidth.setNum(filters.getHigh() + filters.getLow());
-    }
-    else
-        if (m == "CWL")
-        {
-            return fwidth.setNum(filters.getHigh() + filters.getLow());
-        }
-        else
-            return fwidth.setNum(filters.getHigh() - filters.getLow());
-}
-
-
-QString UI::rigctlGetVFO()
-{
-    return widget.vfoFrame->rigctlGetvfo();
-}
-
-
-void UI::rigctlSetVFOA()
-{
-    widget.vfoFrame->on_pBtnvfoA_clicked();
-}
-
-
-void UI::rigctlSetVFOB()
-{
-    widget.vfoFrame->on_pBtnvfoB_clicked();
-}
-
-
-void UI::rigctlSetFreq(long long f)
-{
-    frequencyChanged(f);
-}
-
-
-void UI::rigctlSetMode(int newmode)
-{
-    modeChanged(mode.getMode(), newmode);
-    mode.setMode(newmode);
-}
-
-
-void UI::rigctlSetFilter(int newfilter)
-{
-    qDebug() << "UI.cpp: dl6kbg: wanted filter via hamlib: " << newfilter;
-    filters.selectFilter(newfilter);
 }
 
 
 void UI::slaveSetMode(int m)
 {
-    rigctlSetMode(m);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->rigctlSetMode(m);
 }
 
 
 void UI::slaveSetFilter(int low, int high)
 {
-    rxp[0]->setFilter(low,high);
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->rxp[current_index]->setFilter(low, high);
     //    widget.waterfallView->setFilter(low,high);
 }
 
 
 void UI::slaveSetZoom(int position)
 {
+    if (current_index < 0) return;
     widget.zoomSpectrumSlider->setValue(position);
-    rxp[0]->setZoom(position);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->rxp[current_index]->setZoom(position);
     //   widget.waterfallView->setZoom(position);
 }
 
 
 void UI::getBandFrequency()
 {
-    widget.vfoFrame->setBandFrequency(band.getFrequency());
+    if (current_index < 0) return;
+    widget.vfoFrame->setBandFrequency(radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->band[current_index].getFrequency());
+}
+
+
+void UI::enableRxEq(bool enable)
+{
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->enableRxEq(current_index, enable);
+}
+
+
+void UI::enableTxEq(bool enable)
+{
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->enableTxEq(current_index, enable);
+}
+
+
+void UI::updateVFO(long long f)
+{
+    widget.vfoFrame->setFrequency(f);
+}
+
+
+void UI::frequencyMoved(int fi, int fs)
+{
+    if (current_index < 0) return;
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->frequencyMoved(current_index, fi, fs);
 }
 
 
 void UI::vfoStepBtnClicked(int direction)
 {
+    if (current_index < 0) return;
     long long f;
-    int samplerate = rxp[0]->samplerate();
+
+    int samplerate = radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->rxp[current_index]->samplerate();
 
     //qDebug()<<Q_FUNC_INFO<<": vfo up or down button clicked. Direction = "<<direction<<", samplerate = "<<samplerate;
-    switch ( samplerate )
+    switch (samplerate)
     {
     case 24000 : f = 20000; break;
     case 48000 : f = 40000; break;
@@ -2825,13 +2457,20 @@ void UI::vfoStepBtnClicked(int direction)
 
     default : f = (samplerate * 8) / 10;
     }
-    frequencyMoved(f, direction);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->frequencyMoved(current_index, f, direction);
 }
+
+
+void UI::ctlSetPTT(bool enabled)
+{
+    widget.ctlFrame->RigCtlTX(enabled);
+} // end ctlSetPTT
 
 
 // The ptt service has been activated. Caller values, 0 = MOX, 1 = Tune, 2 = VOX, 3 = Extern H'ware
 void UI::pttChange(int caller, bool ptt)
 {
+    if (current_index < 0) return;
     QByteArray command;
     static int workingMode;
 //    static double currentPwr;
@@ -2846,14 +2485,14 @@ void UI::pttChange(int caller, bool ptt)
     {
         if (ptt)
         {    // Going from Rx to Tx ................
-            rxp[0]->panadapterScene->bMox = true;
+            radio[connection.channels[current_index].radio.radio_id]->rxp[current_index]->panadapterScene->bMox = true;
             delete widget.sMeterFrame->sMeterMain;
             widget.sMeterFrame->sMeterMain = new Meter("Main Pwr", POWMETER);
-            workingMode = mode.getMode(); //Save the current mode for restoration when we finish tuning
+            workingMode = radio[connection.channels[current_index].radio.radio_id]->mode[current_index].getMode(); //Save the current mode for restoration when we finish tuning
             if (caller == 1)
             { //We have clicked the tune button so switch to AM and set carrier level
-     //////           currentPwr = (double)widget.ctlFrame->getTxPwr();
-                workingMode = mode.getMode(); //Save the current mode for restoration when we finish tuning
+      //          currentPwr = (double)widget.ctlFrame->getTxPwr();
+     /////           workingMode = mode.getMode(); //Save the current mode for restoration when we finish tuning
                 actionAM();
                 // Set the AM carrier level to match the tune power slider value in a scale 0 to 1.0
                 if ((dspversion >= 20120201)  && canTX && chkTX)
@@ -2938,7 +2577,7 @@ void UI::pttChange(int caller, bool ptt)
                     command.append(QString("%1").arg(0));
                 }
                 connection.sendCommand(command);
-                rxp[0]->panadapterScene->bMox = false;
+                radio[connection.channels[current_index].radio.radio_id]->rxp[current_index]->panadapterScene->bMox = false;
 
                 //Restore AM carrier level to previous level.
                 if ((dspversion >= 20120201) && canTX && chkTX)
@@ -2953,7 +2592,7 @@ void UI::pttChange(int caller, bool ptt)
                     command.clear();
                     command.append((char)currentTxChannel);
                     command.append((char)SETTXAMCARLEV);
-                    command.append(QString("%1").arg(currentPwr));
+                    command.append(QString("%1").arg(radio[connection.channels[current_index].radio.radio_id]->currentPwr));
                 }
                 connection.sendCommand(command);
                 //Restore the mode back to original before tuning
@@ -2992,7 +2631,7 @@ void UI::pttChange(int caller, bool ptt)
                     command.append(QString("%1").arg(0));
                 }
                 connection.sendCommand(command);
-                rxp[0]->panadapterScene->bMox = false;
+                radio[connection.channels[current_index].radio.radio_id]->rxp[current_index]->panadapterScene->bMox = false;
             }
             txNow = false;
 
@@ -3002,7 +2641,7 @@ void UI::pttChange(int caller, bool ptt)
             disconnect(audioinput, SIGNAL(mic_update_level(qreal)),widget.ctlFrame, SLOT(update_mic_level(qreal)));
             SPECTRUM spec;
             spec.length = 0;
-            txp->updateSpectrumFrame(spec);
+            radio[connection.channels[current_index].radio.radio_id]->txp->updateSpectrumFrame(spec);
         }
     }
     else
@@ -3015,10 +2654,11 @@ void UI::actionConnectNow(QString IP)
     qDebug() << "Connect Slot:"  << IP;
     if (isConnected == false)
     {
+        current_index = -1;
         QuickIP = IP;
         configure.addHost(IP);
         connection.connect(IP, DSPSERVER_BASE_PORT+configure.getReceiver());
-        rxp[0]->setReceiver(configure.getReceiver());
+//        rxp[0][0]->setReceiver(configure.getReceiver());
     }
     else
     {
@@ -3031,6 +2671,7 @@ void UI::actionConnectNow(QString IP)
 
 void UI::actionSquelch()
 {
+    if (current_index < 0) return;
     if (squelch)
     {
         squelch = false;
@@ -3040,7 +2681,7 @@ void UI::actionSquelch()
         command.append((char)SETSQUELCHSTATE);
         command.append((char)0);
         connection.sendCommand(command);
-        rxp[0]->setSquelch(false);
+        radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->rxp[current_index]->setSquelch(true);
         widget.actionSquelchEnable->setChecked(false);
     }
     else
@@ -3057,8 +2698,8 @@ void UI::actionSquelch()
         command.append((char)SETSQUELCHSTATE);
         command.append((char)1);
         connection.sendCommand(command);
-        rxp[0]->setSquelch(true);
-        rxp[0]->setSquelchVal(squelchValue);
+        radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->rxp[current_index]->setSquelch(true);
+        radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->rxp[current_index]->setSquelchVal(squelchValue);
         widget.actionSquelchEnable->setChecked(true);
     }
 }
@@ -3066,6 +2707,7 @@ void UI::actionSquelch()
 
 void UI::actionSquelchReset()
 {
+    if (current_index < 0) return;
     squelchValue = -100;
     if (squelch)
     {
@@ -3075,13 +2717,14 @@ void UI::actionSquelchReset()
         command.append((char)SETSQUELCHVAL);
         command.append(QString("%1").arg(squelchValue));
         connection.sendCommand(command);
-        rxp[0]->setSquelchVal(squelchValue);
+        radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->rxp[current_index]->setSquelchVal(squelchValue);
     }
 }
 
 
 void UI::squelchValueChanged(int val)
 {
+    if (current_index < 0) return;
     squelchValue = squelchValue+val;
     if (squelch)
     {
@@ -3091,7 +2734,7 @@ void UI::squelchValueChanged(int val)
         command.append((char)SETSQUELCHVAL);
         command.append(QString("%1").arg(squelchValue));
         connection.sendCommand(command);
-        rxp[0]->setSquelchVal(squelchValue);
+        radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->rxp[current_index]->setSquelchVal(squelchValue);
     }
 }
 
@@ -3135,13 +2778,14 @@ void UI::setservername(QString sname)
 }
 
 
-void UI::cwPitchChanged(int arg1)
+void UI::cwPitchChanged(int8_t channel, int arg1)
 {
-    cwPitch = arg1;
+    if (current_index < 0) return;
+    radio[connection.channels[channel].radio.radio_id]->cwPitch = arg1;
     if (isConnected)
     {
-        filters.selectFilter(filters.getFilter()); //Dummy call to centre filter on tone
-        frequencyChanged(frequency); //Dummy call to set freq into correct place in filter
+//        filters.selectFilter(filters.getFilter()); //Dummy call to centre filter on tone
+//        frequencyChanged(channel, frequency); //Dummy call to set freq into correct place in filter
     }
 }
 
@@ -3161,43 +2805,17 @@ void UI::setChkTX(bool chk)
 }
 
 
-void UI::resetbandedges(double offset)
-{
-    loffset= offset;
-    BandLimit limits=band.getBandLimits(band.getFrequency()-(rxp[0]->samplerate()/2),band.getFrequency()+(rxp[0]->samplerate()/2));
-    rxp[0]->setBandLimits(limits.min() + loffset,limits.max()+loffset);
-    qDebug()<<"loffset = "<<loffset;
-}
-
-
 void UI::on_zoomSpectrumSlider_sliderMoved(int position)
 {
+    if (current_index < 0) return;
     viewZoomLevel = position;
-    rxp[0]->setZoom(position);
+    radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->rxp[current_index]->setZoom(position);
 }
-
-
-void UI::rigSetPTT(int enabled)
-{
-    if (enabled)
-    {
-        widget.ctlFrame->RigCtlTX(true);
-    }
-    else
-    {
-        widget.ctlFrame->RigCtlTX(false);
-    }
-}
-
-
-bool UI::rigGetPTT(void)
-{
-    return txNow;
-} // end rigGetPTT
 
 
 void UI::windowTypeChanged(int type)
 {
+    if (current_index < 0) return;
     QByteArray command;
 
     command.clear();
@@ -3245,6 +2863,7 @@ void UI::setPwsMode(int mode)
 
 void UI::AGCTLevelChanged(int level)
 {
+    if (current_index < 0) return;
     QByteArray command;
     command.clear();
     command.append((char)currentRxChannel);
@@ -3252,61 +2871,6 @@ void UI::AGCTLevelChanged(int level)
     command.append(QString("%1").arg(level));
     qDebug()<<Q_FUNC_INFO<<":   The command sent is "<< command;
 //    widget.agcTLevelLabel->setText(QString("%1").arg(level));
-}
-
-
-void UI::enableRxEq(bool enable)
-{
-    if (!newDspServerCheck()) return;
-
-    QByteArray command;
-    command.clear();
-    command.append((char)currentRxChannel);
-    command.append((char)ENABLERXEQ);
-    command.append((char)enable);
-    connection.sendCommand(command);
-    qDebug() << Q_FUNC_INFO << ":   The command sent is " << command;
-}
-
-
-void UI::enableTxEq(bool enable)
-{
-    if (!newDspServerCheck() || currentTxChannel < 0) return;
-
-    QByteArray command;
-    command.clear();
-    command.append((char)currentTxChannel);
-    command.append((char)ENABLETXEQ);
-    command.append((char)enable);
-    connection.sendCommand(command);
-    qDebug() << Q_FUNC_INFO << ":   The command sent is " << command;
-}
-
-
-void UI::addNotchFilter(void)
-{
-    if (!newDspServerCheck()) return;
-
-    if (notchFilterIndex >= 9)
-    {
-        QMessageBox::warning(this, "Tracking Notch Filter Error", "Maximum of 9 notch filters reached!");
-        return;
-    }
-    widget.tnfButton->setChecked(true);
-    if (rxp[0]->addNotchFilter(notchFilterIndex++) < 0)
-        notchFilterIndex--;;
-}
-
-
-void UI::removeNotchFilter(void)
-{
-    if (!newDspServerCheck()) return;
-
-    notchFilterIndex--;
-    if (notchFilterIndex < 0)
-        notchFilterIndex = 0;
-    if (notchFilterIndex == 0)
-        widget.tnfButton->setChecked(false);
 }
 
 
@@ -3337,6 +2901,7 @@ bool UI::newDspServerCheck(void)
 void UI::agcSlopeChanged(int value)
 {
     if (!newDspServerCheck()) return;
+    if (current_index < 0) return;
 
     QByteArray command;
     command.clear();
@@ -3350,6 +2915,7 @@ void UI::agcSlopeChanged(int value)
 
 void UI::agcMaxGainChanged(double value)
 {
+    if (current_index < 0) return;
     if (!newDspServerCheck()) return;
 
     QByteArray command;
@@ -3364,6 +2930,7 @@ void UI::agcMaxGainChanged(double value)
 
 void UI::agcAttackChanged(int value)
 {
+    if (current_index < 0) return;
     if (!newDspServerCheck()) return;
 
     QByteArray command;
@@ -3378,6 +2945,7 @@ void UI::agcAttackChanged(int value)
 
 void UI::agcDecayChanged(int value)
 {
+    if (current_index < 0) return;
     if (!newDspServerCheck()) return;
 
     QByteArray command;
@@ -3392,6 +2960,7 @@ void UI::agcDecayChanged(int value)
 
 void UI::agcHangChanged(int value)
 {
+    if (current_index < 0) return;
     if (!newDspServerCheck()) return;
 
     QByteArray command;
@@ -3406,6 +2975,7 @@ void UI::agcHangChanged(int value)
 
 void UI::agcHangThreshChanged(int value)
 {
+    if (current_index < 0) return;
     if (!newDspServerCheck()) return;
 
     QByteArray command;
@@ -3420,6 +2990,7 @@ void UI::agcHangThreshChanged(int value)
 
 void UI::agcFixedGainChanged(double value)
 {
+    if (current_index < 0) return;
     if (!newDspServerCheck()) return;
 
     QByteArray command;
@@ -3448,6 +3019,7 @@ void UI::levelerStateChanged(int value)
 
 void UI::rxFilterWindowChanged(int value)
 {
+    if (current_index < 0) return;
     if (!newDspServerCheck()) return;
 
     QByteArray command;
@@ -3587,60 +3159,701 @@ void UI::TXalcAttackChanged(int value)
 }
 
 
-void UI::hardwareSet(QString hardware)
+void UI::setCurrentChannel(int channel)
 {
-    //QStringList hwList = hardware.split(" ");
+    currentRxChannel = channel;
+} // end setCurrentChannel
 
-    //if (hwList.length() < 2) return;
-    if (hardware == "hermes")
+
+void UI::resetBandedges(double f)
+{
+    if (current_index > -1)
+        radio[connection.channels[receiver_channel[current_index]].radio.radio_id]->resetbandedges(current_index, f);
+}
+
+
+Radio::Radio(int8_t index, ServerConnection *connection)
+{
+    initRigCtl(19090+index);
+    fprintf(stderr, "rigctl: Calling init\n");
+
+    radio_index = index;
+    for (int i=0;i<MAX_CHANNELS;i++)
+    {
+        if (connection->channels[i].radio.radio_id == index)
+        {
+            hardwareType = connection->channels[i].radio.radio_type;
+            break;
+        }
+    }
+    radio_started = false;
+    bandscope = NULL;
+    txp = NULL;
+    currentTxChannel = -1;
+    currentRxChannel = -1;
+    activeReceivers = 0;
+    QSettings settings("FreeSDR", "QtRadioII");
+    for (int i=0;i<MAX_RECEIVERS;i++)
+    {
+        band[i].loadSettings(&settings);
+        receiver_active[i] = false;
+        receiver_channel[i] = -1;
+        fps[i] = 15;
+        notchFilterIndex[i] = 0;
+        rxp[i] = NULL;
+        if (settings.contains("squelch"))
+            squelchValue[i] = settings.value("squelch").toInt();
+    }
+
+    equalizer = new EqualizerDialog(connection);
+/*
+    settings.beginGroup("AudioEqualizer");
+    if (settings.contains("eqMode"))
+    {
+        if (settings.value("eqMode") == 3)
+            equalizer->loadSettings3Band();
+        else
+            equalizer->loadSettings10Band();
+    }
+    else
+    {
+        settings.setValue("eqMode", 10);
+        equalizer->set10BandEqualizer();
+    }
+    settings.endGroup(); */
+}
+
+
+Radio::~Radio()
+{
+    if (hardwareType == "hermes")
+        static_cast<HermesFrame*>(hww)->disconnect();
+    this->disconnect();
+}
+
+
+void Radio::sendCommand(QByteArray command)
+{
+    emit send_spectrum_command(command);
+}
+
+
+int8_t Radio::getInternalIndex(int8_t channel_index)
+{
+    for (int8_t i=0;i<MAX_RECEIVERS;i++)
+        if (channels[i].index == channel_index)
+            return i;
+    return -1;
+}
+
+
+void Radio::initializeReceiver(CHANNEL *channel)
+{
+    memcpy(&channels[activeReceivers], channel, sizeof(CHANNEL));
+    if (!channel->isTX)
+    {
+        currentRxChannel = channel->id;
+        squelchValue[activeReceivers] = -100;
+        squelch = false;
+
+        rxp[activeReceivers] = new Panadapter();
+        rxp[activeReceivers]->currentChannel = currentRxChannel;
+        rxp[activeReceivers]->index = activeReceivers;
+        connect(rxp[activeReceivers], SIGNAL(send_spectrum_command(QByteArray)), this, SLOT(sendCommand(QByteArray)));
+        connect(rxp[activeReceivers], SIGNAL(frequencyMoved(int8_t,int,int)), this, SLOT(frequencyMoved(int8_t,int,int)));
+
+    }
+//    rxp[channel->index]->setHost(configure.getHost());
+
+    receiver_active[activeReceivers] = true;
+    receiver_channel[activeReceivers] = channel->id;
+    memcpy((char*)&channel[activeReceivers], (char*)channel, sizeof(CHANNEL));
+
+    band[activeReceivers].initBand(activeReceivers, band[activeReceivers].getBand());
+//    band[activeReceivers].setFilter(MODE_USB);
+//    band[activeReceivers].setMode(MODE_USB);
+//    band[activeReceivers].selectBand(BAND_15+100);
+//    frequency[activeReceivers] = band[activeReceivers].getFrequency();
+
+//    fps[connection->channels[channel].index] = configure.getFps();
+
+    activeReceivers++;
+}
+
+
+void Radio::bandChanged(int8_t index, int previousBand,int newBand)
+{
+    if (index < 0) return;
+    qDebug() << Q_FUNC_INFO << ":   previousBand, newBand = " << previousBand << "," << newBand;
+    qDebug() << Q_FUNC_INFO << ":   band.getFilter = " << band[index].getFilter();
+
+    emit updateBandMenu(newBand);
+
+    // get the band setting
+    mode[index].setMode(index, band[index].getMode());
+
+    qDebug() << Q_FUNC_INFO << ":   The value of band.getFilter is ... " << band[index].getFilter();
+    qDebug() << Q_FUNC_INFO << ":   The value of filters.getFilter is  " << filters.getFilter();
+
+    rxp[index]->setBand(band[index].getStringBand());
+
+    if (band[index].getFilter() != filters.getFilter())
+    {
+        emit filterChanged(channels[index].id, filters.getFilter(), band[index].getFilter());
+    }
+    frequency[index] = band[index].getFrequency();
+
+    int samplerate = rxp[index]->samplerate();
+
+    QByteArray command;
+    command.clear();
+    command.append((char)channels[index].id);
+    command.append((char)SETFREQ);
+    command.append(QString("%1").arg(frequency[index]));
+    emit send_command(command);
+
+    rxp[index]->setFrequency(frequency[index]);
+
+    //    gvj code
+//    widget.vfoFrame->setFrequency(frequency);
+    emit updateVFO(frequency[index]);
+    qDebug() << __FUNCTION__ << ": frequency, newBand = " << frequency[index] << ", " << newBand;
+    rxp[index]->setHigh(band[index].getSpectrumHigh());
+    rxp[index]->setLow(band[index].getSpectrumLow());
+    //    widget.waterfallView->setFrequency(frequency);
+    rxp[index]->panadapterScene->waterfallItem->setHigh(band[index].getWaterfallHigh());
+    rxp[index]->panadapterScene->waterfallItem->setLow(band[index].getWaterfallLow());
+
+    BandLimit limits = band[index].getBandLimits(band[index].getFrequency()-(samplerate/2),band[index].getFrequency()+(samplerate/2));
+    rxp[index]->setBandLimits(limits.min() + loffset,limits.max() + loffset);
+    if ((mode[index].getStringMode() == "CWU") || (mode[index].getStringMode() == "CWL"))
+        frequencyChanged(index, frequency[index]); //gvj dummy call to set Rx offset for cw
+} // end bandChanged
+
+
+void Radio::modeChanged(int8_t index, int previousMode,int newMode)
+{
+    QByteArray command;
+
+    qDebug() << Q_FUNC_INFO << ":   previousMode, newMode" << previousMode << "," << newMode;
+    qDebug() << Q_FUNC_INFO << ":   band.getFilter = " << band[index].getFilter();
+
+    qDebug() << Q_FUNC_INFO << ":  999: value of band.getFilter before filters.selectFilters has been called = " << band[index].getFilter();
+
+    // check the new mode and set the filters
+    switch (newMode)
+    {
+    case MODE_CWL:
+        filters.selectFilters(index, &cwlFilters);
+        break;
+    case MODE_CWU:
+        filters.selectFilters(index, &cwuFilters);
+        break;
+    case MODE_LSB:
+        filters.selectFilters(index, &lsbFilters);
+        break;
+    case MODE_USB:
+        filters.selectFilters(index, &usbFilters);
+        break;
+    case MODE_DSB:
+        filters.selectFilters(index, &dsbFilters);
+        break;
+    case MODE_AM:
+        filters.selectFilters(index, &amFilters);
+        break;
+    case MODE_SAM:
+        filters.selectFilters(index, &samFilters);
+        break;
+    case MODE_FM:
+        filters.selectFilters(index, &fmnFilters);
+        break;
+    case MODE_DIGL:
+        filters.selectFilters(index, &diglFilters);
+        break;
+    case MODE_DIGU:
+        filters.selectFilters(index, &diguFilters);
+        break;
+    }
+
+    emit updateModeMenu(newMode);
+
+    qDebug() << Q_FUNC_INFO<<":  1043: value of band.getFilter after filters.selectFilters has been called = " << band[index].getFilter();
+    if (!channels[index].isTX)
+        rxp[index]->setMode(mode[index].getStringMode()); // FIXME:
+    //    widget.waterfallView->setMode(mode.getStringMode());
+    command.clear();
+    command.append((char)channels[index].id);
+    command.append((char)SETMODE);
+    command.append((char)newMode);
+    emit send_command(command);
+} // end modeChanged
+
+
+void Radio::filtersChanged(int8_t index, FiltersBase* previousFilters, FiltersBase* newFilters)
+{
+    if (index < 0) return;
+    qDebug() << Q_FUNC_INFO<<":   newFilters->getText, newFilters->getSelected = " << newFilters->getText() << ", "<<newFilters->getSelected();
+    qDebug() << Q_FUNC_INFO<<":   band.getFilter = " << band[index].getFilter();
+
+    emit updateFiltersMenu(band[index].getFilter(), newFilters);
+
+    qDebug() << Q_FUNC_INFO<<":   1092 band.getFilter = " << band[index].getFilter() << ", modeFlag = " << modeFlag[index];
+
+    if (!modeFlag[index])
+    {
+        newFilters->selectFilter(band[index].getFilter()); //TODO Still not there yet
+        qDebug() << Q_FUNC_INFO << ":    Using the value from band.getFilter = " << band[index].getFilter();
+    }
+
+    filters.selectFilter(index, filters.getFilter());
+
+    rxp[index]->setFilter(filters.getText());
+    emit printStatusBar(" .. Initial frequency. ");    //added by gvj
+} // end filtersChanged
+
+
+void Radio::filterChanged(int8_t index, int previousFilter,int newFilter)
+{
+    if (index < 0) return;
+    QByteArray command;
+
+    qDebug()<<Q_FUNC_INFO<< ":    previousFilter, newFilter" << previousFilter << ":" << newFilter;
+
+    emit updateFilterMenu(newFilter);
+
+    int low, high;
+    if (previousFilter != 10 && newFilter == 10)
+        return;
+
+    if (mode[index].getMode() == MODE_CWL)
+    {
+        low = -cwPitch - filters.getLow();
+        high = -cwPitch + filters.getHigh();
+    }
+    else
+        if (mode[index].getMode() == MODE_CWU)
+        {
+            low = cwPitch - filters.getLow();
+            high = cwPitch + filters.getHigh();
+        }
+        else
+        {
+            low = filters.getLow();
+            high = filters.getHigh();
+        }
+
+    command.clear();
+    command.append((char)channels[index].id);
+    command.append((char)SETFILTER);
+    command.append(QString("%1,%2").arg(low).arg(high));
+    if (radio_started)
+        emit send_command(command);
+
+    rxp[index]->setFilter(low, high);
+    if (txp != NULL)
+        txp->setFilter(low, high);
+    rxp[index]->setFilter(filters.getText());
+    //    widget.waterfallView->setFilter(low,high);
+    band[index].setFilter(newFilter);
+} // end filterChanged
+
+
+void Radio::variableFilter(int8_t index, int low, int high)
+{
+    QByteArray command;
+
+    emit updateFilterMenu(10);
+
+    command.clear();
+    command.append((char)channels[index].id);
+    command.append((char)SETFILTER);
+    command.append(QString("%1,%2").arg(low).arg(high));
+    if (radio_started)
+        emit send_command(command);
+
+    if (filters.getFilter() != 10)
+    {
+        band[index].setFilter(10);
+        filters.selectFilter(index, 10);
+    }
+} // end variableFilter
+
+
+void Radio::frequencyChanged(int8_t index, long long f)
+{
+    if (index < 0) return;
+    QByteArray command;
+    long long freqOffset = f; //Normally no offset (only for CW Rx mode)
+
+    frequency[index] = f;
+    /* FIXME: Need to make the following lines work.
+    if ((mode.getStringMode() == "CWU") && (!widget.vfoFrame->getPtt()))
+    {
+        freqOffset -= cwPitch;
+    }
+    if ((mode.getStringMode() == "CWL") && (!widget.vfoFrame->getPtt()))
+    {
+        freqOffset += cwPitch;
+    } */
+    //Send command to server
+    command.clear();
+    command.append((char)receiver_channel[index]);
+    command.append((char)SETFREQ);
+    command.append(QString("%1").arg(freqOffset));
+    emit send_command(command);
+    command.clear();
+
+    //Adjust all frequency displays & Check for exiting current band
+    band[index].setFrequency(frequency[index]);
+
+    if (!channels[index].isTX)
+        rxp[index]->setFrequency(frequency[index]);
+ //   widget.vfoFrame->setFrequency(frequency[connection->channels[channel].index]);
+    //    widget.waterfallView->setFrequency(frequency);
+    emit updateVFO(f);
+    qDebug("Frequency changed for channel: %d\n", receiver_channel[index]);
+} // end frequencyChanged
+
+
+void Radio::frequencyMoved(int8_t index, int increment, int step)
+{
+    qDebug() << __FUNCTION__ << ": increment=" << increment << " step=" << step;
+
+    frequencyChanged(index, band[index].getFrequency() - (long long)(increment * step));
+} // end frequencyMoved
+
+
+void Radio::sampleRateChanged(int8_t index, long rate)
+{
+    QByteArray command;
+    //Send command to server
+    command.clear();
+    command.append((char)channels[index].id);
+    command.append((char)SETSAMPLERATE);
+    command.append(QString("%1").arg(rate));
+    emit send_command(command);
+} // end sampleRateChanged
+
+
+void Radio::fpsChanged(int8_t index, int f)
+{
+    //qDebug() << "fpsChanged:" << f;
+    fps[index] = f;
+} // end fpsChanged
+
+
+void Radio::setFPS(int8_t index)
+{
+    QByteArray command;
+    command.clear();
+    command.append((char)channels[index].id);
+    command.append((char)SETFPS);
+    command.append(QString("2000,%1").arg(fps[index]));
+    emit send_command(command);
+    emit send_spectrum_command(command);
+} // end setFPS
+
+
+void Radio::enableRxEq(int8_t index, bool enable)
+{
+    QByteArray command;
+    command.clear();
+    command.append((char)channels[index].id);
+    command.append((char)ENABLERXEQ);
+    command.append((char)enable);
+    emit send_command(command);
+    qDebug() << Q_FUNC_INFO << ":   The command sent is " << command;
+}
+
+
+void Radio::enableTxEq(int8_t index, bool enable)
+{
+    if (index < 0) return;
+
+    QByteArray command;
+    command.clear();
+    command.append((char)channels[index].id);
+    command.append((char)ENABLETXEQ);
+    command.append((char)enable);
+    emit send_command(command);
+    qDebug() << Q_FUNC_INFO << ":   The command sent is " << command;
+}
+
+
+void Radio::removeNotchFilter(int8_t index)
+{
+    notchFilterIndex[index]--;
+    if (notchFilterIndex[index] < 0)
+        notchFilterIndex[index] = 0;
+    if (notchFilterIndex[index] == 0)
+        tnfSetChecked(false);
+}
+
+
+void Radio::hardwareSet(QWidget *widget)
+{
+    if (hardwareType == "hermes")
     {
         HermesFrame *hf = new HermesFrame(this);
-        widget.RadioScrollAreaWidgetContents->layout()->addWidget((HermesFrame*)hf);
+        widget->layout()->addWidget((HermesFrame*)hf);
         hww = (QWidget*)hf;
-        hardwareType = "hermes";
         connect((HermesFrame*)hf, SIGNAL(hhcommand(QByteArray)), this, SLOT(sendHardwareCommand(QByteArray)));
-        connect((HermesFrame*)hf, SIGNAL(pttTuneChange(int,bool)), this, SLOT(pttChange(int,bool)));
-        hf->radio_id = connection.channels[currentRxChannel].radio.radio_id;
+//        connect((HermesFrame*)hf, SIGNAL(pttTuneChange(int,bool)), this, SLOT(pttChange(int,bool)));
+        hf->radio_id = radio_index;
         hf->currentRxChannel = currentRxChannel;
         hf->currentTxChannel = currentTxChannel;
-//        hf->initialize();
     }
-    if (connection.channels[currentRxChannel].radio.bandscope_capable)
-        widget.actionBandscope->setEnabled(true);
-    else
-        widget.actionBandscope->setEnabled(false);
 } // end hardwareSet
 
 
-void UI::sendHardwareCommand(QByteArray command)
+void Radio::sendHardwareCommand(QByteArray command)
 {
-    connection.sendCommand(command);
+    emit send_command(command);
     fprintf(stderr, "Send hardware command...\n");
 } // end sendHardwareCommand
 
 
-void UI::initializeRadio(int8_t channel)
+void Radio::initializeRadio()
 {
-    QString radio_type = connection.channels[channel].radio.radio_type;
-    if (radio_type == "hermes")
+    if (hardwareType == "hermes")
     {
+        radio_started = true;
+        static_cast<HermesFrame*>(hww)->currentRxChannel = currentRxChannel;
+        static_cast<HermesFrame*>(hww)->currentTxChannel = currentTxChannel;
         static_cast<HermesFrame*>(hww)->initializeRadio();
     }
 } // end initializeRadio
 
 
-void UI::shutdownRadio(int8_t channel)
+void Radio::shutdownRadio()
 {
-    QString radio_type = connection.channels[channel].radio.radio_type;
-    if (radio_type == "hermes")
+    if (hardwareType == "hermes")
     {
         static_cast<HermesFrame*>(hww)->shutDown();
     }
 } // end shutdownRadio
 
 
-void UI::setCurrentChannel(int channel)
+void Radio::initRigCtl(int port)
 {
-    currentRxChannel = channel;
-    //widget.ctlFrame->setCurrentChannel(channel+1);
-} // end setCurrentChannel
+    rigCtl = new RigCtlServer(this, this, port);
+}
+
+
+long long Radio::rigctlGetFreq()
+{
+    return frequency[0];
+}
+
+
+QString Radio::rigctlGetMode()
+{
+    QString  m = mode[0].getStringMode();
+    if (m == "CWU")
+    {
+        m = "CW";
+    }
+    if (m == "CWL")
+    {
+        m = "CWR";
+    }
+    return m;
+}
+
+
+QString Radio::rigctlGetFilter()
+{
+    QString fwidth;
+    QString  m = mode[0].getStringMode();
+
+    if (m == "CWU")
+    {
+        return fwidth.setNum(filters.getHigh() + filters.getLow());
+    }
+    else
+        if (m == "CWL")
+        {
+            return fwidth.setNum(filters.getHigh() + filters.getLow());
+        }
+        else
+            return fwidth.setNum(filters.getHigh() - filters.getLow());
+}
+
+
+QString Radio::rigctlGetVFO()
+{
+    return "VFOA"; // widget.vfoFrame->rigctlGetvfo();
+}
+
+
+void Radio::rigctlSetVFOA()
+{
+//    widget.vfoFrame->on_pBtnvfoA_clicked();
+}
+
+
+void Radio::rigctlSetVFOB()
+{
+//    widget.vfoFrame->on_pBtnvfoB_clicked();
+}
+
+
+void Radio::rigctlSetFreq(long long f)
+{
+    frequencyChanged(channels[0].id, f);
+    if (currentTxChannel > -1)
+        frequencyChanged(8, f);
+}
+
+
+void Radio::rigctlSetMode(int newmode)
+{
+    modeChanged(0, mode[0].getMode(), newmode);
+    if (currentTxChannel > -1)
+    {
+        for (int i=0;i<MAX_RECEIVERS;i++)
+            if (channels[i].id == currentTxChannel)
+            {
+                modeChanged(i, mode[i].getMode(), newmode);
+                break;
+            }
+    }
+    mode[0].setMode(0, newmode);
+}
+
+
+void Radio::rigctlSetFilter(int newfilter)
+{
+    qDebug() << "UI.cpp: dl6kbg: wanted filter via hamlib: " << newfilter;
+    filters.selectFilter(0, newfilter);
+}
+
+
+void Radio::rigSetPTT(int enabled)
+{
+    if (enabled)
+    {
+//        widget.ctlFrame->RigCtlTX(true);
+        emit ctlSetPTT(enabled);
+        txNow = true;
+    }
+    else
+    {
+//        widget.ctlFrame->RigCtlTX(false);
+        emit ctlSetPTT(enabled);
+        txNow = false;
+    }
+}
+
+
+bool Radio::rigGetPTT(void)
+{
+    return txNow;
+} // end rigGetPTT
+
+
+void Radio::enableBandscope(SpectrumConnection *connection, bool enable)
+{
+    if (enable)
+    {
+        if (bandscope == NULL)
+            bandscope = new Bandscope(connection);
+        connect(bandscope, SIGNAL(closeBandScope()), this, SLOT(closeBandScope()));
+        bandscope->setWindowTitle("QtRadioII Bandscope");
+        bandscope->channel = MAX_CHANNELS - 1 - radio_index;
+        bandscope->radio_id = radio_index;
+        bandscope->show();
+        bandscope->connect();
+    }
+    else
+    {
+        if (bandscope != NULL)
+        {
+            bandscope->setVisible(false);
+            bandscope->disconnect();
+        }
+    }
+}
+
+
+void Radio::closeBandScope()
+{
+    emit bandScopeClosed();
+} // end closeBandScope
+
+
+void Radio::spectrumHighChanged(int8_t index, int high)
+{
+    //qDebug() << __FUNCTION__ << ": " << high;
+
+    rxp[index]->setHigh(high);
+    //    configure.setSpectrumHigh(high);
+    band[index].setSpectrumHigh(high);
+} // end spectrumHighChanged
+
+
+void Radio::spectrumLowChanged(int8_t index, int low)
+{
+    //qDebug() << __FUNCTION__ << ": " << low;
+
+    rxp[index]->setLow(low);
+    //    configure.setSpectrumLow(low);
+    band[index].setSpectrumLow(low);
+} // end spectrumLowChanged
+
+
+void Radio::waterfallHighChanged(int8_t index, int high)
+{
+    //qDebug() << __LINE__ << __FUNCTION__ << ": " << high;
+
+    rxp[index]->panadapterScene->waterfallItem->setHigh(high);
+    //    configure.setWaterfallHigh(high);
+    band[index].setWaterfallHigh(high);
+} // end waterfallHighChanged
+
+
+void Radio::waterfallLowChanged(int8_t index, int low)
+{
+    //qDebug() << __FUNCTION__ << ": " << low;
+
+    rxp[index]->panadapterScene->waterfallItem->setLow(low);
+    //    configure.setWaterfallLow(low);
+    band[index].setWaterfallLow(low);
+} // end waterfallLowChanged
+
+
+void Radio::waterfallAutomaticChanged(int8_t index, bool state)
+{
+    rxp[index]->panadapterScene->waterfallItem->setAutomatic(state);
+} // end waterfallautomaticChanged
+
+
+void Radio::resetbandedges(int8_t index, double offset)
+{
+//    loffset = offset;
+    BandLimit limits = band[index].getBandLimits(band[index].getFrequency()-(rxp[index]->samplerate()/2),band[index].getFrequency()+(rxp[index]->samplerate()/2));
+    rxp[index]->setBandLimits(limits.min() + offset, limits.max() + offset);
+//    qDebug()<<"loffset = "<<loffset;
+} // end resetbandedges
+
+
+void Radio::squelchValueChanged(int8_t index, int val)
+{
+    squelchValue[index] = squelchValue[index] + val;
+    if (squelch)
+    {
+        QByteArray command;
+        command.clear();
+        command.append((char)channels[index].id);
+        command.append((char)SETSQUELCHVAL);
+        command.append(QString("%1").arg(squelchValue[index]));
+        emit sendCommand(command);
+        rxp[index]->setSquelchVal(squelchValue[index]);
+    }
+}
+
+
+void UI::tnfSetChecked(bool enabled)
+{
+    widget.tnfButton->setChecked(enabled);
+} // end tnfSetChecked

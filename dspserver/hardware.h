@@ -105,7 +105,7 @@ typedef struct _bufferwb {
 } BUFFERWB;
 
 extern CHANNEL channels[MAX_CHANNELS];
-extern int iq_socket;
+//extern int iq_socket;
 extern short int connected_radios;
 extern int sampleRate;
 extern int mox;
@@ -117,6 +117,7 @@ extern char *manifest_xml[5];
 // values saved from last change to send to slaves
 long long lastFreq;
 int lastMode;
+bool audio_enabled[MAX_CHANNELS];
 
 
 /* --------------------------------------------------------------------------*/

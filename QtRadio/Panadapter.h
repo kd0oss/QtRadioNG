@@ -258,7 +258,7 @@ signals:
     void frequencyMoved(int steps,int step);
     void spectrumHighChanged(int high);
     void spectrumLowChanged(int low);
-    void meterValue(float, float, float);
+    void meterValue(int8_t, float, float, float);
 
 protected:
 //    void resizeEvent(QResizeEvent *event);
@@ -345,7 +345,8 @@ public:
     void setFilter(int low,int high);
     void updateSpectrumFrame(SPECTRUM);
     int samplerate();
-    int8_t  currentChannel;
+    int8_t currentChannel;
+    int8_t index;
 
     int getHigh();
     int getLow();
@@ -367,17 +368,18 @@ public:
 
 
 signals:
-    void frequencyMoved(int steps,int step);
+    void frequencyMoved(int8_t, int steps,int step);
 //    void frequencyChanged(long long frequency);
-    void spectrumHighChanged(int high);
-    void spectrumLowChanged(int low);
-    void waterfallHighChanged(int high);
-    void waterfallLowChanged(int low);
-    void meterValue(float, float, float);
-    void squelchValueChanged(int step);
+    void spectrumHighChanged(int8_t, int high);
+    void spectrumLowChanged(int8_t, int low);
+    void waterfallHighChanged(int8_t, int high);
+    void waterfallLowChanged(int8_t, int low);
+    void meterValue(int8_t, float, float, float);
+    void squelchValueChanged(int8_t, int step);
     void statusMessage(QString);
-    void removeNotchFilter(void);
-    void variableFilter(int low, int high);
+    void removeNotchFilter(int8_t);
+    void variableFilter(int8_t, int low, int high);
+    void send_spectrum_command(QByteArray);
 
 protected:
  //   void paintEvent(QPaintEvent*);
@@ -393,7 +395,7 @@ protected:
 
 public slots:
     void setAvg(int value);
-    int  addNotchFilter(int index);    // KD0OSS
+    int  addNotchFilter(void);    // KD0OSS
     void enableNotchFilter(bool enable);   // KD0OSS
     void enableNotchFilter(int index, bool enable);   // KD0OSS
     void updateWaterfall(void);
@@ -426,6 +428,8 @@ private:
     QString mode;
     QString filter;
 
+    int dbmLines;
+    int freqLines;
     int button;
     int startX;
     int lastX;

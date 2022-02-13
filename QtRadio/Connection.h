@@ -127,8 +127,8 @@ public:
 
     QString  manifest_xml[4];
     int      available_xcvrs[4];
-    bool     receivers_active[7];
-    int8_t   receiver_channel[7];
+    bool     receivers_active[8];
+    int8_t   receiver_channel[8];
     long     sample_rate;
     CHANNEL  channels[35];
     int8_t   txrxPair;
@@ -137,7 +137,6 @@ public:
     int      selected_channel;
 
     void    connect(QString host, int receiver);
-    void    sendCommand(QByteArray command);
     void    freeBuffers(char* header, char* buffer);
     void    setMuted(bool);
     bool    getSlave();
@@ -154,6 +153,7 @@ public slots:
     void cmdSocketData();
     void processBuffer();
     void activateRadio();
+    void sendCommand(QByteArray command);
 
 signals:
     void isConnected(bool*, int8_t*, int8_t*);
@@ -170,11 +170,12 @@ signals:
     void setCanTX(bool);
     void setChkTX(bool);  // password style server
     void resetbandedges(double loffset);
-    void setFPS();
+//    void setFPS();
     void hardware(QString);
     void activateRadioSig();
     void setSampleRate(long);
     void setCurrentChannel(int);
+    void send_command(QByteArray command);
 
 private:
     // really not used (and not even implemented)
@@ -210,14 +211,14 @@ public:
     SpectrumConnection();
     virtual ~SpectrumConnection();
     void    connect(QString host, int receiver);
-    void    sendCommand(QByteArray command);
     void    freeBuffers(SPECTRUM);
     QString server;
     int     port;
+    QMutex  trans_mutex;
+    QMutex  recv_mutex;
 
 private:
     QTcpSocket  *tcpSocket;
-    QMutex       mutex;
     int          state;
     char        *hdr;
     char        *buffer;
@@ -230,11 +231,13 @@ public slots:
     void disconnect();
     void socketError(QAbstractSocket::SocketError socketError);
     void spectrumSocketData();
+    void sendCommand(QByteArray command);
 
 signals:
     void isConnected();
     void disconnected(QString message);
     void spectrumBuffer(CHANNEL);
+    void send_spectrum_command(QByteArray);
 };
 
 

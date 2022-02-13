@@ -21,7 +21,7 @@ class HermesFrame : public QFrame
     Q_OBJECT
 
 public:
-    explicit HermesFrame(UI *pUI, QWidget *parent = 0);
+    explicit HermesFrame(Radio *pUI, QWidget *parent = 0);
     ~HermesFrame();
     void initializeRadio(void);
     void shutDown(void);
@@ -33,7 +33,7 @@ public:
 private:
     Ui::HermesFrame *ui;
     bool tuning;
-    UI *pui;
+    Radio *pui;
     QSettings *settings;
     QTimer *itimer;
 

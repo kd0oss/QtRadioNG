@@ -17,7 +17,7 @@ RadiosDialog::RadiosDialog(QWidget *parent): QDialog(parent), ui(new Ui::RadiosD
         available_xcvrs[i] = 0;
     }
 
-    for (int i=0;i<7;i++)
+    for (int i=0;i<8;i++)
     {
         receivers_active[i] = false;
         receiver_channel[i] = -1;
@@ -30,6 +30,7 @@ RadiosDialog::RadiosDialog(QWidget *parent): QDialog(parent), ui(new Ui::RadiosD
     ui->receiver5Ckb->setChecked(false);
     ui->receiver6Ckb->setChecked(false);
     ui->receiver7Ckb->setChecked(false);
+    ui->receiver8Ckb->setChecked(false);
 
     ui->receiver2Ckb->setEnabled(false);
     ui->receiver3Ckb->setEnabled(false);
@@ -37,6 +38,7 @@ RadiosDialog::RadiosDialog(QWidget *parent): QDialog(parent), ui(new Ui::RadiosD
     ui->receiver5Ckb->setEnabled(false);
     ui->receiver6Ckb->setEnabled(false);
     ui->receiver7Ckb->setEnabled(false);
+    ui->receiver8Ckb->setEnabled(false);
 
     connect(ui->radioList, SIGNAL(itemClicked(QListWidgetItem*)), this, SLOT(getRadioDetails()));
     connect(ui->radioStartButton, SIGNAL(released()), this, SLOT(startRadio()));
@@ -76,6 +78,7 @@ void RadiosDialog::startRadio()
     receivers_active[4] = ui->receiver5Ckb->isChecked();
     receivers_active[5] = ui->receiver6Ckb->isChecked();
     receivers_active[6] = ui->receiver7Ckb->isChecked();
+    receivers_active[7] = ui->receiver8Ckb->isChecked();
 
     if (ui->transPairedCB->currentIndex() > 0 && txrxPair[0] > -1)
         txrxPair[1] = receiver_channel[ui->transPairedCB->currentIndex()-1];
@@ -115,13 +118,14 @@ void RadiosDialog::getRadioDetails()
     selected_channel = radio_id;
     radio_type = ui->radioList->currentItem()->text().split(" ").at(1);
 
-    ui->receiver1Ckb->setEnabled(false);
+    ui->receiver1Ckb->setChecked(false);
     ui->receiver2Ckb->setChecked(false);
     ui->receiver3Ckb->setChecked(false);
     ui->receiver4Ckb->setChecked(false);
     ui->receiver5Ckb->setChecked(false);
     ui->receiver6Ckb->setChecked(false);
     ui->receiver7Ckb->setChecked(false);
+    ui->receiver8Ckb->setChecked(false);
 
     ui->receiver2Ckb->setEnabled(false);
     ui->receiver3Ckb->setEnabled(false);
@@ -129,6 +133,7 @@ void RadiosDialog::getRadioDetails()
     ui->receiver5Ckb->setEnabled(false);
     ui->receiver6Ckb->setEnabled(false);
     ui->receiver7Ckb->setEnabled(false);
+    ui->receiver8Ckb->setEnabled(false);
 
     ui->radioAudioLocalChk->setEnabled(false);
     ui->radioMicLocalChk->setEnabled(false);
@@ -159,7 +164,7 @@ void RadiosDialog::getRadioDetails()
             }
         }
 
-        if (ch >= 7) break;
+        if (ch >= 8) break;
         if (channels[x].dsp_channel != -1 && channels[x].radio.radio_id == radio_id)
         {
             if (channels[x].isTX)
@@ -206,6 +211,12 @@ void RadiosDialog::getRadioDetails()
                 case 6:
                     ui->receiver7Ckb->setEnabled(true);
                     ui->transPairedCB->addItem("Recv 7");
+                    receiver_channel[ch] = x;
+                    break;
+
+                case 7:
+                    ui->receiver8Ckb->setEnabled(true);
+                    ui->transPairedCB->addItem("Recv 8");
                     receiver_channel[ch] = x;
                     break;
 

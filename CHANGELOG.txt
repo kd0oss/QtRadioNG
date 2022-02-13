@@ -1,6 +1,20 @@
 QtRadioNG changes log by Rick Schnicker KD0OSS
 ==================================================
 
+2022/02/13   Up rev'd to version ALPHA 2.04
+    QtRadio now handles multiple panadapters.
+    Configuration of panadapters after radio start
+    still needs work.
+
+    There is a receiver dropdown below the VFO
+    that will select the active receiver/panadapter.
+    Most menu and VFO commands will act only on
+    selected receiver. Audio only on selected
+    receiver.
+
+    Rig control will work on Receiver 0. radio
+    selected by adding radio index to TCP port #.
+
 2022/01/29   Up rev'd to version ALPHA 2.03
     Change hpsdr code to manage most resources per
     reciever and transmitter slots.

@@ -59,10 +59,10 @@ vfo::vfo(QWidget *parent) : QFrame(parent), ui(new Ui::vfo)
     ui->btnGrpBand->setId(ui->bandBtn_10, 10); // 6
     ui->btnGrpBand->setId(ui->bandBtn_11, 11); // GEN
     ui->btnGrpBand->setId(ui->bandBtn_12, 12); // WWV
-    connect(ui->btnGrpBand, SIGNAL(buttonClicked(int)),
-                this, SLOT(btnGrpClicked(int)));
-    connect(ui->hSlider, SIGNAL(valueChanged(int)),
-                this, SLOT(processRIT(int)));
+
+    connect(ui->btnGrpBand, SIGNAL(buttonClicked(int)), this, SLOT(btnGrpClicked(int)));
+    connect(ui->hSlider, SIGNAL(valueChanged(int)), this, SLOT(processRIT(int)));
+    connect(ui->receiverSelectCB, SIGNAL(currentIndexChanged(int)), this, SLOT(changeReceiver(int)));
 
 // Powermate related stuff
 #if defined(LINUX)
@@ -78,6 +78,27 @@ vfo::vfo(QWidget *parent) : QFrame(parent), ui(new Ui::vfo)
 vfo::~vfo()
 {
     delete ui;
+}
+
+
+void vfo::resetSelectedReceiver(void)
+{
+    ui->receiverSelectCB->clear();
+}
+
+void vfo::changeReceiver(int index)
+{
+    emit receiverChanged((int8_t)index);
+}
+
+void vfo::setCurrentReceiver(int index)
+{
+    ui->receiverSelectCB->setCurrentIndex(index);
+}
+
+void vfo::setSelectedReceiver(QString item)
+{
+    ui->receiverSelectCB->addItem(item);
 }
 
 void vfo::setFrequency(int freq)
@@ -114,6 +135,11 @@ void vfo::on_pBtnRIT_clicked()
 void vfo::btnGrpClicked(int btn)
 {
     emit bandBtnClicked(btn);
+}
+
+void vfo::receiverChangedSlot(int index)
+{
+    emit receiverChanged(index);
 }
 
 void vfo::timerEvent(QTimerEvent *event)
@@ -410,6 +436,7 @@ void vfo::on_pBtnBtoA_clicked()
 void vfo::readSettings(QSettings* settings)
 {
     settings->beginGroup("vfo");
+    writeA(settings->value("vfoB_f",14234567).toInt()); // vfoA initial settings from band.ccp
     writeB(settings->value("vfoB_f",14234567).toInt()); // vfoA initial settings from band.ccp
     settings->endGroup();
 }

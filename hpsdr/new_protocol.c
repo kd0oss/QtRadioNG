@@ -738,7 +738,7 @@ static void new_protocol_high_priority() {
                     rxFrequency+=(long long)cw_keyer_sidetone_frequency;
                 }
             }
-
+//fprintf(stderr, "rxFreq: %lld\n", rxFrequency);
             phase=(long)((4294967296.0*(double)rxFrequency)/122880000.0);
             high_priority_buffer_to_radio[9+(ddc*4)]=phase>>24;
             high_priority_buffer_to_radio[10+(ddc*4)]=phase>>16;
@@ -1641,6 +1641,7 @@ static void* iq_thread(void *data)
             sequence_errors++;
         }
         ddc_sequence[ddc]++;
+  //      fprintf(stderr, "rxid: %d   ddc: %d\n", rxid[ddc], ddc);
         //
         //  Now comes the action table:
         //  for each DDC we have set up which action to be taken

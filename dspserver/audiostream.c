@@ -180,7 +180,7 @@ void audio_stream_reset()
  * Operates only on as_conf_cache, and requires no synchronization as
  * long as the calling thread is always iq_thread.
  */
-void audio_stream_put_samples(short left_sample, short right_sample)
+void audio_stream_put_samples(int8_t index, short left_sample, short right_sample)
 {
     int audio_buffer_length;
 
@@ -240,7 +240,7 @@ void audio_stream_put_samples(short left_sample, short right_sample)
         if (as_conf_cache.encoding == ENCODING_PCM)
             audio_buffer_length *= 2;
         audio_buffer[1] = HEADER_VERSION;
-        audio_buffer[2] = HEADER_SUBVERSION;
+        audio_buffer[2] = index;
         /* FIXME: htons */
         audio_buffer[3] = (audio_buffer_length >> 8) & 0xFF;
         audio_buffer[4] = audio_buffer_length & 0xFF;

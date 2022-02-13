@@ -33,7 +33,7 @@
 #include <vector>
 #include <QtDebug>
 
-RigCtlSocket::RigCtlSocket(QObject *parent, UI *main, QTcpSocket *conn) : QObject(parent), main(main)
+RigCtlSocket::RigCtlSocket(QObject *parent, Radio *main, QTcpSocket *conn) : QObject(parent), main(main)
 {
     this->conn = conn;
 }
@@ -463,11 +463,11 @@ void RigCtlSocket::readyRead()
     }
 }
 
-RigCtlServer::RigCtlServer(QObject *parent, UI *main)
+RigCtlServer::RigCtlServer(QObject *parent, Radio *main, int port)
     : QObject(parent),
       main(main) {
     server = new QTcpServer(this);
-    if (!server->listen(QHostAddress::Any, 19090)) { // or listen(QHostAddress::LocalHost, 19090)) {
+    if (!server->listen(QHostAddress::Any, port)) { // or listen(QHostAddress::LocalHost, 19090)) {
         fprintf(stderr, "rigctl: failed to bind socket\n");
         return;
     }

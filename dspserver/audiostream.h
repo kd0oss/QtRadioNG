@@ -88,7 +88,7 @@ extern sem_t audiostream_sem;
 
 
 void audio_stream_reset();
-void audio_stream_put_samples(short left_sample,short right_sample);
+void audio_stream_put_samples(int8_t, short left_sample,short right_sample);
 void audio_stream_init(int port);
 void allocate_audio_buffer(void);
 void init_alaw_tables(void);

@@ -53,6 +53,7 @@
 static sem_t hw_send_semaphore;
 static sem_t hw_cmd_semaphore;
 extern sem_t iq_semaphore;
+extern sem_t wb_iq_semaphore;
 
 // Added by Alex lee 18 Aug 2010
 double LO_offset = 0; // 9000;  // LO offset 9khz
@@ -67,7 +68,7 @@ static pthread_t wb_iq_thread_id[5];
 static int hw_debug = 0;
 
 RADIO radio[5];
-int iq_socket = -1;
+//int iq_socket = -1;
 
 //int buffer_size = BUFFER_SIZE;
 //float input_buffer[BUFFER_SIZE*2]; // I,Q
@@ -156,7 +157,7 @@ void* iq_thread(void* channel)
     static float data_out[2048];
 
     // create a socket to receive iq from the server
-    iq_socket = socket(PF_INET,SOCK_DGRAM, IPPROTO_UDP);
+    int iq_socket = socket(PF_INET,SOCK_DGRAM, IPPROTO_UDP);
     if (iq_socket < 0)
     {
         perror("iq_thread: create iq socket failed");
@@ -224,42 +225,46 @@ void* iq_thread(void* channel)
         if (error != 0 && error != -2)
             printf("fexchange error: %d\n", error);
 
-        // process the output with resampler
-        int rc;
+        if (audio_enabled[ch])
+        {
+            // process the output with resampler
+            int rc;
 #pragma omp parallel for schedule(static) private(j)
-        for (j=0; j < (i/2); j++)
-        {
-            data_in[j*2]   = (float)dataout[j*2];
-            data_in[j*2+1] = (float)dataout[j*2+1];
-        }
-
-        SRC_DATA data;
-        data.data_in = data_in;
-        data.input_frames = i/2;
-
-        data.data_out = data_out;
-        data.output_frames = i/2;
-        data.src_ratio = src_ratio;
-        data.end_of_input = 0;
-
-        rc = src_process(sr_state, &data);
-        if (rc)
-        {
-            fprintf(stderr,"SRATE: error: %s (rc=%d)\n", src_strerror (rc), rc);
-            fprintf(stderr, "i: %d   Frames: %ld   SR: %f\n", i, data.output_frames_gen, src_ratio);
-            fprintf(stderr, "Bytes read: %d\n", bytes_read);
-       //     exit(1);
-        }
-        else
-        {
-            for (int i=0; i < data.output_frames_gen; i++)
+            for (j=0; j < (i/2); j++)
             {
-                left_rx_sample = (short)(data.data_out[i*2]*32767.0);
-                right_rx_sample = (short)(data.data_out[i*2+1]*32767.0);
-                // FIXME: need option to send audio to radio speaker if hardware capable.
-                audio_stream_put_samples(left_rx_sample, right_rx_sample);  // send audio to client computer
+                data_in[j*2]   = (float)dataout[j*2];
+                data_in[j*2+1] = (float)dataout[j*2+1];
             }
-        } // if (rc)
+
+            SRC_DATA data;
+            data.data_in = data_in;
+            data.input_frames = i/2;
+
+            data.data_out = data_out;
+            data.output_frames = i/2;
+            data.src_ratio = src_ratio;
+            data.end_of_input = 0;
+
+            rc = src_process(sr_state, &data);
+            if (rc)
+            {
+                fprintf(stderr,"SRATE: error: %s (rc=%d)\n", src_strerror (rc), rc);
+                fprintf(stderr, "i: %d   Frames: %ld   SR: %f\n", i, data.output_frames_gen, src_ratio);
+                fprintf(stderr, "Bytes read: %d\n", bytes_read);
+                //     exit(1);
+            }
+            else
+            {
+                for (int i=0; i < data.output_frames_gen; i++)
+                {
+                    left_rx_sample = (short)(data.data_out[i*2]*32767.0);
+                    right_rx_sample = (short)(data.data_out[i*2+1]*32767.0);
+                    // FIXME: need option to send audio to radio speaker if hardware capable.
+                    audio_stream_put_samples(ch, left_rx_sample, right_rx_sample);  // send audio to client computer
+                    //fprintf(stderr, "audio ch: %d\n", ch);
+                }
+            } // if (rc)
+        } // audio_enabled
 
         if (channels[ch].enabled)
             runSpectrum0(ch, buffer.data);
@@ -323,8 +328,10 @@ void* wb_iq_thread(void* channel)
             exit(1);
         }
 
+  //      sem_wait(&wb_iq_semaphore);
         if (channels[ch].enabled)
         {
+   //         sem_post(&wb_iq_semaphore);
      //       fprintf(stderr, "Br: %d\n", bytes_read);
             memcpy((char*)data, (char*)buffer.data, buffer.length * 2);
             offset = offset + buffer.length;
@@ -337,7 +344,7 @@ void* wb_iq_thread(void* channel)
                     samples[i*2] = data[i]/32768.0f;
                     samples[(i*2)+1] = 0.0f;
                 }
-     //           fprintf(stderr, "DSP: %u\n", channels[ch].dsp_channel);
+            //    fprintf(stderr, "DSP: %u\n", channels[ch].dsp_channel);
                 sem_wait(&iq_semaphore);
                 runSpectrum0(ch, samples);
              //   Spectrum0(1, channels[ch].dsp_channel, 0, 0, samples);
@@ -1016,6 +1023,7 @@ void createChannels(int connecton, char *manifest)
     int  num_rcvrs = 0;
     bool bs_capable = false;
 
+
     for (int i=0;i<strlen(manifest);i++)
     {
         if (manifest[i] != 10)
@@ -1044,7 +1052,6 @@ void createChannels(int connecton, char *manifest)
         //        fprintf(stderr, "%s\n", line);
                 if (active_channels >= MAX_CHANNELS) break;
                 sscanf(line, "%*s %d", &radio_id);
-         //       connected_radios++;
             }
             else
                 if (strstr(line, "radio_type"))
@@ -1075,7 +1082,7 @@ void createChannels(int connecton, char *manifest)
                                 {   // setup receive channels
                                     if (active_channels >= MAX_CHANNELS) break;
                                     channels[active_channels].id = active_channels;
-                                    channels[active_channels].radio.radio_id = connected_radios;
+                                    channels[active_channels].radio.radio_id = radio_id;
                                     channels[active_channels].dsp_channel = num_chs++;
                                     channels[active_channels].index = x;
                                     channels[active_channels].isTX = false;
@@ -1090,7 +1097,7 @@ void createChannels(int connecton, char *manifest)
                                 {   // setup transmit channels
                                     if (active_channels >= MAX_CHANNELS) break;
                                     channels[active_channels].id = active_channels;
-                                    channels[active_channels].radio.radio_id = connected_radios;
+                                    channels[active_channels].radio.radio_id = radio_id;
                                     channels[active_channels].dsp_channel = num_chs++;
                                     channels[active_channels].index = x;
                                     channels[active_channels].radio.bandscope_capable = bs_capable;

@@ -40,8 +40,10 @@ extern int send_audio;
 extern int sample_rate;
 extern int zoom;
 extern int low, high;
+extern bool audio_enabled[MAX_CHANNELS];
 extern sem_t bufferevent_semaphore,
              iq_semaphore,
+             wb_iq_semaphore,
              audio_bufevent_semaphore;
 
 int8_t active_receivers = 0;
@@ -263,7 +265,10 @@ int widebandInitAnalyzer(int disp, int pixels)
 
 void wb_destroy_analyzer(int8_t ch)
 {
-    DestroyAnalyzer(ch);
+  //  sem_wait(&wb_iq_semaphore);
+    if (!channels[ch].enabled)
+        DestroyAnalyzer(ch);
+ //   sem_post(&wb_iq_semaphore);
 } // end wb_destroy_analyzer
 
 
@@ -631,6 +636,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
                 sem_post(&iq_semaphore);
                 spectrum_timer_init(ch);
                 hw_startIQ(ch);
+                audio_enabled[ch] = false;
             }
             else
             {
@@ -1414,6 +1420,15 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
                 sem_post(&audiostream_sem);
             }
             sdr_log(SDR_LOG_INFO, "encoding changed to %d\n", enc);
+        }
+            break;
+
+        case ENABLEAUDIO:
+        {
+            for (int i=0;i<MAX_CHANNELS;i++)
+                audio_enabled[i] = false;
+            bool enabled = (bool)message[2];
+            audio_enabled[ch] = enabled;
         }
             break;
 

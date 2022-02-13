@@ -156,6 +156,7 @@ sem_t audio_bufevent_semaphore,
       bufferevent_semaphore,
       mic_semaphore,
       spectrum_semaphore,
+      wb_iq_semaphore,
       iq_semaphore;
 
 
@@ -349,6 +350,7 @@ void server_init(int receiver)
     sem_init(&wideband_semaphore, 0, 1);
     sem_init(&wb_bufevent_semaphore, 0, 1);
     sem_init(&iq_semaphore, 0, 1);
+    sem_init(&wb_iq_semaphore, 0, 1);
 
     signal(SIGPIPE, SIG_IGN);
 
@@ -782,7 +784,7 @@ void command_errorcb(struct bufferevent *bev, short error, void *ctx)
 
 void do_accept_command(evutil_socket_t listener, short event, void *arg)
 {
-    client_entry *item;
+    client_entry *item, *lastItem;
     struct event_base *base = arg;
     struct sockaddr_in ss;
     socklen_t slen = sizeof(ss);
@@ -814,6 +816,7 @@ void do_accept_command(evutil_socket_t listener, short event, void *arg)
     item->bev = bev;
     sem_wait(&bufferevent_semaphore);
     TAILQ_INSERT_TAIL(&Client_list, item, entries);
+    lastItem = item;
     sem_post(&bufferevent_semaphore);
 
     int client_count = 0;
@@ -823,6 +826,10 @@ void do_accept_command(evutil_socket_t listener, short event, void *arg)
     {
         client_count++;
     }
+
+    if (client_count == 1) // FIXME: Need a better way to set CONTROL type.
+        for (int i=0;i<MAX_CHANNELS;i++)
+            lastItem->client_type[i] = CONTROL;
     sem_post(&bufferevent_semaphore);
 
     if (client_count == 0)
@@ -1407,7 +1414,7 @@ void wideband_timer_handler(union sigval usv)
 //    for (int i=MAX_CHANNELS-1;i>MAX_CHANNELS-5;i--) // last 5 channels are for wideband
 //    {
         if (channels[i].dsp_channel < 0) return;
-    //    fprintf(stderr,"here: %d\n", channels[i].dsp_channel);
+   //     fprintf(stderr,"here: %d\n", channels[i].dsp_channel);
         sem_wait(&wideband_semaphore);
         if (last_item == NULL)
         {
@@ -1429,11 +1436,11 @@ void wideband_timer_handler(union sigval usv)
 
    //     fprintf(stderr,"here: %d\n", channels[i].dsp_channel);
  //       sem_wait(&wideband_semaphore);
-        runGetPixels(i, widebandBuffer[channels[i].radio.radio_id]);
+        flag = runGetPixels(i, widebandBuffer[channels[i].radio.radio_id]);
       //  GetPixels(channels[i].dsp_channel, 0, widebandBuffer[channels[i].radio.radio_id], &flag);
         sem_post(&wideband_semaphore);
         if (!flag) return;
-   //     fprintf(stderr, "here 3\n");
+  //      fprintf(stderr, "here 3\n");
 
         sem_wait(&wb_bufevent_semaphore);
         TAILQ_FOREACH(item, &Wideband_client_list, entries)
@@ -1445,7 +1452,7 @@ void wideband_timer_handler(union sigval usv)
     //            fprintf(stderr, "here 4\n");
                 if (channels[i].spectrum.frame_counter-- <= 1)
                 {
-              //      fprintf(stderr, "here 5\n");
+             //       fprintf(stderr, "here 5\n");
                     char *client_samples = malloc(sizeof(CHANNEL)+channels[i].spectrum.nsamples);
                     sem_wait(&wideband_semaphore);
                     if (!channels[i].enabled)
@@ -1609,7 +1616,7 @@ void wideband_readcb(struct bufferevent *bev, void *ctx)
         }
 
         message[bytesRead-1] = 0;    // for Linux strings terminating in NULL
-        fprintf(stderr, "Wideband message: [%u]\n", (unsigned char)message[1]);
+        fprintf(stderr, "Wideband message: [%u] [%u] [%u]\n", (unsigned char)message[0], (unsigned char)message[1], (unsigned char)message[2]);
         ch = message[0];
         switch ((unsigned char)message[1])
         {
@@ -1635,15 +1642,15 @@ void wideband_readcb(struct bufferevent *bev, void *ctx)
         case STOPBANDSCOPE:
         {
             channels[ch].radio.radio_id = message[2];
-            enable_wideband(ch, false);
+            current_item->channel_enabled[ch] = false;
             timer_delete(wideband_timerid[ch]);
             usleep(5000);
+            enable_wideband(ch, false);
             sem_wait(&wb_bufevent_semaphore);
             if (widebandBuffer[channels[ch].radio.radio_id] != NULL)
                 free(widebandBuffer[channels[ch].radio.radio_id]);
             widebandBuffer[channels[ch].radio.radio_id] = NULL;
             sem_post(&wb_bufevent_semaphore);
-            current_item->channel_enabled[ch] = false;
             sdr_log(SDR_LOG_INFO, "Bandscope channel %d stopped.\n", ch);
         }
             break;
@@ -2380,9 +2387,12 @@ void enable_wideband(int8_t channel, bool enable)
     }
     else
     {
+   //     sem_wait(&wb_iq_semaphore);
         channels[channel].enabled = false;
+   //     sem_post(&wb_iq_semaphore);
+        usleep(10000);
         channels[channel].radio.bandscope_capable = false;
-        wb_destroy_analyzer(channel);
+        wb_destroy_analyzer(ch);
     }
     sem_post(&wb_bufevent_semaphore);
 } // end enable_wideband

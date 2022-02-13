@@ -73,20 +73,62 @@
 #define MIC_NO_OF_FRAMES 4      // need to ensure this is the same value in dspserver
 #define MIC_ALAW_BUFFER_SIZE 512 //58 // limited by the 64 byte TCP message frame
 
-#define MAX_RECEIVERS 7
+#define MAX_RECEIVERS 9  // 8 receivers and one transmitter
+#define MAX_RADIOS    4
 
-class UI : public QMainWindow {
+class Radio : public QObject {
     Q_OBJECT
 
 public:
-    UI(const QString server = QString(""));
-    virtual ~UI();
-    void closeEvent(QCloseEvent* event);
-    void keyPressEvent(QKeyEvent * event);
-    void keyReleaseEvent(QKeyEvent * event);
-    void loadSettings();
-    void saveSettings();
-   // void sendCommand(QString command);
+    Radio(int8_t index, ServerConnection *connection);
+    virtual ~Radio();
+
+    Panadapter      *rxp[MAX_RECEIVERS];
+    TxPanadapter    *txp;
+    Bandscope       *bandscope;
+    EqualizerDialog *equalizer;
+    Mode             mode[MAX_RECEIVERS];
+    Band             band[MAX_RECEIVERS];
+    Filters          filters;
+    CWLFilters       cwlFilters;
+    CWUFilters       cwuFilters;
+    LSBFilters       lsbFilters;
+    USBFilters       usbFilters;
+    DSBFilters       dsbFilters;
+    AMFilters        amFilters;
+    SAMFilters       samFilters;
+    FMNFilters       fmnFilters;
+    DIGUFilters      diguFilters;
+    DIGLFilters      diglFilters;
+    RigCtlServer    *rigCtl;
+    QString          hardwareType;
+    QWidget         *hww;
+    bool             receiver_active[MAX_RECEIVERS];
+    int8_t           receiver_channel[MAX_RECEIVERS];
+    int8_t           currentRxChannel;
+    int8_t           currentTxChannel;
+    int8_t           activeReceivers;
+    double           currentPwr;
+    int              sampleRate[MAX_RECEIVERS];
+    int              fps[MAX_RECEIVERS];
+    int8_t           radio_index;
+    CHANNEL          channels[MAX_RECEIVERS];
+    bool             radio_started;
+
+    int       notchFilterIndex[MAX_RECEIVERS];
+    long long frequency[MAX_RECEIVERS];
+    long long selectedFrequency;
+    long long txFrequency;
+
+    bool   txNow;
+    int    cwPitch;
+    double loffset;
+
+    bool   squelch;
+    float  squelchValue[MAX_RECEIVERS];
+    bool   modeFlag[MAX_RECEIVERS]; //Signals mode is changed from main menu
+
+    void initializeReceiver(CHANNEL *channel);
     long long rigctlGetFreq();
     QString rigctlGetMode();
     QString rigctlGetFilter();
@@ -98,31 +140,118 @@ public:
     void rigctlSetFilter(int newfilter);
     void rigSetPTT(int enabled);
     bool rigGetPTT(void);
+    void initRigCtl(int);
+    void initializeRadio(void);
+    void shutdownRadio(void);
+    int8_t getInternalIndex(int8_t channel_index);
+
+public slots:
+    void bandChanged(int8_t, int previousBand,int newBand);
+    void modeChanged(int8_t, int previousMode,int newMode);
+    void filtersChanged(int8_t, FiltersBase* previousFilters,FiltersBase* newFilters);
+    void filterChanged(int8_t, int previousFilter,int newFilter);
+    void variableFilter(int8_t, int low, int high);
+    void frequencyChanged(int8_t, long long frequency);
+    void sampleRateChanged(int8_t, long rate);
+    void fpsChanged(int8_t, int f);
+    void setFPS(int8_t);
+    void enableRxEq(int8_t, bool);
+    void enableTxEq(int8_t, bool);
+    void removeNotchFilter(int8_t);
+    void resetbandedges(int8_t, double offset);
+    void hardwareSet(QWidget*);
+    void sendHardwareCommand(QByteArray);
+    void spectrumHighChanged(int8_t, int high);
+    void spectrumLowChanged(int8_t, int low);
+    void waterfallHighChanged(int8_t, int high);
+    void waterfallLowChanged(int8_t, int low);
+    void waterfallAutomaticChanged(int8_t, bool state);
+    void enableBandscope(SpectrumConnection*, bool);
+    void frequencyMoved(int8_t, int increment,int step);
+    void sendCommand(QByteArray);
+    void closeBandScope(void);
+    void squelchValueChanged(int8_t index, int val);
+
+signals:
+    void send_command(QByteArray command);
+    void send_spectrum_command(QByteArray);
+    void updateVFO(long long);
+    void printStatusBar(QString);
+    void updateFilterMenu(int);
+    void updateFiltersMenu(int, FiltersBase*);
+    void updateModeMenu(int);
+    void updateBandMenu(int);
+    void bandScopeClosed(void);
+    void ctlSetPTT(bool);
+    void tnfSetChecked(bool);
+    void tuningEnable(bool);
+
+private:
+
+}; // end Radio
+
+
+class UI : public QMainWindow {
+    Q_OBJECT
+
+public:
+    UI(const QString server = QString(""));
+    virtual ~UI();
+
+    void closeEvent(QCloseEvent* event);
+    void keyPressEvent(QKeyEvent * event);
+    void keyReleaseEvent(QKeyEvent * event);
+    void loadSettings();
+    void saveSettings();
+
     ServerConnection connection;
     SpectrumConnection spectrumConnection;
     AudioConnection audioConnection;
     MicAudioConnection micAudioConnection;
-    Panadapter *rxp[8];
-    QGraphicsView *rxg[8];
-    TxPanadapter *txp;
-    Mode mode;
-    bool   receivers_active[7];
-    int8_t receiver_channel[7];
+
+    Radio  *radio[MAX_RADIOS];
+    bool    receiver_active[MAX_RECEIVERS];
+    int8_t  receiver_channel[MAX_RECEIVERS];
+
     int8_t currentRxChannel;
     int8_t currentTxChannel;
+    int8_t current_index;
     double currentPwr;
+    bool squelch;
+    float squelchValue;
+    Ui::UI widget;
+
+    CWLFilters       cwlFilters;
+    CWUFilters       cwuFilters;
+    LSBFilters       lsbFilters;
+    USBFilters       usbFilters;
+    DSBFilters       dsbFilters;
+    AMFilters        amFilters;
+    SAMFilters       samFilters;
+    FMNFilters       fmnFilters;
+    DIGUFilters      diguFilters;
+    DIGLFilters      diglFilters;
 
 signals:
     void initialize_audio(int length);
-    void select_audio(QAudioDeviceInfo info,int rate,int channels,QAudioFormat::Endian byteOrder);
-    //void process_audio(QByteArray*);
-    void process_audio(char* header,char* buffer,int length);
+    void select_audio(QAudioDeviceInfo info,int rate, int channels, QAudioFormat::Endian byteOrder);
+    void process_audio(char* header, char* buffer, int length);
     void HideTX(bool cantx);
 
 public slots:
-    void getMeterValue(float s, float f, float r);
+    void getMeterValue(int8_t, float s, float f, float r);
+    void resetBandedges(double);
+    void currentReceiverChanged(int);
+    void enableBandscope(bool);
+    void bandScopeClosed(void);
+    void ctlSetPTT(bool);
+    void tnfSetChecked(bool);
 
     bool newDspServerCheck(void);
+    void updateFilterMenu(int);
+    void updateFiltersMenu(int, FiltersBase*);
+    void updateModeMenu(int);
+    void updateBandMenu(int);
 
     void actionConfigure();
     void actionEqualizer();
@@ -132,7 +261,6 @@ public slots:
     void actionDisconnectNow();
     void actionDisconnect();
     void actionQuick_Server_List();
-    void actionBandscope();
     void actionRecord();
 
     void actionMuteMainRx();
@@ -142,7 +270,7 @@ public slots:
     void squelchValueChanged(int);
 
     void actionKeypad();
-    void setKeypadFrequency(long long);
+    void setKeypadFrequency(int8_t, long long);
 
     void getBandBtn(int btn);
     void quickMemStore();
@@ -200,14 +328,6 @@ public slots:
     void audioBuffer(char* header,char* buffer);
     void spectrumBuffer(CHANNEL);
 
-    void bandChanged(int previousBand,int newBand);
-    void modeChanged(int previousMode,int newMode);
-    void filtersChanged(FiltersBase* previousFilters,FiltersBase* newFilters);
-    void filterChanged(int previousFilter,int newFilter);
-    void variableFilter(int low, int high);
-    void frequencyChanged(long long frequency);
-    void sampleRateChanged(long rate);
-
  //   void updateSpectrum();
     void masterButtonClicked(void);
 
@@ -216,16 +336,6 @@ public slots:
 
     void micDeviceChanged(QAudioDeviceInfo info,int rate,int channels,QAudioFormat::Endian byteOrder);
     void micSendAudio(QQueue<qint16>*);
-
-    void frequencyMoved(int increment,int step);
-
-    void spectrumHighChanged(int high);
-    void spectrumLowChanged(int low);
-    void fpsChanged(int f);
-    void setFPS(void);
-    void waterfallHighChanged(int high);
-    void waterfallLowChanged(int low);
-    void waterfallAutomaticChanged(bool state);
 
     void hostChanged(QString host);
     void receiverChanged(int rx);
@@ -248,8 +358,6 @@ public slots:
     void TXalcMaxGainChanged(double);
 
     void AGCTLevelChanged(int level);
-    void enableRxEq(bool);
-    void enableTxEq(bool);
 
     void nrValuesChanged(int,int,double,double);
     void anfValuesChanged(int,int,double,double);
@@ -257,7 +365,6 @@ public slots:
  //   void sdromThresholdChanged(double);
     void windowTypeChanged(int);
     void statusMessage(QString);
-    void removeNotchFilter(void);
 
     void actionBookmark();
     void addBookmark();
@@ -266,13 +373,16 @@ public slots:
     void bookmarkDeleted(int);
     void bookmarkUpdated(int,QString);
     void bookmarkSelected(int entry);
+    void selectBookmark(QAction* action);
+ //   void appendBookmark(Bookmark* bookmark);
 
     void addXVTR(QString,long long,long long,long long,long long,int,int);
     void deleteXVTR(int index);
     void selectXVTR(QAction* action);
-    void selectBookmark(QAction* action);
     void getBandFrequency();
     void vfoStepBtnClicked(int direction);
+    void frequencyMoved(int,int);
+    void updateVFO(long long);
     void pttChange(int caller, bool ptt);
     void printStatusBar(QString message);
     void slaveSetMode(int newmode);
@@ -283,8 +393,9 @@ public slots:
     void setservername(QString sname);
     void setCanTX(bool tx);
     void closeServers ();
-    void cwPitchChanged(int cwPitch);
-    void resetbandedges(double offset);
+    void cwPitchChanged(int8_t, int cwPitch);
+    void enableRxEq(bool);
+    void enableTxEq(bool);
 
 signals:
     void set_src_ratio(double ratio);
@@ -296,13 +407,9 @@ protected:
 
 private slots:
     void on_zoomSpectrumSlider_sliderMoved(int position);
-    void addNotchFilter(void);
     void setAudioMuted(bool);
     void audioGainChanged(void);
-    void hardwareSet(QString);
-    void sendHardwareCommand(QByteArray);
     void setCurrentChannel(int);
-    void closeBandScope(void);
     void cessbOvershootChanged(bool);
     void aeFilterChanged(bool);
     void nrGainMethodChanged(int);
@@ -315,20 +422,12 @@ private:
     void printWindowTitle(QString message);
     void actionGain(int g);
     void setGain(bool state);
-    void initRigCtl();
     void setPwsMode(int mode);
-    void appendBookmark(Bookmark* bookmark);
-    void initializeRadio(int8_t);
-    void shutdownRadio(int8_t);
     QString stringFrequency(long long frequency);
     QString getversionstring();
 
     QLabel modeInfo;
-    RigCtlServer *rigCtl;
-    QString hardwareType;
-    QWidget *hww;
 
-    Ui::UI widget;
     Audio* audio;
     AudioInput* audioinput;
     QAudioDeviceInfo audio_device;
@@ -349,43 +448,16 @@ private:
 
     bool connection_valid;
 
-    Band band;
-
-    Filters filters;
-    CWLFilters cwlFilters;
-    CWUFilters cwuFilters;
-    LSBFilters lsbFilters;
-    USBFilters usbFilters;
-    DSBFilters dsbFilters;
-    AMFilters amFilters;
-    SAMFilters samFilters;
-    FMNFilters fmnFilters;
-    DIGUFilters diguFilters;
-    DIGLFilters diglFilters;
-
     Xvtr xvtr;
 
-  //  void *hf;
-
     int agc;
-    int cwPitch;
-    long long frequency;
-    int sampleRate;
-    int fps;
-    QTimer* spectrumTimer;
 
     About about;
     Configure configure;
     Servers *servers;
 
-    Bandscope* bandscope;
-
-    EqualizerDialog *equalizer;
-
     int sampleZoomLevel;
     int viewZoomLevel;
-
-    int notchFilterIndex;
 
     BookmarkDialog bookmarkDialog;
     BookmarksDialog* bookmarksDialog;
@@ -394,16 +466,11 @@ private:
     Bookmarks bookmarks;
 
     KeypadDialog keypad;
-//    Meter* sMeter;
     int meter;
-//    int txPwr;
+    long long frequency;
     long long txFrequency;
     bool isConnected;
     QString QuickIP;
-
-    bool squelch;
-    float squelchValue;
-    bool modeFlag; //Signals mode is changed from main menu
 
     G711A g711a;
 

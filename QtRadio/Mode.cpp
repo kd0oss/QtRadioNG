@@ -33,10 +33,11 @@ Mode::Mode() {
 Mode::~Mode() {
 }
 
-void Mode::setMode(int m) {
+void Mode::setMode(int8_t idx, int m) {
+    index = idx;
     int previousMode=currentMode;
     currentMode=m;
-    emit modeChanged(previousMode,currentMode);
+    emit modeChanged(index, previousMode,currentMode);
 }
 
 int Mode::getMode() {

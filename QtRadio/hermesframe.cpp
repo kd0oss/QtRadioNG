@@ -4,7 +4,7 @@
 
 #define STARCOMMAND 9
 
-HermesFrame::HermesFrame(UI *pUI, QWidget *parent) : QFrame(parent), ui(new Ui::HermesFrame)
+HermesFrame::HermesFrame(Radio *pUI, QWidget *parent) : QFrame(parent), ui(new Ui::HermesFrame)
 {
     ui->setupUi(this);
     tuning = false;
@@ -130,7 +130,7 @@ void HermesFrame::initializeRadio(void)
     QByteArray command;
 
     command.clear();
-    command.append((char)currentRxChannel);
+    command.append((char)0);
     command.append((char)STARCOMMAND);
     command.append((char)STARTRADIO);
     command.append((char)radio_id);
@@ -152,7 +152,7 @@ void HermesFrame::shutDown(void)
     QByteArray command;
 
     command.clear();
-    command.append((char)currentRxChannel);
+    command.append((char)0);
     command.append((char)STARCOMMAND);
     command.append((char)STOPRADIO);
     command.append((char)radio_id);
@@ -387,7 +387,7 @@ void HermesFrame::pwrSliderValueChanged(int pwr)
 
     if (currentTxChannel < 0)
         return;
-    if (pui->mode.getMode() == MODE_AM || pui->mode.getMode() == MODE_SAM)
+    if (pui->mode[pui->channels[currentRxChannel].index].getMode() == MODE_AM || pui->mode[pui->channels[currentRxChannel].index].getMode() == MODE_SAM)
     {
         fprintf(stderr, "TX Gain slider: %d\n", pwr);
         command.clear();

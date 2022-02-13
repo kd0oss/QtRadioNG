@@ -7,6 +7,7 @@ EqualizerDialog::EqualizerDialog(ServerConnection *pConn, QWidget *parent) : QDi
     ui->setupUi(this);
 
     connection = pConn;
+    channel = 0;
 
     connect(ui->rxEqPreampSlider, SIGNAL(valueChanged(int)), this, SLOT(rxSliderChanged()));
     connect(ui->rxEq32Slider, SIGNAL(valueChanged(int)), this, SLOT(rxSliderChanged()));
@@ -213,6 +214,7 @@ void EqualizerDialog::rxSliderChanged(void)
         command.clear();
         line.sprintf("%d %d %d %d", values[0], values[1], values[2], values[3]);
     }
+    command.append((char)channel);
     command.append((char)SETRXEQPRO);
     command.append((char)bands);
     command.append(line);
@@ -251,6 +253,7 @@ void EqualizerDialog::txSliderChanged(void)
         command.clear();
         line.sprintf("%d %d %d %d", values[0], values[1], values[2], values[3]);
     }
+    command.append((char)channel);
     command.append((char)SETTXEQPRO);
     command.append((char)bands);
     command.append(line);

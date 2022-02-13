@@ -661,9 +661,10 @@ void Band::saveSettings(QSettings* settings) {
     settings->endGroup();
 }
 
-void Band::initBand(int b) {
+void Band::initBand(int8_t idx, int b) {
+    index = idx;
     currentBand=b;
-    emit bandChanged(currentBand, currentBand);
+    emit bandChanged(index, currentBand, currentBand);
 }
 
 int Band::getBand() {
@@ -907,7 +908,7 @@ void Band::selectBand(int b) {
 
 qDebug()<<Q_FUNC_INFO<<"currentBand = "<<currentBand<<", currentStack = "<<currentStack<<", workingStack = "<<workingStack<<", f="<< bandstack[currentBand][workingStack].getFrequency();
 
-    emit bandChanged(previousBand,currentBand);
+    emit bandChanged(index, previousBand,currentBand);
     emit printStatusBar(" ... Using memory");
 }
 

@@ -698,7 +698,7 @@ void send_IQ_buffer(int idx)
     unsigned short offset = 0;
     BUFFERL buffer;
     int rc;
-
+//if (idx != 1) return;
     if (rfunit[idx].client.socket > -1)
     {
         // send the IQ buffer

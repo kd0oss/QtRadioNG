@@ -47,17 +47,17 @@ class Mode : public QObject {
 public:
     Mode();
     virtual ~Mode();
-    void setMode(int m);
+    void setMode(int8_t, int m);
     int getMode();
     QString getStringMode();
     QString getStringMode(int mode);
 
 signals:
-    void modeChanged(int oldMode, int newMode);
+    void modeChanged(int8_t, int oldMode, int newMode);
 
 private:
     int currentMode;
-
+    int8_t index;
 };
 
 #endif	/* MODE_H */

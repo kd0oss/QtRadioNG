@@ -70,6 +70,7 @@ ServerConnection::ServerConnection()
     available_xcvrs[2] = 0;
     available_xcvrs[3] = 0;
     QObject::connect(this, SIGNAL(activateRadioSig()), this, SLOT(activateRadio()));
+    QObject::connect(this, SIGNAL(send_command(QByteArray)), this, SLOT(sendCommand(QByteArray)));
 } // end constructor
 
 
@@ -209,7 +210,7 @@ void ServerConnection::connected()
     qbyte.append((char)0);
     qbyte.append((char)QUESTION);
     qbyte.append((char)QINFO);
-    sendCommand(qbyte);
+ //   sendCommand(qbyte);
     /*
     qbyte.append((char)QUESTION);
     qbyte.append((char)QDSPVERSION);
@@ -236,20 +237,20 @@ void ServerConnection::sendCommand(QByteArray command)
     int  bytesWritten;
 
     //  qDebug() << "ServerConnection::sendCommand: "<< command.toStdString().c_str();
+    mutex.lock();
     for (i=0; i < SEND_BUFFER_SIZE; i++)
         buffer[i] = 0;
 
     if (tcpSocket != NULL && tcpSocket->isValid() && tcpSocket->isWritable())
     {
-        mutex.lock();
         qDebug("Server: ch: %d  Comm: %u\n", (char)command[0], (unsigned char)command[1]);
         memcpy(buffer, command.constData(), command.size());
         bytesWritten = tcpSocket->write(buffer, SEND_BUFFER_SIZE);
         if (bytesWritten != SEND_BUFFER_SIZE)
             qDebug() << "sendCommand: write error";
-        //tcpSocket->flush();
-        mutex.unlock();
+        tcpSocket->flush();
     }
+    mutex.unlock();
 } // end sendCommand
 
 
@@ -258,7 +259,7 @@ void ServerConnection::cmdSocketData()
     int     toRead;
     int     bytesRead=0;
     int     thisRead=0;
-    static int     radio_index;
+    static int radio_index;
 
     if (bytes < 0)
     {
@@ -785,12 +786,13 @@ void ServerConnection::createChannels(int radios)
     int  num_rcvrs = 0;
     bool bs_capable = false;
 
+    active_radios = 0;
     for (int x=0;x<radios;x++)
     {
         manifest = (char*)malloc(manifest_xml[x].length()+1);
         strcpy(manifest, manifest_xml[x].toLatin1().data());
 
-        for (int i=0;i<strlen(manifest);i++)
+        for (int i=0;i<(int)strlen(manifest);i++)
         {
             if (manifest[i] != 10)
             {
@@ -813,7 +815,7 @@ void ServerConnection::createChannels(int radios)
                 line[index] = 0;
                 index = 0;
                 fprintf(stderr, "%s\n", line);
-                if (strstr(line, "radio "))
+                if (strstr((const char*)QString(line).trimmed().toLatin1().data(), "radio "))
                 {
                     active_radios++;
                     sscanf(line, "%*s %d", &radio_id);
@@ -934,7 +936,7 @@ void ServerConnection::activateRadio()
     rd->fillRadioList();
     if (rd->exec() == QDialog::Accepted)
     {
-        for (int i=0;i<7;i++)
+        for (int i=0;i<8;i++)
         {
             receivers_active[i] = rd->receivers_active[i];
             receiver_channel[i] = rd->receiver_channel[i];
@@ -960,6 +962,8 @@ SpectrumConnection::SpectrumConnection()
     tcpSocket = NULL;
     state = READ_HEADER;
     bytes = 0;
+
+    QObject::connect(this, SIGNAL(send_spectrum_command(QByteArray)), this, SLOT(sendCommand(QByteArray)));
 }
 
 
@@ -1083,9 +1087,11 @@ void SpectrumConnection::spectrumSocketData()
         return;
     }
 
+    recv_mutex.lock();
     toRead = tcpSocket->bytesAvailable();
     if (toRead <= 0)
     {
+        recv_mutex.unlock();
         return;
     }
 
@@ -1100,7 +1106,7 @@ void SpectrumConnection::spectrumSocketData()
             {
                 fprintf(stderr, "QtRadio: FATAL: READ_HEADER: error in read: %d\n", thisRead);
                 tcpSocket->close();
-                return;
+                continue;
             }
             bytes += thisRead;
             if (bytes == header_size)
@@ -1134,9 +1140,10 @@ void SpectrumConnection::spectrumSocketData()
             break;
         default:
             fprintf (stderr, "FATAL: WRONG STATUS !!!!!\n");
-        }
+        } // switch
         bytesRead += thisRead;
-    }
+    } // while
+    recv_mutex.unlock();
 } // end spectrumSocketData
 
 
@@ -1146,20 +1153,20 @@ void SpectrumConnection::sendCommand(QByteArray command)
     char buffer[SEND_BUFFER_SIZE];
     int  bytesWritten;
 
+    trans_mutex.lock();
     for (i=0; i < SEND_BUFFER_SIZE; i++)
         buffer[i] = 0;
 
     if (tcpSocket != NULL && tcpSocket->isValid() && tcpSocket->isWritable())
     {
-        mutex.lock();
         qDebug("Spec: ch: %d  Comm: %d\n", (char)command[0], (char)command[1]);
         memcpy(buffer, command.constData(), SEND_BUFFER_SIZE);
         bytesWritten = tcpSocket->write(buffer, SEND_BUFFER_SIZE);
         if (bytesWritten != SEND_BUFFER_SIZE)
             qDebug() << "spectrum sendCommand: write error";
         //tcpSocket->flush();
-        mutex.unlock();
     }
+    trans_mutex.unlock();
 } // end sendCommand
 
 

@@ -41,6 +41,10 @@ public slots:
     void on_pBtnvfoA_clicked();  // moved from private for rigctl
     void on_pBtnvfoB_clicked();
     void refocus(); // returns focus to vfo frame after clicking subrx
+    void setSelectedReceiver(QString);
+    void resetSelectedReceiver(void);
+    void changeReceiver(int);
+    void setCurrentReceiver(int);
 
 signals:
     void sendVfoFreq(int freq);
@@ -52,6 +56,7 @@ signals:
     void rightBandClick();
     void getBandFrequency();
     void vfoStepBtnClicked(int direction);
+    void receiverChanged(int);
 
 protected:
     void wheelEvent( QWheelEvent*);
@@ -72,6 +77,7 @@ private slots:
     void release(); // Powermate released
     void increase(int n); // Powermate increased
     void decrease(int n); // Powermate decreased
+    void receiverChangedSlot(int);
 
 private:
     Ui::vfo *ui;

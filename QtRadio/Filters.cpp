@@ -138,19 +138,19 @@ Filters::~Filters()
 {
 }
 
-void Filters::selectFilters(FiltersBase* filters)
+void Filters::selectFilters(int8_t index, FiltersBase* filters)
 {
     FiltersBase* oldFilters=currentFilters;
     currentFilters=filters;
     qDebug()<<Q_FUNC_INFO<<":   Connecting to UI::filtersChanged. currentFilters = "<<currentFilters->getSelected();
-    emit filtersChanged(oldFilters,currentFilters);
+    emit filtersChanged(index, oldFilters,currentFilters);
 }
 
-void Filters::selectFilter(int f)
+void Filters::selectFilter(int8_t index, int f)
 {
     int previousFilter=currentFilters->getSelected();
     currentFilters->selectFilter(f);
-    emit filterChanged(previousFilter,f);
+    emit filterChanged(index, previousFilter,f);
 }
 
 int Filters:: getFilter()

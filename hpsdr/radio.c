@@ -1105,7 +1105,8 @@ void setFrequency(int8_t idx, long long f)
         else
         {
             vfo[idx].frequency = f;
-            fprintf(stderr, "Set Freq: %lld  for index %d\n", f, idx);
+            fprintf(stderr, "Set Freq: %lld  for index %d\n", vfo[0].frequency, 0);
+            fprintf(stderr, "Set Freq: %lld  for index %d\n", vfo[1].frequency, 1);
         }
         break;
     }
