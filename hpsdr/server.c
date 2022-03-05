@@ -594,7 +594,8 @@ void* client_thread(void* arg)
         if (bytes_read == 0) // || command[0] < 0)
         {
             usleep(1000);
-            continue;
+            fprintf(stderr, "Server disconnected..exiting.\n");
+            break;
         }
 //fprintf(stderr,"%u ", (uint8_t)byte[0]);
         if (packet_started)

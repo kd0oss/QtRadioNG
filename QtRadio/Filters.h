@@ -78,12 +78,15 @@ public:
     Filters();
     Filters(const Filters& orig);
     virtual ~Filters();
-    void selectFilters(int8_t, FiltersBase* f);
-    void selectFilter(int8_t, int f);
+    void selectFilters(FiltersBase* f);
+    void selectFilter(int f);
     int getFilter();
     int getLow();
     int getHigh();
+    void setIndex(int8_t index);
+    int8_t index;
     QString getText();
+    FiltersBase *getCurrentFilters(void);
 
 signals:
     void filtersChanged(int8_t, FiltersBase* previousFilters, FiltersBase* newFilters);

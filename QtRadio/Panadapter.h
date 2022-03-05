@@ -336,6 +336,8 @@ public:
 
     bool sampleZoom; // KD0OSS
     int splitViewBoundary; // KD0OSS
+    int filterLow;
+    int filterHigh;
 
     void setObjectName(QString name);
     void setGeometry(QRect rect);
@@ -444,8 +446,6 @@ private:
     int maxMeter;
     int meterCount;
 
-    int filterLow;
-    int filterHigh;
     bool filterSelected;
     int avg;
     int size;

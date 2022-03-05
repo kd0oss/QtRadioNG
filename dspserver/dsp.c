@@ -1402,8 +1402,16 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             int low, high;
             sscanf((const char*)(message+2), "%d,%d", &low, &high);
-            printf("RX: %d  Low: %d   High: %d\n", channels[ch].dsp_channel, low, high);
-            RXASetPassband(channels[ch].dsp_channel, (double)low, (double)high);
+            if (channels[ch].isTX)
+            {
+                printf("TX: %d  Low: %d   High: %d\n", channels[ch].dsp_channel, low, high);
+                SetTXABandpassFreqs(channels[ch].dsp_channel, (double)low, (double)high);
+            }
+            else
+            {
+                printf("RX: %d  Low: %d   High: %d\n", channels[ch].dsp_channel, low, high);
+                RXASetPassband(channels[ch].dsp_channel, (double)low, (double)high);
+            }
         }
             break;
 

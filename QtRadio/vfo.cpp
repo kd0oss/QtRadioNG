@@ -323,6 +323,7 @@ void vfo::checkBandBtn(int band)
 {
 //qDebug()<<Q_FUNC_INFO<<": Value of band button is ... "<<band;
     ui->btnGrpBand->button(band)->setChecked(true);
+    ui->btnGrpBand->button(band)->setFocus();
 }
 
 long long vfo::readA()

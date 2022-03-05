@@ -78,6 +78,7 @@ typedef struct _radio {
     unsigned int iq_length;
     struct sockaddr_in iq_addr;
     pthread_t thread_id;
+    bool connected;
 } RADIO;
 
 typedef struct _buffer {

@@ -362,14 +362,15 @@ void ServerConnection::cmdSocketData()
                 int right = r.toInt();
                 int current_channel = c.toInt();
    //             emit setCurrentChannel(current_channel);
-    //            emit slaveSetFreq(newf);
-    //            emit slaveSetFilter(left, right);
+                emit slaveSetFreq(newf);
+      //          emit slaveSetFilter(left, right);
     //            emit slaveSetZoom(zoom);
                 if (newmode != lastMode)
                 {
      //               emit slaveSetMode(newmode);
                 }
 
+                emit printStatusBar(" .. Info. ");    //added by gvj
                 lastFreq = newf;
                 lastMode = newmode;
                 emit setservername("local");
@@ -921,6 +922,8 @@ void ServerConnection::createChannels(int radios)
 
 void ServerConnection::activateRadio()
 {
+    bool started = false;
+
     RadiosDialog *rd = new RadiosDialog();
     rd->manifest_xml[0] = manifest_xml[0];
     rd->manifest_xml[1] = manifest_xml[1];
@@ -942,13 +945,12 @@ void ServerConnection::activateRadio()
             receiver_channel[i] = rd->receiver_channel[i];
         }
         memcpy((int8_t*)&txrxPair, (int8_t*)&rd->txrxPair, 2);
-//        selected_channel = rd->selected_channel;
         sample_rate = rd->sample_rate[0];
-
-        emit isConnected((bool*)&receivers_active, (int8_t*)&receiver_channel, (int8_t*)&txrxPair);
-//        emit hardware(QString("%1 %2").arg(channels[selected_channel].radio.radio_type));
+        started = true;
     }
     delete rd;
+    if (started)
+        emit isConnected((bool*)&receivers_active, (int8_t*)&receiver_channel, (int8_t*)&txrxPair);
 } // end activateRadio
 
 
@@ -1323,7 +1325,7 @@ void WidebandConnection::widebandSocketData()
         switch (state)
         {
         case READ_HEADER:
-            fprintf(stderr, "READ_HEADER: hdr size: %d bytes: %d\n", header_size, bytes);
+       //     fprintf(stderr, "READ_HEADER: hdr size: %d bytes: %d\n", header_size, bytes);
             thisRead = tcpSocket->read((char*)&channel+bytes, header_size - bytes);
             if (thisRead < 0)
             {

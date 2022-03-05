@@ -784,7 +784,7 @@ void command_errorcb(struct bufferevent *bev, short error, void *ctx)
 
 void do_accept_command(evutil_socket_t listener, short event, void *arg)
 {
-    client_entry *item, *lastItem;
+    client_entry *item;
     struct event_base *base = arg;
     struct sockaddr_in ss;
     socklen_t slen = sizeof(ss);
@@ -814,9 +814,10 @@ void do_accept_command(evutil_socket_t listener, short event, void *arg)
     bufferevent_setwatermark(bev, EV_WRITE, 4096, 0);
     bufferevent_enable(bev, EV_READ|EV_WRITE);
     item->bev = bev;
+    for (int i=0;i<MAX_CHANNELS;i++)
+        item->client_type[i] = CONTROL;
     sem_wait(&bufferevent_semaphore);
     TAILQ_INSERT_TAIL(&Client_list, item, entries);
-    lastItem = item;
     sem_post(&bufferevent_semaphore);
 
     int client_count = 0;
@@ -826,10 +827,6 @@ void do_accept_command(evutil_socket_t listener, short event, void *arg)
     {
         client_count++;
     }
-
-    if (client_count == 1) // FIXME: Need a better way to set CONTROL type.
-        for (int i=0;i<MAX_CHANNELS;i++)
-            lastItem->client_type[i] = CONTROL;
     sem_post(&bufferevent_semaphore);
 
     if (client_count == 0)

@@ -415,16 +415,17 @@ void send_command(int connection, char* command, int len, char *response)
     {
         sem_post(&hw_cmd_semaphore);
         fprintf(stderr, "send command failed: %d: %s\n", rc, command);
-        exit(1);
+        radio[connection].connected = false;
     }
 
     /* FIXME: This is broken.  It will probably work as long as
      * responses are very small and everything proceeds in lockstep. */
     rc = recv(radio[connection].socket, response, HW_RESPONSE_SIZE, 0);
     sem_post(&hw_cmd_semaphore);
-    if (rc < 0)
+    if (rc < 1)
     {
         fprintf(stderr, "read response failed: %d\n", rc);
+        radio[connection].connected = false;
     }
     /* FIXME: This is broken, too.  If the response is exactly
      * HW_RESPONSE_SIZE, we have to truncate it by one byte. */
@@ -796,13 +797,15 @@ void* command_thread(void* arg)
         close(radio[connected_radios].socket);
     //    free(radio[connected_radios]);
     //    radio[connected_radios] = NULL;
+        radio[connected_radios].connected = false;
         connected_radios--;
         return 0;
     }
+    radio[connected_radios].connected = true;
     hw_get_manifest(connected_radios);
     connected_radios++;
 
-    while (1)
+    while (radio[connected_radios-1].connected)
     {
 /*        bytes_read = recv(radio[connected].socket, buffer, 13, 0);
         if (bytes_read < 0)

@@ -195,7 +195,7 @@
      </widget>
     </item>
     <item>
-     <layout class="QHBoxLayout" name="horizontalLayout_4" stretch="0,0,100">
+     <layout class="QHBoxLayout" name="horizontalLayout_4" stretch="0,0,0,100">
       <property name="spacing">
        <number>0</number>
       </property>
@@ -206,7 +206,45 @@
        <number>0</number>
       </property>
       <item>
-       <layout class="QVBoxLayout" name="spectrumLayout"/>
+       <spacer name="horizontalSpacer_2">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <layout class="QVBoxLayout" name="spectrumLayout">
+        <property name="spacing">
+         <number>0</number>
+        </property>
+        <property name="leftMargin">
+         <number>0</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="titlelabel">
+          <property name="font">
+           <font>
+            <family>FreeSerif</family>
+            <pointsize>138</pointsize>
+            <italic>true</italic>
+           </font>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">background-color: rgb(85, 170, 255);
+color: rgb(255, 248, 41);</string>
+          </property>
+          <property name="text">
+           <string>QtRadioNG</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
       <item>
        <spacer name="horizontalSpacer">
@@ -370,6 +408,9 @@
            <height>0</height>
           </size>
          </property>
+         <property name="styleSheet">
+          <string notr="true">background-color: rgb(222, 237, 255);</string>
+         </property>
          <property name="frameShape">
           <enum>QFrame::WinPanel</enum>
          </property>
@@ -453,6 +494,9 @@
           <property name="toolTip">
            <string>Enable/Disable tracking notch filters.</string>
           </property>
+          <property name="styleSheet">
+           <string notr="true">background-color: rgb(217, 217, 217);</string>
+          </property>
           <property name="text">
            <string>TNF</string>
           </property>
@@ -478,30 +522,11 @@
           <property name="toolTip">
            <string>Add tracking notch filter to current band.</string>
           </property>
+          <property name="styleSheet">
+           <string notr="true">background-color: rgb(217, 217, 217);</string>
+          </property>
           <property name="text">
            <string>+TNF</string>
-          </property>
-         </widget>
-         <widget class="QWidget" name="widget" native="true">
-          <property name="geometry">
-           <rect>
-            <x>13</x>
-            <y>136</y>
-            <width>120</width>
-            <height>18</height>
-           </rect>
-          </property>
-          <property name="minimumSize">
-           <size>
-            <width>120</width>
-            <height>0</height>
-           </size>
-          </property>
-          <property name="maximumSize">
-           <size>
-            <width>120</width>
-            <height>16777215</height>
-           </size>
           </property>
          </widget>
         </widget>

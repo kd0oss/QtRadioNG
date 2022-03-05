@@ -89,7 +89,7 @@ public:
     EqualizerDialog *equalizer;
     Mode             mode[MAX_RECEIVERS];
     Band             band[MAX_RECEIVERS];
-    Filters          filters;
+    Filters          filters[MAX_RECEIVERS];
     CWLFilters       cwlFilters;
     CWUFilters       cwuFilters;
     LSBFilters       lsbFilters;
@@ -102,12 +102,14 @@ public:
     DIGLFilters      diglFilters;
     RigCtlServer    *rigCtl;
     QString          hardwareType;
+    QTimer           settingsTimer[MAX_RECEIVERS];
     QWidget         *hww;
     bool             receiver_active[MAX_RECEIVERS];
     int8_t           receiver_channel[MAX_RECEIVERS];
     int8_t           currentRxChannel;
     int8_t           currentTxChannel;
     int8_t           activeReceivers;
+    int8_t           txrxPair[2];
     double           currentPwr;
     int              sampleRate[MAX_RECEIVERS];
     int              fps[MAX_RECEIVERS];
@@ -143,6 +145,8 @@ public:
     void initRigCtl(int);
     void initializeRadio(void);
     void shutdownRadio(void);
+    void saveSetting(QString, QString, QString, int8_t);
+    QString loadSetting(QString, QString, int8_t);
     int8_t getInternalIndex(int8_t channel_index);
 
 public slots:
@@ -171,6 +175,7 @@ public slots:
     void sendCommand(QByteArray);
     void closeBandScope(void);
     void squelchValueChanged(int8_t index, int val);
+    void saveAllSettings(void);
 
 signals:
     void send_command(QByteArray command);
@@ -270,7 +275,7 @@ public slots:
     void squelchValueChanged(int);
 
     void actionKeypad();
-    void setKeypadFrequency(int8_t, long long);
+    void setKeypadFrequency(long long);
 
     void getBandBtn(int btn);
     void quickMemStore();
@@ -386,14 +391,16 @@ public slots:
     void pttChange(int caller, bool ptt);
     void printStatusBar(QString message);
     void slaveSetMode(int newmode);
+    void slaveSetFrequency(long long freq);
     void slaveSetFilter(int l, int r);
     void slaveSetZoom(int z);
+    void fpsChanged(int fps);
     void setdspversion(long dspversion, QString dspversiontxt);
     void setChkTX(bool chk);
     void setservername(QString sname);
     void setCanTX(bool tx);
     void closeServers ();
-    void cwPitchChanged(int8_t, int cwPitch);
+    void cwPitchChanged(int cwPitch);
     void enableRxEq(bool);
     void enableTxEq(bool);
 
@@ -417,6 +424,7 @@ private slots:
     void preAGCFiltersChanged(bool);
     void rxFilterWindowChanged(int);
     void txFilterWindowChanged(int);
+    void kick_display(void);
 
 private:
     void printWindowTitle(QString message);
@@ -427,6 +435,8 @@ private:
     QString getversionstring();
 
     QLabel modeInfo;
+
+    QTimer kickDisplay;
 
     Audio* audio;
     AudioInput* audioinput;

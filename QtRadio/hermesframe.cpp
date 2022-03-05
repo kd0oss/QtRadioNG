@@ -135,7 +135,7 @@ void HermesFrame::initializeRadio(void)
     command.append((char)STARTRADIO);
     command.append((char)radio_id);
     emit hhcommand(command);
-    itimer->start(1000);
+    itimer->start(500);
 } // end initializeRadio
 
 
