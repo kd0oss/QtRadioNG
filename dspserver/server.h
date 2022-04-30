@@ -181,7 +181,7 @@ typedef struct _client_entry {
 } client_entry;
 
 typedef struct _memory_entry {
-	char* memory;
+	unsigned char* memory;
 	TAILQ_ENTRY(_memory_entry) entries;
 } memory_entry;
 
@@ -204,6 +204,7 @@ typedef struct _xcvr
     int8_t    radio_id;
     int8_t    connection;
     char      radio_type[25];
+    char      radio_name[25];
     char      ip_address[16];
     char      mac_address[18];
     bool      bandscope_capable;
@@ -234,6 +235,8 @@ typedef struct _channel
     XCVR      radio;
     SPECTRUM  spectrum;
     int8_t    dsp_channel;
+    int8_t    protocol;
+    long long frequency;
     int8_t    index;
     bool      isTX;
     bool      enabled;
@@ -256,6 +259,7 @@ void server_init(int receiver);
 void tx_init(void);
 void spectrum_init(void);
 void initAnalyzer(int, int, int, int);
+void start_rx_audio(int8_t channel);
 void enable_wideband(int8_t, bool);
 int widebandInitAnalyzer(int, int);
 void spectrum_timer_init(int);

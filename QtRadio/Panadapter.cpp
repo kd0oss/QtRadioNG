@@ -1573,7 +1573,7 @@ void Panadapter::updateSpectrumFrame(SPECTRUM spec)
     // do not rotate Panadapter display.  LO_offset rotation done in dspserver
     for (i = 0; i < size; i++)
     {
-   //     fprintf(stderr, "[%u]", (unsigned char)buffer[i]);
+  //      fprintf(stderr, "%d   [%u]\n", avg, (unsigned char)spec.samples[i]);
         samples[i] = ((float)(samples[i] * avg - (spec.samples[i] & 0xFF))/(float)(avg+1)) * 1.0f;
         wsamples[i] = spec.samples[i];
     }

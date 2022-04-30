@@ -12,8 +12,8 @@
 #include "receiver.h"
 #include "discovered.h"
 #include "server.h"
+#include "old_protocol.h"
 
-long long frequency = 0LL;
 
 RECEIVER *create_receiver(int id, int buffer_size, int alexRxAntenna, int alexAttenuation)
 {
@@ -63,19 +63,18 @@ RECEIVER *create_receiver(int id, int buffer_size, int alexRxAntenna, int alexAt
     }
 
     fprintf(stderr,"create_receiver: id=%d default adc=%d\n", rx->id, rx->adc);
-    frequency = 14010000LL;
-    vfo[rx->id].frequency = frequency;
-    vfo[rx->id].lo = 0LL;
-    vfo[rx->id].ctun = 0;
-    vfo[rx->id].ctun_frequency = frequency;
-    vfo[rx->id].offset = 0;
+    rx->frequency = 14010000LL;
+    rx->lo = 0LL;
+    rx->ctun = 0;
+    rx->ctun_frequency = rx->frequency;
+    rx->offset = 0;
 
     rx->sample_rate = 48000;
     rx->buffer_size = buffer_size;
-    rx->update_timer_id = -1;
+//    rx->update_timer_id = -1;
 
     rx->samples = 0;
-    rx->displaying = 0;
+//    rx->displaying = 0;
     rx->rf_gain = 50.0;
 
     rx->dither = 0;
@@ -97,21 +96,21 @@ RECEIVER *create_receiver(int id, int buffer_size, int alexRxAntenna, int alexAt
     rx->local_audio_buffer = NULL;
     rx->local_audio_buffer_size = 2048;
 //    rx->audio_name=NULL;
-    rx->mute_when_not_active = 0;
+//    rx->mute_when_not_active = 0;
 //    rx->audio_channel=STEREO;
 //    rx->audio_device=-1;
 
     rx->low_latency = 0;
 
-    rx->squelch_enable = 0;
-    rx->squelch = 0;
+//    rx->squelch_enable = 0;
+//    rx->squelch = 0;
 
-    rx->filter_high = 525;
-    rx->filter_low = 275;
+//    rx->filter_high = 525;
+//    rx->filter_low = 275;
 
     rx->deviation = 2500;
 
-    rx->mute_radio = 0;
+//    rx->mute_radio = 0;
 
     // allocate buffers
     rx->iq_input_buffer = (double*)malloc((2*rx->buffer_size) * sizeof(double));
@@ -148,15 +147,17 @@ void dump_udp_buffer(unsigned char* buffer)
 
 void add_iq_samples(RECEIVER *rx, double i_sample, double q_sample)
 {
-  rx->iq_input_buffer[rx->samples*2] = i_sample;
-  rx->iq_input_buffer[(rx->samples*2)+1] = q_sample;
-  rx->samples = rx->samples+1;
-//  printf("%d   %f  %f\n", rx->samples, i_sample, q_sample);
-  if (rx->samples >= rx->buffer_size)
-  {
-      send_IQ_buffer(rx->id);
-      rx->samples=0;
-  }
+    rx->iq_input_buffer[rx->samples*2] = i_sample;
+    rx->iq_input_buffer[(rx->samples*2)+1] = q_sample;
+    rx->samples = rx->samples+1;
+    // fprintf(stderr, "%d   %f  %f\n", rx->samples, i_sample, q_sample);
+    if (rx->samples >= rx->buffer_size)
+    {
+    //    pthread_mutex_lock(&rx->mutex);
+        send_IQ_buffer(rx->id);
+   //     pthread_mutex_unlock(&rx->mutex);
+        rx->samples=0;
+    }
 } // end add_iq_samples
 
 
@@ -165,15 +166,15 @@ void add_iq_samples(RECEIVER *rx, double i_sample, double q_sample)
 //
 void add_div_iq_samples(RECEIVER *rx, double i0, double q0, double i1, double q1)
 {
-  rx->iq_input_buffer[rx->samples*2]    = i0 + (div_cos*i1 - div_sin*q1);
-  rx->iq_input_buffer[(rx->samples*2)+1]= q0 + (div_sin*i1 + div_cos*q1);
-//  printf("%3.3f  %3.3f\n", i0, q0);
-  rx->samples=rx->samples+1;
-  if (rx->samples>=rx->buffer_size)
-  {
-    send_IQ_buffer(rx->id);
-    rx->samples=0;
-  }
+    rx->iq_input_buffer[rx->samples*2]    = i0 + (div_cos*i1 - div_sin*q1);
+    rx->iq_input_buffer[(rx->samples*2)+1]= q0 + (div_sin*i1 + div_cos*q1);
+    //  printf("%3.3f  %3.3f\n", i0, q0);
+    rx->samples=rx->samples+1;
+    if (rx->samples>=rx->buffer_size)
+    {
+        send_IQ_buffer(rx->id);
+        rx->samples=0;
+    }
 } // end add_div_iq_samples
 
 
@@ -215,6 +216,12 @@ void receiver_change_sample_rate(RECEIVER *rx, int sample_rate)
 ///////        g_free(rx->audio_output_buffer);
 /////////    }
 /////////    rx->audio_output_buffer=g_new(gdouble,2*rx->output_samples);
+
+    if (protocol == ORIGINAL_PROTOCOL)
+    {
+        for (int i=1; i<8; i++)
+            ozy_send_buffer();
+    }
 
     pthread_mutex_unlock(&rx->mutex);
 

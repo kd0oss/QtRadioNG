@@ -1,6 +1,11 @@
 QtRadioNG changes log by Rick Schnicker KD0OSS
 ==================================================
 
+2022/04/30   Up rev'd to version ALPHA 2.05
+    Protocol 1 supports has been added to hpsdr.
+    Added functions to send speaker audio to
+    radio hardware. More bug fixes.
+
 2022/02/13   Up rev'd to version ALPHA 2.04
     QtRadio now handles multiple panadapters.
     Configuration of panadapters after radio start

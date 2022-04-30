@@ -83,6 +83,7 @@ typedef struct _xcvr
     int8_t    radio_id;
     int8_t    connection;
     char      radio_type[25];
+    char      radio_name[25];
     char      ip_address[16];
     char      mac_address[18];
     bool      bandscope_capable;
@@ -110,9 +111,11 @@ typedef struct _spectrum
 typedef struct _channel
 {
     int8_t    id;
-    XCVR     radio;
+    XCVR      radio;
     SPECTRUM  spectrum;
     int8_t    dsp_channel;
+    int8_t    protocol;
+    long long frequency;
     int8_t    index;
     bool      isTX;
     bool      enabled;

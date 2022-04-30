@@ -48,7 +48,6 @@
 #define max(x,y) (x<y?y:x)
 
 struct utsname unameData;
-struct _vfo vfo[MAX_VFOS];
 //struct _mode_settings mode_settings[MODES];
 
 int dot;
@@ -203,14 +202,19 @@ int main_delete(int radio_id)
             break;
         case NEW_PROTOCOL:
             new_protocol_stop();
-            free(radio->wideband->input_buffer);
-            free(radio->wideband);
+            if (radio->wideband != NULL)
+            {
+                free(radio->wideband->input_buffer);
+                free(radio->wideband);
+                radio->wideband = NULL;
+            }
             //     free(radio);
             break;
         }
         fprintf(stderr, "*** All radios shut down. ***\n");
     }
     receivers = active_receivers = 0;
+    transmitter = NULL;
     return 0;
 } // end main_delete
 
@@ -227,6 +231,7 @@ static void activatehpsdr()
     fprintf(stderr,"machine: %s\n",unameData.machine);
 
     receivers = active_receivers;
+    transmitter = NULL;
     discovery();
 } // end activatehpsdr
 
@@ -246,6 +251,7 @@ bool start_radio(int radio_id)
 
     protocol = radio->protocol;
     device = radio->device;
+    radio->wideband = NULL;
 
     // set the default power output and max drive value
     drive_max = 100.0;
@@ -715,6 +721,8 @@ void start_receivers(int radio_id)
     DISCOVERED *radio = &discovered[radio_id];
 
     receivers = 0;
+    protocol = radio->protocol;
+    device = radio->device;
 
     for (int i=0;i<radio->supported_receivers;i++)
     {
@@ -752,7 +760,7 @@ void start_receivers(int radio_id)
     switch (protocol)
     {
     case ORIGINAL_PROTOCOL:
-        old_protocol_init(receiver[receivers-1]->sample_rate);
+        old_protocol_init(receiver[0]->sample_rate);
         break;
     case NEW_PROTOCOL:
         new_protocol_init();
@@ -869,6 +877,11 @@ void set_tx_power(int8_t pow)
     {
         schedule_high_priority();
     }
+    else
+    {
+        for (int i=1; i<8; i++)
+            ozy_send_buffer();
+    }
     fprintf(stderr, "Set TX Power: %u\n", pow);
 } // end set_tx_power
 
@@ -900,7 +913,7 @@ int create_manifest()
         d = &discovered[i];
         char str[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &(d->info.network.address.sin_addr), str, INET_ADDRSTRLEN);
-        if (strcmp(str, "127.0.0.1") == 0) continue;
+  //      if (strcmp(str, "127.0.0.1") == 0) continue;
         sprintf(line, "<radio=%d>\n", i);
         xml = (char*)realloc((char*)xml, strlen(xml)+strlen(line)+1);
         strcat(xml, line);
@@ -925,7 +938,7 @@ int create_manifest()
         sprintf(line, "<status>%d</status>\n", d->status);
         xml = (char*)realloc((char*)xml, strlen(xml)+strlen(line)+1);
         strcat(xml, line);
-        if (d->protocol >= 1)
+        if (d->protocol >= 1 && d->wideband != NULL)
             sprintf(line, "<bandscope>1</bandscope>\n");
         else
             sprintf(line, "<bandscope>0</bandscope>\n");
@@ -934,7 +947,13 @@ int create_manifest()
         sprintf(line, "<supported_receivers>%d</supported_receivers>\n", d->supported_receivers);
         xml = (char*)realloc((char*)xml, strlen(xml)+strlen(line)+1);
         strcat(xml, line);
-        sprintf(line, "<supported_transmitters>%d</supported_transmitters>\n", d->supported_transmitters);
+        if (protocol == 0)
+        {
+            sprintf(line, "<supported_transmitters>1</supported_transmitters>\n");
+            d->supported_transmitters = 1;
+        }
+        else
+            sprintf(line, "<supported_transmitters>%d</supported_transmitters>\n", d->supported_transmitters);
         xml = (char*)realloc((char*)xml, strlen(xml)+strlen(line)+1);
         strcat(xml, line);
         sprintf(line, "<adcs>%d</adcs>\n", d->adcs);
@@ -995,6 +1014,11 @@ void set_alex_rx_antenna(int8_t idx, int v)
     {
         schedule_high_priority();
     }
+    else
+    {
+        for (int i=1; i<8; i++)
+            ozy_send_buffer();
+    }
 } // end set_alex_rx_antenna
 
 
@@ -1004,6 +1028,11 @@ void set_alex_tx_antenna(int v)
     if (protocol == NEW_PROTOCOL)
     {
         schedule_high_priority();
+    }
+    else
+    {
+        for (int i=1; i<8; i++)
+            ozy_send_buffer();
     }
 } // end set_alex_tx_antenna
 
@@ -1024,10 +1053,15 @@ void set_alex_attenuation(int8_t idx, int v)
     if (v == 1) {adc_attenuation[0] = 10; adc_attenuation[1] = 10;}
     if (v == 2) {adc_attenuation[0] = 20; adc_attenuation[1] = 20;}
     if (v == 3) {adc_attenuation[0] = 30; adc_attenuation[1] = 30;}
-    printf("Att: %d for RX: %d\n", receiver[idx]->alex_attenuation, idx);
+    printf("Att: %d for RX: %d\n", active_receiver->alex_attenuation, idx);
     if (protocol == NEW_PROTOCOL)
     {
         schedule_high_priority();
+    }
+    else
+    {
+        for (int i=1; i<8; i++)
+            ozy_send_buffer();
     }
 } // end set_alex_attenuation
 
@@ -1039,6 +1073,11 @@ void dither_cb(int8_t idx, bool enable)
     {
         schedule_high_priority();
     }
+    else
+    {
+        for (int i=1; i<8; i++)
+            ozy_send_buffer();
+    }
 } // end dither_cb
 
 
@@ -1048,6 +1087,11 @@ void random_cb(int8_t idx, bool enable)
     if (protocol == NEW_PROTOCOL)
     {
         schedule_high_priority();
+    }
+    else
+    {
+        for (int i=1; i<8; i++)
+            ozy_send_buffer();
     }
 } // end random_cb
 
@@ -1059,6 +1103,11 @@ void preamp_cb(int8_t idx, bool enable)
     {
         schedule_high_priority();
     }
+    else
+    {
+        for (int i=1; i<8; i++)
+            ozy_send_buffer();
+    }
 } // end preamp_cb
 
 
@@ -1069,6 +1118,11 @@ void mic_boost_cb(bool enable)
     {
         schedule_high_priority();
     }
+    else
+    {
+        for (int i=1; i<8; i++)
+            ozy_send_buffer();
+    }
 } // end mic_boost_cb
 
 
@@ -1078,6 +1132,11 @@ void linein_gain_cb(int gain)
     if (protocol == NEW_PROTOCOL)
     {
         schedule_high_priority();
+    }
+    else
+    {
+        for (int i=1; i<8; i++)
+            ozy_send_buffer();
     }
 } // end linein_gain_cb
 
@@ -1091,22 +1150,36 @@ void setFrequency(int8_t idx, long long f)
     {
     case NEW_PROTOCOL:
     case ORIGINAL_PROTOCOL:
-        if (vfo[idx].ctun)
+        if (idx+1 <= receivers)
         {
-            long long minf = vfo[idx].frequency - (long long)(receiver[idx]->sample_rate/2);
-            long long maxf = vfo[idx].frequency + (long long)(receiver[idx]->sample_rate/2);
-            if (f < minf) f = minf;
-            if (f > maxf) f = maxf;
-            vfo[idx].ctun_frequency = f;
-            vfo[idx].offset = f-vfo[idx].frequency;
-            ////////  set_offset(active_receiver,vfo[v].offset);
-            return;
+            if (receiver[idx]->ctun)
+            {
+                long long minf = receiver[idx]->frequency - (long long)(receiver[idx]->sample_rate/2);
+                long long maxf = receiver[idx]->frequency + (long long)(receiver[idx]->sample_rate/2);
+                if (f < minf) f = minf;
+                if (f > maxf) f = maxf;
+                receiver[idx]->ctun_frequency = f;
+                receiver[idx]->offset = f-receiver[idx]->frequency;
+                if (transmitter != NULL)
+                {
+                    transmitter->ctun_frequency = f;
+                    transmitter->offset = f-transmitter->frequency;
+                }
+                ////////  set_offset(active_receiver,vfo[v].offset);
+                return;
+            }
+            else
+            {
+                receiver[idx]->frequency = f;
+                if (transmitter != NULL)
+                    transmitter->frequency = f;
+                fprintf(stderr, "Set Freq: %lld  for index %d\n", receiver[0]->frequency, 0);
+                fprintf(stderr, "Set Freq: %lld  for index %d\n", receiver[1]->frequency, 1);
+            }
         }
         else
         {
-            vfo[idx].frequency = f;
-            fprintf(stderr, "Set Freq: %lld  for index %d\n", vfo[0].frequency, 0);
-            fprintf(stderr, "Set Freq: %lld  for index %d\n", vfo[1].frequency, 1);
+            transmitter->frequency = f;
         }
         break;
     }
@@ -1117,6 +1190,8 @@ void setFrequency(int8_t idx, long long f)
         schedule_high_priority();
         break;
     case ORIGINAL_PROTOCOL:
+        for (int i=1; i<8; i++)
+            ozy_send_buffer();
         break;
     }
 } // end setFrequency
@@ -1161,6 +1236,8 @@ int main_start(char *dsp_server_address)
 
     // "should" not get this far
     fprintf(stderr,"exiting ...\n");
+    if (radio != NULL)
+        free(radio);
     if (discovered_xml != NULL)
         free(discovered_xml);
     main_delete(0);

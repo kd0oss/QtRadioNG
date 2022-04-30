@@ -32,6 +32,7 @@ typedef struct _transmitter {
     int id;
     int dac;
     int fps;
+    long long frequency;
     int displaying;
     int mic_sample_rate;
     int mic_dsp_rate;
@@ -42,6 +43,19 @@ typedef struct _transmitter {
     int output_samples;
     double *mic_input_buffer;
     double *iq_output_buffer;
+
+    int filter;
+
+    int txmode;
+
+    int ctun;
+    long long ctun_frequency;
+
+    int rit_enabled;
+    long long rit;
+
+    long long lo;
+    long long offset;
 
     int mode;
     int filter_low;

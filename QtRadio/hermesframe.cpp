@@ -14,6 +14,64 @@ HermesFrame::HermesFrame(Radio *pUI, QWidget *parent) : QFrame(parent), ui(new U
     currentRxChannel = -1;
     currentTxChannel = -1;
 
+    connect(ui->hhTxPowerSlider, SIGNAL(valueChanged(int)), this, SLOT(adjustPower(int)));
+    connect(ui->hhTxMicBoostCB, SIGNAL(toggled(bool)), this, SLOT(adjustMicBoost(bool)));
+    connect(ui->hhPreampCB, SIGNAL(toggled(bool)), this, SLOT(enablePreamp(bool)));
+    connect(ui->hhDitherCB, SIGNAL(toggled(bool)), this, SLOT(enableDither(bool)));
+    connect(ui->hhRandomCB, SIGNAL(toggled(bool)), this, SLOT(enableRandom(bool)));
+    connect(ui->hhTxGainSlider, SIGNAL(valueChanged(int)), this, SLOT(pwrSliderValueChanged(int)));
+    connect(ui->hhTxTunePwrSlider, SIGNAL(valueChanged(int)), this, SLOT(tunePwrSliderValueChanged(int)));
+    connect(ui->hhRxAtt0Radio, SIGNAL(toggled(bool)), this, SLOT(setAttenuation(bool)));
+    connect(ui->hhRxAtt10Radio, SIGNAL(toggled(bool)), this, SLOT(setAttenuation(bool)));
+    connect(ui->hhRxAtt20Radio, SIGNAL(toggled(bool)), this, SLOT(setAttenuation(bool)));
+    connect(ui->hhRxAtt30Radio, SIGNAL(toggled(bool)), this, SLOT(setAttenuation(bool)));
+    connect(ui->hhRxAttSlider, SIGNAL(sliderReleased()), this, SLOT(attSliderChanged()));
+    connect(ui->hhIO0CB, SIGNAL(released()), this, SLOT(setOCOutputs()));
+    connect(ui->hhIO1CB, SIGNAL(released()), this, SLOT(setOCOutputs()));
+    connect(ui->hhIO2CB, SIGNAL(released()), this, SLOT(setOCOutputs()));
+    connect(ui->hhIO3CB, SIGNAL(released()), this, SLOT(setOCOutputs()));
+    connect(ui->hhIO4CB, SIGNAL(released()), this, SLOT(setOCOutputs()));
+    connect(ui->hhIO5CB, SIGNAL(released()), this, SLOT(setOCOutputs()));
+    connect(ui->hhIO6CB, SIGNAL(released()), this, SLOT(setOCOutputs()));
+    connect(ui->hhTxTuneButton, SIGNAL(released()), this, SLOT(tuneClicked()));
+    connect(ui->hhRxAnt0Radio, SIGNAL(released()), this, SLOT(setRxAntenna()));
+    connect(ui->hhRxAnt1Radio, SIGNAL(released()), this, SLOT(setRxAntenna()));
+    connect(ui->hhRxAnt2Radio, SIGNAL(released()), this, SLOT(setRxAntenna()));
+    connect(ui->hhTxAnt0Radio, SIGNAL(released()), this, SLOT(setTxRelay()));
+    connect(ui->hhTxAnt1Radio, SIGNAL(released()), this, SLOT(setTxRelay()));
+    connect(ui->hhTxAnt2Radio, SIGNAL(released()), this, SLOT(setTxRelay()));
+    connect(pUI, SIGNAL(tuningEnable(bool)), this, SLOT(tuningEnabled(bool)));
+
+    itimer = new QTimer(this);
+    itimer->setSingleShot(true);
+    connect(itimer, SIGNAL(timeout()), this, SLOT(initialize()));
+} // end constructor
+
+
+HermesFrame::~HermesFrame()
+{
+    delete itimer;
+    delete settings;
+    delete ui;
+} // end destructor
+
+
+void HermesFrame::initializeRadio(void)
+{
+    QByteArray command;
+
+    command.clear();
+    command.append((char)0);
+    command.append((char)STARCOMMAND);
+    command.append((char)STARTRADIO);
+    command.append((char)radio_id);
+    emit hhcommand(command);
+    itimer->start(500);
+} // end initializeRadio
+
+
+void HermesFrame::initialize(void)
+{
     // Load hardware settings
     settings = new QSettings("FreeSDR", "QtRadioII");
     settings->beginGroup("Hermes");
@@ -83,64 +141,6 @@ HermesFrame::HermesFrame(Radio *pUI, QWidget *parent) : QFrame(parent), ui(new U
     };
     settings->endGroup();
 
-    connect(ui->hhTxPowerSlider, SIGNAL(valueChanged(int)), this, SLOT(adjustPower(int)));
-    connect(ui->hhTxMicBoostCB, SIGNAL(toggled(bool)), this, SLOT(adjustMicBoost(bool)));
-    connect(ui->hhPreampCB, SIGNAL(toggled(bool)), this, SLOT(enablePreamp(bool)));
-    connect(ui->hhDitherCB, SIGNAL(toggled(bool)), this, SLOT(enableDither(bool)));
-    connect(ui->hhRandomCB, SIGNAL(toggled(bool)), this, SLOT(enableRandom(bool)));
-    connect(ui->hhTxGainSlider, SIGNAL(valueChanged(int)), this, SLOT(pwrSliderValueChanged(int)));
-    connect(ui->hhTxTunePwrSlider, SIGNAL(valueChanged(int)), this, SLOT(tunePwrSliderValueChanged(int)));
-    connect(ui->hhRxAtt0Radio, SIGNAL(toggled(bool)), this, SLOT(setAttenuation(bool)));
-    connect(ui->hhRxAtt10Radio, SIGNAL(toggled(bool)), this, SLOT(setAttenuation(bool)));
-    connect(ui->hhRxAtt20Radio, SIGNAL(toggled(bool)), this, SLOT(setAttenuation(bool)));
-    connect(ui->hhRxAtt30Radio, SIGNAL(toggled(bool)), this, SLOT(setAttenuation(bool)));
-    connect(ui->hhRxAttSlider, SIGNAL(sliderReleased()), this, SLOT(attSliderChanged()));
-    connect(ui->hhIO0CB, SIGNAL(released()), this, SLOT(setOCOutputs()));
-    connect(ui->hhIO1CB, SIGNAL(released()), this, SLOT(setOCOutputs()));
-    connect(ui->hhIO2CB, SIGNAL(released()), this, SLOT(setOCOutputs()));
-    connect(ui->hhIO3CB, SIGNAL(released()), this, SLOT(setOCOutputs()));
-    connect(ui->hhIO4CB, SIGNAL(released()), this, SLOT(setOCOutputs()));
-    connect(ui->hhIO5CB, SIGNAL(released()), this, SLOT(setOCOutputs()));
-    connect(ui->hhIO6CB, SIGNAL(released()), this, SLOT(setOCOutputs()));
-    connect(ui->hhTxTuneButton, SIGNAL(released()), this, SLOT(tuneClicked()));
-    connect(ui->hhRxAnt0Radio, SIGNAL(released()), this, SLOT(setRxAntenna()));
-    connect(ui->hhRxAnt1Radio, SIGNAL(released()), this, SLOT(setRxAntenna()));
-    connect(ui->hhRxAnt2Radio, SIGNAL(released()), this, SLOT(setRxAntenna()));
-    connect(ui->hhTxAnt0Radio, SIGNAL(released()), this, SLOT(setTxRelay()));
-    connect(ui->hhTxAnt1Radio, SIGNAL(released()), this, SLOT(setTxRelay()));
-    connect(ui->hhTxAnt2Radio, SIGNAL(released()), this, SLOT(setTxRelay()));
-    connect(pUI, SIGNAL(tuningEnable(bool)), this, SLOT(tuningEnabled(bool)));
-
-    itimer = new QTimer(this);
-    itimer->setSingleShot(true);
-    connect(itimer, SIGNAL(timeout()), this, SLOT(initialize()));
-} // end constructor
-
-
-HermesFrame::~HermesFrame()
-{
-    delete itimer;
-    delete settings;
-    delete ui;
-} // end destructor
-
-
-void HermesFrame::initializeRadio(void)
-{
-    QByteArray command;
-
-    command.clear();
-    command.append((char)0);
-    command.append((char)STARCOMMAND);
-    command.append((char)STARTRADIO);
-    command.append((char)radio_id);
-    emit hhcommand(command);
-    itimer->start(500);
-} // end initializeRadio
-
-
-void HermesFrame::initialize(void)
-{
     setAttenuation(true);
     setRxAntenna();
     setTxRelay();

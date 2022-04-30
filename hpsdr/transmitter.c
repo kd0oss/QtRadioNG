@@ -58,6 +58,8 @@ TRANSMITTER *create_transmitter(int id, int buffer_size)
     tx->id = id;
     tx->dac = 0;
     tx->buffer_size = buffer_size;
+    tx->frequency = 145000000;
+    tx->txmode = modeUSB;
 
     switch (protocol)
     {

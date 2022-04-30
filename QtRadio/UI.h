@@ -74,7 +74,7 @@
 #define MIC_ALAW_BUFFER_SIZE 512 //58 // limited by the 64 byte TCP message frame
 
 #define MAX_RECEIVERS 9  // 8 receivers and one transmitter
-#define MAX_RADIOS    4
+#define MAX_RADIOS    20
 
 class Radio : public QObject {
     Q_OBJECT
@@ -150,10 +150,10 @@ public:
     int8_t getInternalIndex(int8_t channel_index);
 
 public slots:
-    void bandChanged(int8_t, int previousBand,int newBand);
-    void modeChanged(int8_t, int previousMode,int newMode);
-    void filtersChanged(int8_t, FiltersBase* previousFilters,FiltersBase* newFilters);
-    void filterChanged(int8_t, int previousFilter,int newFilter);
+    void bandChanged(int8_t, int8_t, int previousBand, int newBand);
+    void modeChanged(int8_t, int8_t, int previousMode, int newMode);
+    void filtersChanged(int8_t, FiltersBase* previousFilters, FiltersBase* newFilters);
+    void filterChanged(int8_t, int previousFilter, int newFilter);
     void variableFilter(int8_t, int low, int high);
     void frequencyChanged(int8_t, long long frequency);
     void sampleRateChanged(int8_t, long rate);

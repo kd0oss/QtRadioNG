@@ -77,7 +77,6 @@
 #define RXACTION_PS     2    // deliver 2*119 samples to PS engine
 #define RXACTION_DIV    3    // take 2*119 samples, mix them, deliver to a receiver
 
-static int txvfo=0, txmode=modeLSB;
 int sequence_errors = 0;
 
 
@@ -583,7 +582,7 @@ void new_protocol_init() {
         printf("thread_new failed on new_protocol_thread\n");
         exit( -1 );
     }
-    fprintf(stderr, "new_protocol_thread: id=%d\n", new_protocol_thread_id);
+    fprintf(stderr, "new_protocol_thread: id=%ld\n", new_protocol_thread_id);
 
     new_protocol_general();
     new_protocol_start();
@@ -616,7 +615,7 @@ static void new_protocol_general() {
     general_buffer[37]=0x08;  //  phase word (not frequency)
     general_buffer[38]=0x01;  //  enable hardware timer
 
-    if (disablePA) {
+    if (disablePA) {  // FIXME: Not sure if this is working.  May need to disable PA on certain bands.
         general_buffer[58]=0x00;
     } else {
         general_buffer[58]=0x01;  // enable PA
@@ -678,11 +677,14 @@ static void new_protocol_high_priority() {
     //
     //  We need not set PTT if doing internal CW with break-in
     //
-    if (txmode==modeCWU || txmode==modeCWL) {
-        if (isTransmitting() && (!cw_keyer_internal || !cw_breakin || CAT_cw_is_active)) high_priority_buffer_to_radio[4]|=0x02;
-    } else {
-        if (isTransmitting()) {
-            high_priority_buffer_to_radio[4]|=0x02;
+    if (transmitter != NULL)
+    {
+        if (transmitter->txmode==modeCWU || transmitter->txmode==modeCWL) {
+            if (isTransmitting() && (!cw_keyer_internal || !cw_breakin || CAT_cw_is_active)) high_priority_buffer_to_radio[4]|=0x02;
+        } else {
+            if (isTransmitting()) {
+                high_priority_buffer_to_radio[4]|=0x02;
+            }
         }
     }
 
@@ -695,15 +697,15 @@ static void new_protocol_high_priority() {
         // Use frequency of first receiver for both DDC0 and DDC1
         // This is overridden later if we do PURESIGNAL TX
         //
-        rxFrequency=vfo[0].frequency-vfo[0].lo;
-        if (vfo[0].rit_enabled) {
-            rxFrequency+=vfo[0].rit;
+        rxFrequency=receiver[0]->frequency-receiver[0]->lo;
+        if (receiver[0]->rit_enabled) {
+            rxFrequency+=receiver[0]->rit;
         }
 
         if (cw_is_on_vfo_freq) {
-            if (vfo[0].mode==modeCWU) {
+            if (receiver[0]->mode==modeCWU) {
                 rxFrequency-=(long long)cw_keyer_sidetone_frequency;
-            } else if (vfo[0].mode==modeCWL) {
+            } else if (receiver[0]->mode==modeCWL) {
                 rxFrequency+=(long long)cw_keyer_sidetone_frequency;
             }
         }
@@ -727,14 +729,14 @@ static void new_protocol_high_priority() {
             ddc=i;
             if (device==NEW_DEVICE_ANGELIA || device==NEW_DEVICE_ORION || device == NEW_DEVICE_ORION2) ddc=2+i;
             int v=receiver[i]->id;
-            rxFrequency=vfo[v].frequency-vfo[v].lo;
-            if (vfo[v].rit_enabled) {
-                rxFrequency+=vfo[v].rit;
+            rxFrequency=receiver[v]->frequency-receiver[v]->lo;
+            if (receiver[v]->rit_enabled) {
+                rxFrequency+=receiver[v]->rit;
             }
             if (cw_is_on_vfo_freq) {
-                if (vfo[v].mode==modeCWU) {
+                if (receiver[v]->mode==modeCWU) {
                     rxFrequency-=(long long)cw_keyer_sidetone_frequency;
-                } else if (vfo[v].mode==modeCWL) {
+                } else if (receiver[v]->mode==modeCWL) {
                     rxFrequency+=(long long)cw_keyer_sidetone_frequency;
                 }
             }
@@ -751,21 +753,24 @@ static void new_protocol_high_priority() {
     //  Set DUC frequency
     //
     //printf("here 1\n");
-    txFrequency=vfo[txvfo].frequency-vfo[txvfo].lo;
-    if (vfo[txvfo].ctun) txFrequency += vfo[txvfo].offset;
-    if (transmitter->xit_enabled) {
-        txFrequency+=transmitter->xit;
-    }
-
-    if (!cw_is_on_vfo_freq) {
-        if (txmode==modeCWU) {
-            txFrequency+=(long long)cw_keyer_sidetone_frequency;
-        } else if (txmode==modeCWL) {
-            txFrequency-=(long long)cw_keyer_sidetone_frequency;
+    if (transmitter != NULL)
+    {
+        txFrequency=transmitter->frequency-transmitter->lo;
+        if (transmitter->ctun) txFrequency += transmitter->offset;
+        if (transmitter->xit_enabled) {
+            txFrequency+=transmitter->xit;
         }
-    }
 
-    phase=(long)((4294967296.0*(double)txFrequency)/122880000.0);
+        if (!cw_is_on_vfo_freq) {
+            if (transmitter->txmode==modeCWU) {
+                txFrequency+=(long long)cw_keyer_sidetone_frequency;
+            } else if (transmitter->txmode==modeCWL) {
+                txFrequency-=(long long)cw_keyer_sidetone_frequency;
+            }
+        }
+
+        phase=(long)((4294967296.0*(double)txFrequency)/122880000.0);
+    }
 
     if (isTransmitting() && transmitter->puresignal) {
         //
@@ -876,7 +881,7 @@ static void new_protocol_high_priority() {
     //  frequency of VFO_B can safely be used to control the
     //  filters of ADC1 (if there are any).
     //
-    rxFrequency=vfo[VFO_A].frequency-vfo[VFO_A].lo;
+    rxFrequency=receiver[0]->frequency-receiver[0]->lo;
     switch (device) {
     case NEW_DEVICE_ORION2:
         //
@@ -1072,9 +1077,9 @@ static void new_protocol_high_priority() {
         // those of the first RX
         //
         if (diversity_enabled) {
-            rxFrequency=vfo[VFO_A].frequency-vfo[VFO_A].lo;
+            rxFrequency=receiver[0]->frequency-receiver[0]->lo;
         } else {
-            rxFrequency=vfo[VFO_B].frequency-vfo[VFO_B].lo;
+            rxFrequency=receiver[1]->frequency-receiver[1]->lo;
         }
         //
         //      new ANAN-7000/8000 band-pass RX filters
@@ -1165,7 +1170,7 @@ static void new_protocol_transmit_specific() {
     transmit_specific_buffer[4]=1; // 1 DAC
     transmit_specific_buffer[5]=0; //  default no CW
 
-    if ((txmode==modeCWU || txmode==modeCWL) && cw_keyer_internal) {
+    if ((transmitter->txmode==modeCWU || transmitter->txmode==modeCWL) && cw_keyer_internal) {
         //
         // Set this byte only if in CW, and if using the "internal" keyer
         //
@@ -1352,7 +1357,7 @@ static void new_protocol_start() {
         fprintf(stderr, "pthread_new failed on new_protocol_timer_thread\n");
         exit( -1 );
     }
-    fprintf(stderr, "new_protocol_timer_thread: id=%p\n",new_protocol_timer_thread_id);
+    fprintf(stderr, "new_protocol_timer_thread: id=%ld\n",new_protocol_timer_thread_id);
 }
 
 void new_protocol_stop() {
@@ -1924,7 +1929,7 @@ void new_protocol_cw_audio_samples(short left_audio_sample,short right_audio_sam
     //int txmode=get_tx_mode();
     //
     // Only process samples if transmitting in CW
-    if (isTransmitting() && (txmode==modeCWU || txmode==modeCWL)) {
+    if (isTransmitting() && (transmitter->txmode==modeCWU || transmitter->txmode==modeCWL)) {
 
         // insert the samples
         audiobuffer[audioindex++]=left_audio_sample>>8;
@@ -1953,12 +1958,12 @@ void new_protocol_cw_audio_samples(short left_audio_sample,short right_audio_sam
 }
 
 
-void new_protocol_audio_samples(RECEIVER *rx,short left_audio_sample,short right_audio_sample) {
+void new_protocol_audio_samples(short left_audio_sample,short right_audio_sample) {
     int rc;
     // int txmode=get_tx_mode();
     //
     // Only process samples if NOT transmitting in CW
-    if (isTransmitting() && (txmode==modeCWU || txmode==modeCWL)) return;
+    if (isTransmitting() && (transmitter->txmode==modeCWU || transmitter->txmode==modeCWL)) return;
 
     // insert the samples
     audiobuffer[audioindex++]=left_audio_sample>>8;

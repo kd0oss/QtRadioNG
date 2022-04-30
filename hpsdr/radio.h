@@ -132,30 +132,6 @@ extern TRANSMITTER *transmitter;
 
 #define MAX_BUFFER_SIZE 2048
 
-enum {
-  VFO_A=0,
-  VFO_B,
-  MAX_VFOS=9
-};
-
-struct _vfo {
-  int band;
-  int bandstack;
-  long long frequency;
-  int mode;
-  int filter;
-
-  int ctun;
-  long long ctun_frequency;
-
-  int rit_enabled;
-  long long rit;
-
-  long long lo;
-  long long offset;
-};
-
-extern struct _vfo vfo[MAX_VFOS];
 extern DISCOVERED *radio;
 extern unsigned int radio_id;
 

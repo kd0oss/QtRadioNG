@@ -21,11 +21,11 @@ public:
     int     available_xcvrs[4];
     int     servers;
     int8_t  selected_channel;
-    bool    receivers_active[7];
-    int8_t  receiver_channel[7];
+    bool    receivers_active[8];
+    int8_t  receiver_channel[8];
     bool    remote_audio;
     bool    remote_mic_audio;
-    long    sample_rate[7];
+    long    sample_rate[8];
     int     active_radios;
     int     active_channels;
     int8_t  txrxPair[2];

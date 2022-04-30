@@ -36,13 +36,16 @@ TRANSMITTER *transmitter; // FIXME: change to allow multiple attached transmitte
 static RFUNIT rfunit[35]; // max channels defined in dspserver
 
 TAILQ_HEAD(, _txiq_entry) txiq_buffer;
+TAILQ_HEAD(, _rxaudio_entry) rxaudio_buffer;
 
 static sem_t txiq_semaphore[MAX_DEVICES];
 static sem_t client_semaphore;
+static sem_t rxaudio_semaphore[MAX_DEVICES];
 
 static pthread_t txiq_id;
 static pthread_t tx_thread_id;
-static pthread_t ka_thread_id;
+static pthread_t rxaudio_id;
+static pthread_t rx_audio_id;
 
 static _Bool radioStarted[MAX_DEVICES];
 
@@ -53,13 +56,16 @@ static CLIENT client;
 //static struct sockaddr_in cli_addr;
 //static socklen_t cli_length;
 bool send_manifest = false;
+static bool tx_enabled = false;
+static bool audio_enabled[MAX_DEVICES];
 
 static char resp[80];
 
-void* listener_thread(void* arg);
 void* client_thread(void* arg);
 void* tx_IQ_thread(void* arg);
 void* txiq_send(void* arg);
+void* rx_audio_thread(void* arg);
+void* rxaudio_send(void* arg);
 void  init_transmitter(int8_t);
 void* keepalive_thread(void* arg);
 
@@ -82,12 +88,31 @@ char* attach_receiver(int8_t idx)
 
     rfunit[idx].attached = true;
     rfunit[idx].isTx = false;
-    radio->wideband->channel = rfunit[idx].radio_id;
+    if (radio->wideband != NULL)
+        radio->wideband->channel = rfunit[idx].radio_id;
     receiver[idx]->client = &client;
     attached_rcvrs[rfunit[idx].radio_id]++;
     sprintf(resp,"%s %d", OK, receiver[idx]->sample_rate);
     fprintf(stderr, "Receiver attached: radio id = %u  index = %u\n", rfunit[idx].radio_id, idx);
 
+    if (!audio_enabled[rfunit[idx].radio_id])
+    {
+        int rc = pthread_create(&rxaudio_id, NULL, rxaudio_send, (void*)(intptr_t)idx);
+        if (rc < 0)
+        {
+            perror("pthread_create rxaudio_send thread failed");
+            exit(1);
+        }
+        
+        // create thread that receives RX audio stream from dspserver
+        rc = pthread_create(&rx_audio_id, NULL, rx_audio_thread, (void*)(intptr_t)idx);
+        if (rc < 0)
+        {
+            perror("pthread_create rx_auido_thread failed");
+            exit(1);
+        }
+        audio_enabled[rfunit[idx].radio_id] = true;
+    }
     return resp;
 } // end attach_receiver
 
@@ -146,6 +171,7 @@ char* detach_transmitter(int8_t idx)
         rfunit[idx].attached = false;
         fprintf(stderr, "Transmitter detached: radio id = %u  index = %u\n", rfunit[idx].radio_id, idx);
     }
+    tx_enabled = false;
     return OK;
 } // end detach_transmitter
 
@@ -172,7 +198,7 @@ char* parse_command(CLIENT* client, char* command)
 
     fprintf(stderr, "parse_command(idx): %u [%u] %u\n", (uint8_t)command[0], (uint8_t)command[1], (uint8_t)command[2]);
 
-    if (attached_rcvrs[0] <= 0 && (uint8_t)command[1] < HQHARDWARE && (uint8_t)command[1] != STARTRADIO && (uint8_t)command[1] != STOPRADIO)
+    if (attached_rcvrs[rfunit[index].radio_id] <= 0 && (uint8_t)command[1] < HQHARDWARE && (uint8_t)command[1] != STARTRADIO && (uint8_t)command[1] != STOPRADIO)
         return INVALID_COMMAND; // No valid receivers so abort commmand.
 
     switch ((uint8_t)command[1])
@@ -212,6 +238,7 @@ char* parse_command(CLIENT* client, char* command)
     case HATTACHTX:
     {
         bDone = true;
+        tx_enabled = false;
         uint8_t radio_id = (uint8_t)command[2];
         rfunit[index].radio_id = radio_id;
         attach_transmitter(index);
@@ -245,6 +272,7 @@ char* parse_command(CLIENT* client, char* command)
 
     case SETPREAMP:
     {
+        fprintf(stderr, "Preamp %d.\n", (int)command[2]);
         preamp_cb(index, (int)command[2]);
         bDone = true;
     }
@@ -527,7 +555,8 @@ void* client_thread(void* arg)
         rfunit[i].client.socket = -1;
 
     TAILQ_INIT(&txiq_buffer);
-
+    TAILQ_INIT(&rxaudio_buffer);
+    
     sem_init(&client_semaphore, 0, 1);
 
     for (int i=0;i<MAX_DEVICES;i++)
@@ -535,7 +564,9 @@ void* client_thread(void* arg)
         radioStarted[i] = false;
         attached_rcvrs[i] = 0;
         attached_xmits[i] = 0;
+        audio_enabled[i] = false;
         sem_init(&txiq_semaphore[i], 0, 1);
+        sem_init(&rxaudio_semaphore[i], 0, 1);
     }
 
     csocket = socket(AF_INET, SOCK_STREAM, 0);
@@ -578,6 +609,7 @@ void* client_thread(void* arg)
     while (1)  // To infinity and beyond!
     {
 //        command[0] = -1;
+        usleep(100);
         sem_wait(&client_semaphore);
         bytes_read = recv(client->socket, byte, 1, 0);
         if (bytes_read < 0)
@@ -666,6 +698,7 @@ void* client_thread(void* arg)
 void init_receiver(int8_t idx)
 {
     int on = 1;
+    int rc = 0;
     struct sockaddr_in cli_addr;
 
     rfunit[idx].client.socket = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -714,8 +747,9 @@ void send_IQ_buffer(int idx)
         buffer.receiver = idx;
         buffer.length = (receiver[idx]->buffer_size * 2) - offset; // FIXME: offset may not be needed
         if (buffer.length > 2048) buffer.length = 2048;
+ //       fprintf(stderr, "L: %ld  B: %ld\n", buffer.length*sizeof(double), sizeof(buffer.data));
 
-        memcpy((char*)buffer.data, (char*)receiver[idx]->iq_input_buffer, buffer.length*8);
+        memcpy((char*)buffer.data, (char*)receiver[idx]->iq_input_buffer, buffer.length*sizeof(double));
         rc = sendto(rfunit[idx].client.socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr*)&cli_addr, cli_length);
         if (rc <= 0)
         {
@@ -780,6 +814,7 @@ void init_transmitter(int8_t idx)
         exit(1);
     }
     fprintf(stderr, "TX threads created.\n");
+    tx_enabled = true;
 } // end init_transmitter
 
 
@@ -794,6 +829,7 @@ void send_Mic_buffer(float sample)
     static MIC_BUFFER buffer;
     int rc;
 
+    if (!tx_enabled) return;
     buffer.data[count++] = sample;
     if (count < 512) return;
 
@@ -844,24 +880,24 @@ void* txiq_send(void* arg)
     long qsample;
     double gain;
     bool iqswap = false;
-
+    
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &old_state);
     pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &old_type);
-
+    
     switch (protocol)
     {
-       case ORIGINAL_PROTOCOL:
-         gain = 32767.0;  // 16 bit
-         break;
-       case NEW_PROTOCOL:
-         gain = 8388607.0; // 24 bit
-         break;
+        case ORIGINAL_PROTOCOL:
+            gain = 32767.0;  // 16 bit
+            break;
+        case NEW_PROTOCOL:
+            gain = 8388607.0; // 24 bit
+            break;
     }
-
+    
     while (attached_xmits[rfunit[idx].radio_id] > 0)
     {
         double is, qs;
-
+        
         sem_wait(&txiq_semaphore[idx]);
         item = TAILQ_FIRST(&txiq_buffer);
         sem_post(&txiq_semaphore[idx]);
@@ -870,7 +906,7 @@ void* txiq_send(void* arg)
             usleep(100);
             continue;
         }
-
+        
         memcpy((char*)buffer, (char*)item->buffer, 512);
         for (int j=0; j<32; j++)
         {
@@ -884,18 +920,18 @@ void* txiq_send(void* arg)
                 is = buffer[j*2];
                 qs = buffer[(j*2)+1];
             }
-
+            
             isample = is >= 0.0?(long)floor(is*gain+0.5):(long)ceil(is*gain-0.5);
             qsample = qs >= 0.0?(long)floor(qs*gain+0.5):(long)ceil(qs*gain-0.5);
-
+            
             switch (protocol)
             {
-            case ORIGINAL_PROTOCOL:
-                old_protocol_iq_samples(isample, qsample);
-                break;
-            case NEW_PROTOCOL:
-                new_protocol_iq_samples(isample, qsample);
-                break;
+                case ORIGINAL_PROTOCOL:
+                    old_protocol_iq_samples(isample, qsample);
+                    break;
+                case NEW_PROTOCOL:
+                    new_protocol_iq_samples(isample, qsample);
+                    break;
             }
         }
         sem_wait(&txiq_semaphore[idx]);
@@ -920,10 +956,10 @@ void* tx_IQ_thread(void* arg)
     int bytes_read;
     BUFFER buffer;
     char buf[2];
-
+    
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &old_state);
     pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &old_type);
-
+    
     if (rfunit[idx].client.socket == -1)
     {
         rfunit[idx].client.socket = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -936,22 +972,22 @@ void* tx_IQ_thread(void* arg)
         read_timeout.tv_sec = 0;
         read_timeout.tv_usec = 10;
         setsockopt(rfunit[idx].client.socket, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
-
+        
         cli_length = sizeof(cli_addr);
         memset((char*)&cli_addr, 0, cli_length);
         cli_addr.sin_family = AF_INET;
         cli_addr.sin_addr.s_addr = inet_addr(dsp_server_address);
         cli_addr.sin_port = htons(TX_IQ_PORT_0); // + attached_xmits[idx] - 1);
-
+        
         fprintf(stderr, "connection to TX index %u tx IQ on port %d\n", idx, TX_IQ_PORT_0);
     }
-
+    
     // this will setup UDP port from dspserver. FIXME: I don't like this method as it can hang on the dspserver side.
     sendto(rfunit[idx].client.socket, (char*)&buf, sizeof(buf), 0, (struct sockaddr*)&cli_addr, cli_length);
     sleep(2);
     sendto(rfunit[idx].client.socket, (char*)&buf, sizeof(buf), 0, (struct sockaddr*)&cli_addr, cli_length);
     fprintf(stderr, "sent TX sync bytes to dspserver\n");
-
+    
     while (attached_xmits[rfunit[idx].radio_id] > 0)
     {
         if (rfunit[idx].client.socket > -1)
@@ -960,7 +996,8 @@ void* tx_IQ_thread(void* arg)
             bytes_read = recvfrom(rfunit[idx].client.socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr*)&cli_addr, &cli_length);
             if (bytes_read < 0)
             {
-             //   perror("recvfrom socket failed for tx IQ buffer");
+                //   perror("recvfrom socket failed for tx IQ buffer");
+                usleep(1000);
                 continue;
             }
             if (bytes_read > 30)
@@ -977,6 +1014,120 @@ void* tx_IQ_thread(void* arg)
     fprintf(stderr, "tx iq thread closed.\n");
     return NULL;
 } // end tx_IQ_thread
+
+
+/* Send RX audio to radio */
+void* rxaudio_send(void* arg)
+{
+    struct _rxaudio_entry *item;
+    int8_t idx = (intptr_t)arg;
+    int old_state, old_type;
+    short buffer[512];
+    short lsample = 0, rsample = 0;
+    
+    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &old_state);
+    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &old_type);
+    
+    while (attached_rcvrs[rfunit[idx].radio_id] > 0)
+    {
+        sem_wait(&rxaudio_semaphore[idx]);
+        item = TAILQ_FIRST(&rxaudio_buffer);
+        sem_post(&rxaudio_semaphore[idx]);
+        if (item == NULL)
+        {
+            usleep(100000);
+            if (protocol == ORIGINAL_PROTOCOL)
+                ozy_send_buffer();
+            continue;
+        }
+        
+        memcpy((char*)buffer, (char*)item->buffer, 512);
+        for (int j=0; j<256; j++)
+        {
+            lsample = buffer[j*2];
+            rsample = buffer[(j*2)+1];
+            
+            switch (protocol)
+            {
+                case ORIGINAL_PROTOCOL:
+                    old_protocol_audio_samples(lsample, rsample);
+                    break;
+                case NEW_PROTOCOL:
+                    new_protocol_audio_samples(lsample, rsample);
+                    break;
+            }
+        }
+        sem_wait(&rxaudio_semaphore[idx]);
+        TAILQ_REMOVE(&rxaudio_buffer, item, entries);
+        sem_post(&rxaudio_semaphore[idx]);
+        free(item->buffer);
+        free(item);
+    }
+    fprintf(stderr, "rxaudio_send thread closed.\n");
+    audio_enabled[rfunit[idx].radio_id] = false;
+    return NULL;
+} // end rxaudio_send
+
+
+/* Receive RX audio data from dspserver */
+void* rx_audio_thread(void* arg)
+{
+    struct sockaddr_in cli_addr;
+    struct _rxaudio_entry *item;
+    socklen_t cli_length;
+    int8_t idx = (intptr_t)arg;
+    int old_state, old_type;
+    int bytes_read;
+    short buffer[512];
+    char buf[2];
+    
+    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &old_state);
+    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &old_type);
+    
+    if (rfunit[idx].client.socket > -1)
+    {
+        cli_length = sizeof(cli_addr);
+        memset((char*)&cli_addr, 0, cli_length);
+        cli_addr.sin_family = AF_INET;
+        cli_addr.sin_addr.s_addr = inet_addr(dsp_server_address);
+        cli_addr.sin_port = htons(RX_AUDIO_PORT + rfunit[idx].radio_id);
+        
+        fprintf(stderr, "connection to RX index %u RX audio on port %d\n", idx, RX_AUDIO_PORT + rfunit[idx].radio_id);
+    }
+    
+    // this will setup UDP port from dspserver. FIXME: I don't like this method as it can hang on the dspserver side.
+    sendto(rfunit[idx].client.socket, (char*)&buf, sizeof(buf), 0, (struct sockaddr*)&cli_addr, cli_length);
+    sleep(2);
+    sendto(rfunit[idx].client.socket, (char*)&buf, sizeof(buf), 0, (struct sockaddr*)&cli_addr, cli_length);
+    fprintf(stderr, "sent RX audio sync bytes to dspserver\n");
+    
+    while (attached_rcvrs[rfunit[idx].radio_id] > 0)
+    {
+        if (rfunit[idx].client.socket > -1)
+        {
+            // get RX audio from DSP server
+            bytes_read = recvfrom(rfunit[idx].client.socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr*)&cli_addr, &cli_length);
+            if (bytes_read < 0)
+            {
+                //   perror("recvfrom socket failed for rx audio buffer");
+                usleep(1000);
+                continue;
+            }
+//            fprintf(stderr, "RX audio bytes: %d\n", bytes_read);
+            if (bytes_read > 30)
+            {
+                item = malloc(sizeof(*item));
+                item->buffer = malloc(512 * sizeof(short));
+                memcpy(item->buffer, (char*)&buffer, 512 * sizeof(short));
+                sem_wait(&rxaudio_semaphore[idx]);
+                TAILQ_INSERT_TAIL(&rxaudio_buffer, item, entries);
+                sem_post(&rxaudio_semaphore[idx]);
+            }
+        }
+    }
+    fprintf(stderr, "rx audio thread closed.\n");
+    return NULL;
+} // end rx_audio_thread
 
 
 void* keepalive_thread(void* arg)

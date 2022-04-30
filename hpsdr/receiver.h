@@ -14,7 +14,17 @@ typedef struct _receiver {
     int ddc;
     int adc;
 
-    int displaying;
+    long long frequency;
+    long long lo;
+    int ctun;
+    long long ctun_frequency;
+    long long offset;
+    int mode;
+    int filter;
+    int rit_enabled;
+    long long rit;
+
+//    int displaying;
     //  audio_t audio_channel;
     int sample_rate;
     int buffer_size;
@@ -26,7 +36,7 @@ typedef struct _receiver {
     //guchar *audio_buffer;
     //int audio_index;
     //uint32 audio_sequence;
-    int update_timer_id;
+//    int update_timer_id;
     double meter;
 
     int dither;
@@ -38,8 +48,8 @@ typedef struct _receiver {
     int alex_antenna;
     int alex_attenuation;
 
-    int filter_low;
-    int filter_high;
+//    int filter_low;
+//    int filter_high;
 
     int local_audio;
     int mute_when_not_active;
@@ -52,12 +62,12 @@ typedef struct _receiver {
 
     int low_latency;
 
-    int squelch_enable;
-    double squelch;
+//    int squelch_enable;
+//    double squelch;
 
     int deviation;
 
-    int mute_radio;
+//    int mute_radio;
 
     double *buffer;
     void *resampler;

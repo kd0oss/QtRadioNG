@@ -68,7 +68,7 @@ class Band : public QObject {
 public:
     Band();
     virtual ~Band();
-    void initBand(int8_t, int b);
+    void initBand(int8_t, int8_t, int b);
     void selectBand(int b);
     void quickMemStore();
 //    void bandSelected(int b,long long currentFrequency);
@@ -100,7 +100,7 @@ public:
     BandLimit getBandLimits(long long min, long long max);
 
 signals:
-    void bandChanged(int8_t,int previousBand,int newBand);
+    void bandChanged(int8_t, int8_t, int previousBand,int newBand);
     void printStatusBar(QString message);
 
 private:
@@ -108,6 +108,7 @@ private:
     int currentStack;
     int workingStack;
     int8_t index;
+    int8_t channel;
 //    int readPtr;
 //    int stack[BAND_LAST];
     BandStackEntry bandstack[BAND_LAST][BANDSTACK_ENTRIES];

@@ -210,7 +210,7 @@ void ServerConnection::connected()
     qbyte.append((char)0);
     qbyte.append((char)QUESTION);
     qbyte.append((char)QINFO);
- //   sendCommand(qbyte);
+    //   sendCommand(qbyte);
     /*
     qbyte.append((char)QUESTION);
     qbyte.append((char)QDSPVERSION);
@@ -326,20 +326,20 @@ void ServerConnection::cmdSocketData()
             bytes += thisRead;
             if (bytes == length)
             {
-                 qDebug("XML: %s", xml);
-                 manifest_xml[radio_index].clear();
-                 manifest_xml[radio_index].append(xml);
-                 QStringList list = manifest_xml[active_radios].split(">");
-                 available_xcvrs[radio_index++] = list[0].split("=").at(1).toInt();
-                 qDebug("Radio Type: %s\n", getXcvrProperty(0, 0, "radio_type").toLatin1().data());
-                 bytes = 0;
-                 state = READ_HEADER;
-                 createChannels(radio_index);
-                 emit activateRadioSig();
+                qDebug("XML: %s", xml);
+                manifest_xml[radio_index].clear();
+                manifest_xml[radio_index].append(xml);
+                QStringList list = manifest_xml[active_radios].split(">");
+                available_xcvrs[radio_index++] = list[0].split("=").at(1).toInt();
+                qDebug("Radio Type: %s\n", getXcvrProperty(0, 0, "radio_type").toLatin1().data());
+                bytes = 0;
+                state = READ_HEADER;
+                createChannels(radio_index);
+                emit activateRadioSig();
             }
             break;
 
-         case READ_QINFO:
+        case READ_QINFO:
             thisRead = tcpSocket->read(&buffer[bytes], length - bytes);
             bytes += thisRead;
             if (bytes == length)
@@ -361,13 +361,13 @@ void ServerConnection::cmdSocketData()
                 int left = l.toInt();
                 int right = r.toInt();
                 int current_channel = c.toInt();
-   //             emit setCurrentChannel(current_channel);
+                //             emit setCurrentChannel(current_channel);
                 emit slaveSetFreq(newf);
-      //          emit slaveSetFilter(left, right);
-    //            emit slaveSetZoom(zoom);
+                //          emit slaveSetFilter(left, right);
+                //            emit slaveSetZoom(zoom);
                 if (newmode != lastMode)
                 {
-     //               emit slaveSetMode(newmode);
+                    //               emit slaveSetMode(newmode);
                 }
 
                 emit printStatusBar(" .. Info. ");    //added by gvj
@@ -775,14 +775,16 @@ void ServerConnection::createChannels(int radios)
 {
     char line[80];
     char *manifest = NULL;
-    char ip_addr[16];
-    char mac_addr[18];
+    char ip_addr[16] = "";
+    char mac_addr[18] = "";
     bool local_audio = false;
     bool local_mic = false;
     int  index = 0;
     int  t = 0;
+    int  r = 0;
     int  radio_id = 0;
     char radio_type[25];
+    char radio_name[25];
     int  num_chs = 0;
     int  num_rcvrs = 0;
     bool bs_capable = false;
@@ -827,91 +829,101 @@ void ServerConnection::createChannels(int radios)
                         sscanf(line, "%*s %s %*s", radio_type);
                     }
                     else
-                        if (strstr(line, "supported_receivers"))
+                        if (strstr(line, "name"))
                         {
-                            sscanf(line, "%*s %d %*s", &num_rcvrs);
+                            sscanf(line, "%*s %s %*s", radio_name);
                         }
                         else
-                            if (strstr(line, "bandscope"))
+                            if (strstr(line, "supported_receivers"))
                             {
-                                int tmp=0;
-                                sscanf(line, "%*s %d %*s", &tmp);
-                                if (tmp == 1)
-                                    bs_capable = true;
-                                else
-                                    bs_capable = false;
+                                r = 0;
+                                sscanf(line, "%*s %d %*s", &num_rcvrs);
                             }
                             else
-                                if (strstr(line, "supported_transmitters"))
+                                if (strstr(line, "bandscope"))
                                 {
-                                    sscanf(line, "%*s %d %*s", &t);
+                                    int tmp=0;
+                                    sscanf(line, "%*s %d %*s", &tmp);
+                                    if (tmp == 1)
+                                        bs_capable = true;
+                                    else
+                                        bs_capable = false;
                                 }
                                 else
-                                    if (strstr(line, "mac_address"))
-                                        sscanf(line, "%*s %s %*s", mac_addr);
+                                    if (strstr(line, "supported_transmitters"))
+                                    {
+                                        sscanf(line, "%*s %d %*s", &t);
+                                    }
                                     else
-                                        if (strstr(line, "ip_address"))
-                                            sscanf(line, "%*s %s %*s", ip_addr);
+                                        if (strstr(line, "mac_address"))
+                                            sscanf(line, "%*s %s %*s", mac_addr);
                                         else
-                                            if (strstr(line, "local_audio"))
-                                            {
-                                                int tmp = 0;
-                                                sscanf(line, "%*s %d %*s", &tmp);
-                                                if (tmp == 1)
-                                                    local_audio = true;
-                                                else
-                                                    local_audio = false;
-                                            }
+                                            if (strstr(line, "ip_address"))
+                                                sscanf(line, "%*s %s %*s", ip_addr);
                                             else
-                                                if (strstr(line, "local_mic"))
+                                                if (strstr(line, "local_audio"))
                                                 {
                                                     int tmp = 0;
                                                     sscanf(line, "%*s %d %*s", &tmp);
                                                     if (tmp == 1)
-                                                        local_mic = true;
+                                                        local_audio = true;
                                                     else
-                                                        local_mic = false;
+                                                        local_audio = false;
                                                 }
                                                 else
-                                                    if (strstr(line, "ant_switch"))
+                                                    if (strstr(line, "local_mic"))
                                                     {
-                                                        int ant_switch = 0;
-                                                        sscanf(line, "%*s %d %*s", &ant_switch);
-                                                        for (;x<num_rcvrs;x++)
-                                                        {   // setup receive channels
-                                                            channels[active_channels].radio.radio_id = active_radios-1;
-                                                            strcpy(channels[active_channels].radio.ip_address, ip_addr);
-                                                            strcpy(channels[active_channels].radio.mac_address, mac_addr);
-                                                            channels[active_channels].radio.local_audio = local_audio;
-                                                            channels[active_channels].radio.local_mic = local_mic;
-                                                            channels[active_channels].radio.ant_switch = ant_switch;
-                                                            channels[active_channels].dsp_channel = num_chs++;
-                                                            channels[active_channels].index = x;
-                                                            channels[active_channels].radio.bandscope_capable = bs_capable;
-                                                            strcpy(channels[active_channels].radio.radio_type, radio_type);
-                                                            channels[active_channels].isTX = false;
-                                                            channels[active_channels].enabled = false;
-                                                            channels[active_channels].spectrum.samples = NULL;
-                                                            active_channels++;
-                                                        }
-                                                        for (;x<t+num_rcvrs;x++)
-                                                        {   // setup transmit channels
-                                                            channels[active_channels].radio.radio_id = active_radios-1;
-                                                            strcpy(channels[active_channels].radio.ip_address, ip_addr);
-                                                            strcpy(channels[active_channels].radio.mac_address, mac_addr);
-                                                            channels[active_channels].radio.local_audio = local_audio;
-                                                            channels[active_channels].radio.local_mic = local_mic;
-                                                            channels[active_channels].radio.ant_switch = ant_switch;
-                                                            channels[active_channels].dsp_channel = num_chs++;
-                                                            channels[active_channels].index = x;
-                                                            channels[active_channels].radio.bandscope_capable = bs_capable;
-                                                            strcpy(channels[active_channels].radio.radio_type, radio_type);
-                                                            channels[active_channels].isTX = true;
-                                                            channels[active_channels].enabled = false;
-                                                            channels[active_channels].spectrum.samples = NULL;
-                                                            active_channels++;
-                                                        }
+                                                        int tmp = 0;
+                                                        sscanf(line, "%*s %d %*s", &tmp);
+                                                        if (tmp == 1)
+                                                            local_mic = true;
+                                                        else
+                                                            local_mic = false;
                                                     }
+                                                    else
+                                                        if (strstr(line, "ant_switch"))
+                                                        {
+                                                            int ant_switch = 0;
+                                                            sscanf(line, "%*s %d %*s", &ant_switch);
+                                                            for (;r<num_rcvrs;r++)
+                                                            {   // setup receive channels
+                                                                channels[active_channels].radio.radio_id = active_radios-1;
+                                                                strcpy(channels[active_channels].radio.ip_address, ip_addr);
+                                                                strcpy(channels[active_channels].radio.mac_address, mac_addr);
+                                                                channels[active_channels].radio.local_audio = local_audio;
+                                                                channels[active_channels].radio.local_mic = local_mic;
+                                                                channels[active_channels].radio.ant_switch = ant_switch;
+                                                                channels[active_channels].dsp_channel = num_chs++;
+                                                                channels[active_channels].index = r;
+                                                                channels[active_channels].id = active_channels;
+                                                                channels[active_channels].radio.bandscope_capable = bs_capable;
+                                                                strcpy(channels[active_channels].radio.radio_type, radio_type);
+                                                                strcpy(channels[active_channels].radio.radio_name, radio_name);
+                                                                channels[active_channels].isTX = false;
+                                                                channels[active_channels].enabled = false;
+                                                                channels[active_channels].spectrum.samples = NULL;
+                                                                active_channels++;
+                                                            }
+                                                            for (;r<t+num_rcvrs;r++)
+                                                            {   // setup transmit channels
+                                                                channels[active_channels].radio.radio_id = active_radios-1;
+                                                                strcpy(channels[active_channels].radio.ip_address, ip_addr);
+                                                                strcpy(channels[active_channels].radio.mac_address, mac_addr);
+                                                                channels[active_channels].radio.local_audio = local_audio;
+                                                                channels[active_channels].radio.local_mic = local_mic;
+                                                                channels[active_channels].radio.ant_switch = ant_switch;
+                                                                channels[active_channels].dsp_channel = num_chs++;
+                                                                channels[active_channels].index = r;
+                                                                channels[active_channels].id = active_channels;
+                                                                channels[active_channels].radio.bandscope_capable = bs_capable;
+                                                                strcpy(channels[active_channels].radio.radio_type, radio_type);
+                                                                strcpy(channels[active_channels].radio.radio_name, radio_name);
+                                                                channels[active_channels].isTX = true;
+                                                                channels[active_channels].enabled = false;
+                                                                channels[active_channels].spectrum.samples = NULL;
+                                                                active_channels++;
+                                                            }
+                                                        }
             } // end if
         } // end for
         free(manifest);
@@ -1135,9 +1147,9 @@ void SpectrumConnection::spectrumSocketData()
             bytes += thisRead;
             if (bytes == length)
             {
-                 bytes = 0;
-                 state = READ_HEADER;
-                 emit spectrumBuffer(channel);
+                bytes = 0;
+                state = READ_HEADER;
+                emit spectrumBuffer(channel);
             }
             break;
         default:
@@ -1325,7 +1337,7 @@ void WidebandConnection::widebandSocketData()
         switch (state)
         {
         case READ_HEADER:
-       //     fprintf(stderr, "READ_HEADER: hdr size: %d bytes: %d\n", header_size, bytes);
+            //     fprintf(stderr, "READ_HEADER: hdr size: %d bytes: %d\n", header_size, bytes);
             thisRead = tcpSocket->read((char*)&channel+bytes, header_size - bytes);
             if (thisRead < 0)
             {
@@ -1338,7 +1350,7 @@ void WidebandConnection::widebandSocketData()
             {
                 length = channel.spectrum.length;
                 if ((length < 512) || (length > 1920))
-       //         if (length != 512)
+                    //         if (length != 512)
                 {
                     fprintf(stderr, "Wb spec Len: %u\n", (int)length);
                     state = READ_HEADER;
@@ -1358,9 +1370,9 @@ void WidebandConnection::widebandSocketData()
             bytes += thisRead;
             if (bytes == length)
             {
-                 bytes = 0;
-                 state = READ_HEADER;
-                 emit bandscopeBuffer(channel.spectrum);
+                bytes = 0;
+                state = READ_HEADER;
+                emit bandscopeBuffer(channel.spectrum);
             }
             break;
 
@@ -1578,9 +1590,9 @@ void AudioConnection::socketData()
             bytes += thisRead;
             if (bytes == length)
             {
-                 bytes = 0;
-                 state = READ_HEADER;
-                 emit audioBuffer(hdr, buffer);
+                bytes = 0;
+                state = READ_HEADER;
+                emit audioBuffer(hdr, buffer);
             }
             break;
 
@@ -1724,11 +1736,11 @@ void MicAudioConnection::socketData()
 void MicAudioConnection::sendAudio(int8_t channel, int length, unsigned char* data)
 {
     char buffer[MICS_BUFFER_SIZE];
-//    int  i;
+    //    int  i;
     int  bytesWritten;
 
-//    for (i=0; i < SEND_BUFFER_SIZE; i++)
-  //      buffer[i] = 0;
+    //    for (i=0; i < SEND_BUFFER_SIZE; i++)
+    //      buffer[i] = 0;
     if (tcpSocket!=NULL && tcpSocket->isValid() && tcpSocket->isWritable())
     {
         buffer[0] = channel;
@@ -1738,7 +1750,7 @@ void MicAudioConnection::sendAudio(int8_t channel, int length, unsigned char* da
         bytesWritten = tcpSocket->write(buffer, MICS_BUFFER_SIZE);
         if (bytesWritten != MICS_BUFFER_SIZE)
             qDebug() << "mic audio: write error";
-//        qDebug("send mic....");
+        //        qDebug("send mic....");
         //tcpSocket->flush();
         mutex.unlock();
     }

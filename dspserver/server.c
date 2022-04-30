@@ -79,6 +79,7 @@
 #include "buffer.h"
 #include "G711A.h"
 #include "util.h"
+#include "web.h"
 
 #define true  1
 #define false 0
@@ -87,7 +88,6 @@
 #define BASE_PORT_SSL 9000
 
 #define SAMPLE_BUFFER_SIZE 4096
-#define TX_BUFFER_SIZE 512 //1024
 
 #define MSG_SIZE 64
 #define MIC_MSG_SIZE 518 //64
@@ -105,16 +105,24 @@ CHANNEL channels[MAX_CHANNELS];
 short int connected_radios;
 
 long sample_rate = 48000L;
+//int  TX_BUFFER_SIZE = 512;
 
 static pthread_t mic_audio_client_thread_id,
                  client_thread_id,
                  audio_client_thread_id,
                  spectrum_client_thread_id,
-                 wideband_client_thread_id,                 
+                 wideband_client_thread_id,    
+                 rx_audio_thread_id,
                  tx_thread_id[MAX_CHANNELS];
 
 static int port = BASE_PORT;
 static int port_ssl = BASE_PORT_SSL;
+
+struct        sockaddr_in radio_audio_addr[MAX_CHANNELS];
+socklen_t     radio_audio_length[MAX_CHANNELS];
+int           radio_audio_socket[MAX_CHANNELS];
+
+static bool rx_audio_enabled[MAX_CHANNELS];  //FIXME:This doesn't need to be MAX_CHANNELS quantity.
 
 int zoom = 0;
 int low, high;            // filter low/high
@@ -155,6 +163,7 @@ sem_t audio_bufevent_semaphore,
       wideband_semaphore,
       bufferevent_semaphore,
       mic_semaphore,
+      rx_audio_semaphore,
       spectrum_semaphore,
       wb_iq_semaphore,
       iq_semaphore;
@@ -162,9 +171,12 @@ sem_t audio_bufevent_semaphore,
 
 // Mic_audio_stream is the HEAD of a queue for encoded Mic audio samples from QtRadio
 TAILQ_HEAD(, audio_entry) Mic_audio;
-
+      
 // Mic_audio client list
 TAILQ_HEAD(, _client_entry) Mic_audio_client_list;
+
+// rx_audio client list
+TAILQ_HEAD(, _memory_entry) rx_audio_client_list;
 
 // Client_list is the HEAD of a queue of connected clients
 TAILQ_HEAD(, _client_entry) Client_list;
@@ -182,6 +194,7 @@ void* client_thread(void* arg);
 void* spectrum_client_thread(void* arg);
 void* audio_client_thread(void* arg);
 void* tx_thread(void* arg);
+void* rx_audio_thread(void* arg);
 void* mic_audio_client_thread(void* arg);
 void* wideband_client_thread(void* arg);
 
@@ -230,6 +243,7 @@ void audio_stream_init(int receiver)
 void audio_stream_queue_add(unsigned char *buffer, int length)
 {
     client_entry *client_item;
+    memory_entry *memory_item;
 
     sem_wait(&audio_bufevent_semaphore);
     //    if (send_audio)
@@ -238,6 +252,10 @@ void audio_stream_queue_add(unsigned char *buffer, int length)
         {
             bufferevent_write(client_item->bev, buffer, length);
         }
+        memory_item = malloc(sizeof(*memory_item));
+        memory_item->memory = malloc(512);
+        memcpy(memory_item->memory, (char*)buffer, 512);
+        TAILQ_INSERT_TAIL(&rx_audio_client_list, memory_item, entries);
     }
     //    else free(buffer);
     sem_post(&audio_bufevent_semaphore);
@@ -317,12 +335,14 @@ void server_init(int receiver)
         channels[i].id = i;
         channels[i].radio.radio_id = -1;
         channels[i].dsp_channel = -1;
+	    channels[i].frequency = 0;
         channels[i].index = -1;
         channels[i].radio.bandscope_capable = 0;
         channels[i].isTX = false;
         channels[i].radio.mox = false;
         channels[i].enabled = false;
         channels[i].spectrum.samples = NULL;
+        rx_audio_enabled[i] = false;
     }
 
     evthread_use_pthreads();
@@ -341,7 +361,8 @@ void server_init(int receiver)
     TAILQ_INIT(&Wideband_client_list);
     TAILQ_INIT(&Mic_audio_client_list);
     TAILQ_INIT(&Mic_audio);
-
+    TAILQ_INIT(&rx_audio_client_list);
+    
     sem_init(&mic_semaphore, 0, 1);
     sem_init(&bufferevent_semaphore, 0, 1);
     sem_init(&spec_bufevent_semaphore, 0, 1);
@@ -351,7 +372,8 @@ void server_init(int receiver)
     sem_init(&wb_bufevent_semaphore, 0, 1);
     sem_init(&iq_semaphore, 0, 1);
     sem_init(&wb_iq_semaphore, 0, 1);
-
+    sem_init(&rx_audio_semaphore, 0, 1);
+    
     signal(SIGPIPE, SIG_IGN);
 
 //    spectrum_timer_init();
@@ -397,6 +419,8 @@ void server_init(int receiver)
     }
     else
         rc = pthread_detach(wideband_client_thread_id);
+    
+    //   init_http_server();
 } // end server_init
 
 
@@ -429,6 +453,11 @@ void *tx_thread(void *arg)
     int           radio_mic_socket = -1;
     MIC_BUFFER    radio_mic_buffer;
     float        *data_out;
+    int           TX_BUFFER_SIZE = 512;
+
+    if (channels[ch].protocol == 1)
+        TX_BUFFER_SIZE = 1024;
+
     double        tx_IQ[TX_BUFFER_SIZE*8];
     double        mic_buf[TX_BUFFER_SIZE*2];
 
@@ -482,6 +511,7 @@ void *tx_thread(void *arg)
             if (bytes_read <= 0)
             {
                 sem_post(&iq_semaphore);
+                usleep(100);
                 continue;
             }
         //    fprintf(stderr, "F: %2.2f  R: %2.2f\n", radio_mic_buffer.fwd_pwr, radio_mic_buffer.rev_pwr);
@@ -542,6 +572,95 @@ void *tx_thread(void *arg)
     fprintf(stderr, "tx_thread stopped.\n");
     return NULL;
 } // end tx_thread
+
+
+void* rx_audio_thread(void* arg)
+{
+    struct        _memory_entry *item = NULL;
+    int8_t        ch = (intptr_t)arg;
+    unsigned char abuf[512];
+    short         samples[512];
+    
+    sdr_log(SDR_LOG_INFO, "rx_auido_thread STARTED\n");
+    
+    // create a socket to send radio audio from radio.
+    radio_audio_socket[ch] = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (radio_audio_socket[ch] < 0)
+    {
+        perror("rx_audio_thread: create radio audio socket failed");
+        exit(1);
+    }
+    
+    struct timeval read_timeout;
+    read_timeout.tv_sec = 0;
+    read_timeout.tv_usec = 10;
+    setsockopt(radio_audio_socket[ch], SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
+    
+    radio_audio_length[ch] = sizeof(radio_audio_addr[ch]);
+    memset(&radio_audio_addr[ch], 0, radio_audio_length[ch]);
+    radio_audio_addr[ch].sin_family = AF_INET;
+    radio_audio_addr[ch].sin_addr.s_addr = htonl(INADDR_ANY);
+    radio_audio_addr[ch].sin_port = htons(RX_AUDIO_PORT + channels[ch].radio.radio_id);
+    
+    if (bind(radio_audio_socket[ch], (struct sockaddr*)&radio_audio_addr[ch], radio_audio_length[ch]) < 0)
+    {
+        perror("rx_audio: bind socket failed for radio audio socket");
+        exit(1);
+    }
+    
+    fprintf(stderr, "rx_audio: radio audio bound to port %d socket %d   Use radio speaker: %d\n", ntohs(radio_audio_addr[ch].sin_port), radio_audio_socket[ch], radioMic);
+    
+    while (!getStopIQIssued())
+    {
+        sem_wait(&rx_audio_semaphore);
+        item = TAILQ_FIRST(&rx_audio_client_list);
+        sem_post(&rx_audio_semaphore);
+        if (item == NULL)
+        {
+            usleep(1000);
+            continue;
+        }
+        else
+        {
+            if (rx_audio_enabled[ch])
+            {
+                memcpy((unsigned char*)abuf, (unsigned char*)&item->memory[0], 512);
+                for (int j=0; j < 256; j++)
+                {
+                    samples[j*2] = (short)abuf[j*2];
+                    samples[j*2+1] = (short)abuf[j*2+1];
+                }
+                int bytes_written = sendto(radio_audio_socket[ch], (char*)&samples, sizeof(samples), 0, (struct sockaddr *)&radio_audio_addr[ch], radio_audio_length[ch]);
+            }
+            sem_wait(&rx_audio_semaphore);
+            TAILQ_REMOVE(&rx_audio_client_list, item, entries);
+            sem_post(&rx_audio_semaphore);
+            free(item->memory);
+            free(item);
+        }
+    } // end while
+    close(radio_audio_socket[ch]);
+    rx_audio_enabled[channels[ch].radio.radio_id] = false;
+    fprintf(stderr, "rx_audio_thread stopped.\n");
+    return NULL;
+} // end rx_audio_thread
+
+
+void start_rx_audio(int8_t channel)
+{
+    if (rx_audio_enabled[channels[channel].radio.radio_id]) return;
+
+    int rc = pthread_create(&rx_audio_thread_id, NULL, rx_audio_thread, (void*)(intptr_t)channel);
+    if (rc != 0)
+    {
+        fprintf(stderr, "pthread_create failed on rx_audio_thread: rc=%d\n", rc);
+    }
+    else
+    {
+        rc = pthread_detach(rx_audio_thread_id);
+        rx_audio_enabled[channels[channel].radio.radio_id] = true;
+    }
+} // end start_rx_audio
 
 
 void* client_thread(void* arg)
@@ -1990,7 +2109,7 @@ void do_accept_audio(evutil_socket_t listener, short event, void *arg)
         return;
     }
     char ipstr[16];
-    // add newly connected client to Audio_client_list
+    // add newly connected client to 
     item = malloc(sizeof(*item));
     memset(item, 0, sizeof(*item));
     memcpy(&item->client, &ss, sizeof(ss));

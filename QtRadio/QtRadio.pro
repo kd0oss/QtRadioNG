@@ -72,6 +72,7 @@ SOURCES += main.cpp\
     XvtrEntry.cpp \
     Bookmarks.cpp \
     KeypadDialog.cpp \
+    sdr1000frame.cpp \
     smeter.cpp \
     rigctl.cpp \
     vfo.cpp \
@@ -86,7 +87,8 @@ SOURCES += main.cpp\
     radiosdialog.cpp
 
 
-HEADERS  += \ 
+HEADERS  += \
+    sdr1000frame.h\
     UI.h \
     Mode.h \
     Filters.h \
@@ -124,7 +126,8 @@ HEADERS  += \
     hermesframe.h \
     radiosdialog.h
 
-FORMS    += \   
+FORMS    += \
+    sdr1000frame.ui \
     UI.ui \
     Configure.ui \
     Bandscope.ui \

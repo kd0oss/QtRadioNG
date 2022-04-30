@@ -132,9 +132,14 @@ typedef struct _mic_buffer
 } MIC_BUFFER;
 
 typedef struct _txiq_entry {
-        char* buffer;
-        TAILQ_ENTRY(_txiq_entry) entries;
+    char* buffer;
+    TAILQ_ENTRY(_txiq_entry) entries;
 } txiq_entry;
+
+typedef struct _rxaudio_entry {
+    char* buffer;
+    TAILQ_ENTRY(_rxaudio_entry) entries;
+} rxaudio_entry;
 
 extern void create_client_thread(char*);
 extern void init_receiver(int8_t);

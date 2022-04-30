@@ -59,7 +59,7 @@ void RadiosDialog::fillRadioList()
         {
             if (channels[x].radio.radio_id == i)
             {
-                ui->radioList->addItem(QString("%1   %2   %3   %4").arg(i+1).arg(channels[x].radio.radio_type).arg(channels[x].radio.mac_address).arg(channels[x].radio.ip_address));
+                ui->radioList->addItem(QString("%1   %2   %3   %4").arg(i+1).arg(channels[x].radio.radio_name).arg(channels[x].radio.mac_address).arg(channels[x].radio.ip_address));
                 break;
             }
         }
@@ -116,7 +116,15 @@ void RadiosDialog::getRadioDetails()
     txrxPair[1] = -1;
 
     selected_channel = radio_id;
-    radio_type = ui->radioList->currentItem()->text().split(" ").at(1);
+    for (int x=0;x<active_channels;x++)
+    {
+        if (channels[x].radio.radio_id == radio_id)
+        {
+            radio_type = channels[x].radio.radio_type;
+            break;
+        }
+    }
+    //radio_type = ui->radioList->currentItem()->text().split(" ").at(1);
 
     ui->receiver1Ckb->setChecked(false);
     ui->receiver2Ckb->setChecked(false);

@@ -572,12 +572,16 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             {
                 int8_t rx = channels[ch].dsp_channel;
 
-                OpenChannel(rx, 512, 2048, 48000, 48000, 48000, 0, 0, 0.010, 0.025, 0.000, 0.010, 0);
-                printf("RX channel %d opened.\n", rx);fflush(stdout);
+                int buffer_size = 512;
+                if (channels[ch].protocol == 1)
+                    buffer_size = 1024;
 
-                create_anbEXT(rx, 0, 512, 48000, 0.0001, 0.0001, 0.0001, 0.05, 20);
-                create_nobEXT(rx, 0, 0, 512, 48000, 0.0001, 0.0001, 0.0001, 0.05, 20);
-                create_divEXT(rx, 0, 2, 512);
+                OpenChannel(rx, buffer_size, 2048, 48000, 48000, 48000, 0, 0, 0.010, 0.025, 0.000, 0.010, 0);
+                printf("Ch: %d  --  RX channel %d opened.\n", ch, rx);fflush(stdout);
+
+                create_anbEXT(rx, 0, buffer_size, 48000, 0.0001, 0.0001, 0.0001, 0.05, 20);
+                create_nobEXT(rx, 0, 0, buffer_size, 48000, 0.0001, 0.0001, 0.0001, 0.05, 20);
+                create_divEXT(rx, 0, 2, buffer_size);
 
                 RXASetNC(rx, 2048);
                 RXASetMP(rx, 0);
@@ -622,7 +626,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
                 int rc = 0;
                 XCreateAnalyzer(rx, &rc, 262144, 1, 1, "");
                 if (rc < 0) printf("XCreateAnalyzer failed on channel %d.\n", rx);
-                initAnalyzer(rx, 128, 15, 512);  // sample (128) will get changed to spectrum display width when client connects.
+                init_analyzer(rx, buffer_size);
 
                 SetDisplayDetectorMode(rx, 0, DETECTOR_MODE_PEAK/*display_detector_mode*/);
                 SetDisplayAverageMode(rx, 0, AVERAGE_MODE_NONE/*display_average_mode*/);
@@ -643,14 +647,18 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
                 int8_t tx = channels[ch].dsp_channel;
                 if (tx < 0) break;
 
-                OpenChannel(tx, 512, 2048, 48000, 96000, 192000, 1, 0, 0.010, 0.025, 0.000, 0.010, 0);
+                int buffer_size = 512;
+                if (channels[ch].protocol == 1)
+                    buffer_size = 1024;
+
+                OpenChannel(tx, buffer_size, 2048, 48000, 96000, 192000, 1, 0, 0.010, 0.025, 0.000, 0.010, 0);
                 printf("TX channel %d opened.\n", tx);fflush(stdout);
 
                 rc = 0;
                 XCreateAnalyzer(tx, &rc, 262144, 1, 1, "");
                 if (rc < 0) printf("XCreateAnalyzer failed on TX channel %d.\n", tx);
 
-                initAnalyzer(tx, 128, 15, 2048);  // sample (128) will get changed to spectrum display width when client connects.
+                initAnalyzer(tx, 128, 15, buffer_size);  // sample (128) will get changed to spectrum display width when client connects.
 
                 TXASetNC(tx, 2048);
                 TXASetMP(tx, 0);
@@ -870,6 +878,20 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             double level = atof((const char*)(message+2));
             SetRXAAGCHangLevel(channels[ch].dsp_channel, level);
+        }
+            break;
+
+        case SETTXLEVELERATTACK:
+        {
+            int attack = atoi((const char*)(message+2));
+            SetTXALevelerAttack(channels[ch].dsp_channel, attack);
+        }
+            break;
+
+        case SETTXLEVELERDECAY:
+        {
+            int dekay = atoi((const char*)(message+2));
+            SetTXALevelerDecay(channels[ch].dsp_channel, dekay);
         }
             break;
 
@@ -1221,10 +1243,14 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
                 channels[ch].spectrum.nsamples = samp;
                 channels[ch].spectrum.fps = fps;
             }
+            int buffer_size = 512;
+            if (channels[ch].protocol == 1)
+                buffer_size = 1024;
+
             if (!channels[ch].isTX)
-                initAnalyzer(channels[ch].dsp_channel, samp, fps, 512);
+                initAnalyzer(channels[ch].dsp_channel, samp, fps, buffer_size);
             else
-                initAnalyzer(channels[ch].dsp_channel, samp, fps, 2048);
+                initAnalyzer(channels[ch].dsp_channel, samp, fps, buffer_size);
             sem_post(&bufferevent_semaphore);
             sdr_log(SDR_LOG_INFO, "Spectrum fps set to = '%d'  Samples = '%d'\n", fps, samp);
         }
@@ -1637,6 +1663,14 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             channels[ch].spectrum.sample_rate = sample_rate;
             SetChannelState(channels[ch].dsp_channel, 0, 1);
             hwSetSampleRate(ch, sample_rate);
+            SetDSPSamplerate(ch, sample_rate);
+  //          int buffer_size = 512;
+  //          if (channels[ch].protocol == 1)
+ //               buffer_size = 1024;
+ //           init_analyzer(ch, buffer_size);
+ //           SetInputSamplerate(ch, sample_rate);
+            SetEXTANBSamplerate(ch, sample_rate);
+            SetEXTNOBSamplerate(ch, sample_rate);
             setSpeed(ch, sample_rate);
             SetChannelState(channels[ch].dsp_channel, 1, 0);
         }
@@ -1823,13 +1857,13 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             break;
 
         default:
-            fprintf(stderr, "READCB: Unknown command. 0x%02X\n", message[1]);
+            fprintf(stderr, "DSP_COM: Unknown command. 0x%02X\n", message[1]);
             break;
         }
     }
     return "OK";
 badcommand:
-    sdr_log(SDR_LOG_INFO, "Invalid command: %d  on Ch: %d\n", message[1], ch);
+    sdr_log(SDR_LOG_INFO, "DSP_COM: invalid command: %d  on Ch: %d\n", message[1], ch);
     return "ERROR";
 } // end dsp_command
 
