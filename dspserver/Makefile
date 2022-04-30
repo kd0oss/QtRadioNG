@@ -7,8 +7,8 @@ default:	dspserver
 
 all:	dspserver
 
-dspserver: audiostream.o G711A.o util.o web.o hardware.o server.o dsp.o main.o
-	$(CC) $(CFLAGS) -o dspserver audiostream.o G711A.o util.o web.o hardware.o server.o dsp.o main.o $(LIBDIR) $(LIBS)
+dspserver: audiostream.o G711A.o util.o hardware.o server.o dsp.o main.o
+	$(CC) $(CFLAGS) -o dspserver audiostream.o G711A.o util.o hardware.o server.o dsp.o main.o $(LIBDIR) $(LIBS)
 
 clean:
 	$(RM) *.o *~ $(MAIN)
