@@ -21,7 +21,7 @@
 #ifndef DSP_H
 #define DSP_H
 
-#include "server.h"
+//#include "server.h"
 
 extern float txfwd;
 extern float txref;
@@ -34,8 +34,8 @@ extern void runSpectrum0(int8_t ch, double *data);
 extern int runGetPixels(int8_t ch, float *data);
 extern void runRXAGetaSipF1(int8_t ch, float *data, int samples);
 extern void process_tx_iq_data(int channel, double *mic_buf, double *tx_IQ);
-extern void shutdown_client_channels(struct _client_entry *current_item);
-extern void shutdown_wideband_channels(struct _client_entry *item);
+extern void shutdown_client_rfstreams(struct _client_entry *current_item);
+extern void shutdown_wideband_rfstreams(struct _client_entry *item);
 extern void wb_destroy_analyzer(int8_t ch);
 extern char *dsp_command(struct _client_entry*, unsigned char*);
 #endif

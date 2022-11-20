@@ -243,13 +243,13 @@ void vfo::wheelEvent(QWheelEvent *event)
     QString str;
     long long x;
     int digit;
-    int direction = 1;
+    int direction = -1;
     bool isVfoA = true;
     static const int mult[9] = {100000000,10000000,1000000,100000,10000,1000,100,10,1};
 
     digit = getDigit(event->x(), event->y());
     if (digit != 9) {  // getDigit returns 9 if click was outside display area so we just fall through.
-        if (event->delta() < 0) direction = -1;  // x becomes pos or neg depending on wheel rotation.
+        if (event->delta() < 0) direction = 1;  // x becomes pos or neg depending on wheel rotation.
         if (digit > 9) { // getDigit returns 10 ... 18 if we clicked on vfoB
             digit = digit - 10; // so convert to 1 ... 8.
             isVfoA = false;

@@ -654,13 +654,10 @@ static void new_protocol_general() {
 
 static void new_protocol_high_priority() {
     int i;
-    //    BAND *band;
     long long rxFrequency;
     long long txFrequency;
     long phase;
     int ddc;
-    //int txvfo=get_tx_vfo();
-    //int txmode=get_tx_mode();
 
     if (data_socket==-1) {
         return;
@@ -679,13 +676,14 @@ static void new_protocol_high_priority() {
     //
     if (transmitter != NULL)
     {
-        if (transmitter->txmode==modeCWU || transmitter->txmode==modeCWL) {
-            if (isTransmitting() && (!cw_keyer_internal || !cw_breakin || CAT_cw_is_active)) high_priority_buffer_to_radio[4]|=0x02;
-        } else {
+//        if (transmitter->txmode==modeCWU || transmitter->txmode==modeCWL) {
+//            if (isTransmitting() && (!cw_keyer_internal || !cw_breakin || CAT_cw_is_active))
+//                high_priority_buffer_to_radio[4]|=0x02;
+//        } else {
             if (isTransmitting()) {
                 high_priority_buffer_to_radio[4]|=0x02;
             }
-        }
+//        }
     }
 
     //
@@ -697,18 +695,7 @@ static void new_protocol_high_priority() {
         // Use frequency of first receiver for both DDC0 and DDC1
         // This is overridden later if we do PURESIGNAL TX
         //
-        rxFrequency=receiver[0]->frequency-receiver[0]->lo;
-        if (receiver[0]->rit_enabled) {
-            rxFrequency+=receiver[0]->rit;
-        }
-
-        if (cw_is_on_vfo_freq) {
-            if (receiver[0]->mode==modeCWU) {
-                rxFrequency-=(long long)cw_keyer_sidetone_frequency;
-            } else if (receiver[0]->mode==modeCWL) {
-                rxFrequency+=(long long)cw_keyer_sidetone_frequency;
-            }
-        }
+        rxFrequency = receiver[0]->frequency-receiver[0]->lo;
 
         phase=(long)((4294967296.0*(double)rxFrequency)/122880000.0);
         high_priority_buffer_to_radio[ 9]=phase>>24;
@@ -730,16 +717,16 @@ static void new_protocol_high_priority() {
             if (device==NEW_DEVICE_ANGELIA || device==NEW_DEVICE_ORION || device == NEW_DEVICE_ORION2) ddc=2+i;
             int v=receiver[i]->id;
             rxFrequency=receiver[v]->frequency-receiver[v]->lo;
-            if (receiver[v]->rit_enabled) {
-                rxFrequency+=receiver[v]->rit;
-            }
-            if (cw_is_on_vfo_freq) {
-                if (receiver[v]->mode==modeCWU) {
-                    rxFrequency-=(long long)cw_keyer_sidetone_frequency;
-                } else if (receiver[v]->mode==modeCWL) {
-                    rxFrequency+=(long long)cw_keyer_sidetone_frequency;
-                }
-            }
+//            if (receiver[v]->rit_enabled) {
+//                rxFrequency+=receiver[v]->rit;
+//            }
+//            if (cw_is_on_vfo_freq) {
+//                if (receiver[v]->mode==modeCWU) {
+//                    rxFrequency-=(long long)cw_keyer_sidetone_frequency;
+//                } else if (receiver[v]->mode==modeCWL) {
+//                    rxFrequency+=(long long)cw_keyer_sidetone_frequency;
+//                }
+//            }
 //fprintf(stderr, "rxFreq: %lld\n", rxFrequency);
             phase=(long)((4294967296.0*(double)rxFrequency)/122880000.0);
             high_priority_buffer_to_radio[9+(ddc*4)]=phase>>24;
@@ -756,18 +743,18 @@ static void new_protocol_high_priority() {
     if (transmitter != NULL)
     {
         txFrequency=transmitter->frequency-transmitter->lo;
-        if (transmitter->ctun) txFrequency += transmitter->offset;
-        if (transmitter->xit_enabled) {
-            txFrequency+=transmitter->xit;
-        }
+//        if (transmitter->ctun) txFrequency += transmitter->offset;
+//        if (transmitter->xit_enabled) {
+//            txFrequency+=transmitter->xit;
+//        }
 
-        if (!cw_is_on_vfo_freq) {
-            if (transmitter->txmode==modeCWU) {
-                txFrequency+=(long long)cw_keyer_sidetone_frequency;
-            } else if (transmitter->txmode==modeCWL) {
-                txFrequency-=(long long)cw_keyer_sidetone_frequency;
-            }
-        }
+//        if (!cw_is_on_vfo_freq) {
+//            if (transmitter->txmode==modeCWU) {
+//                txFrequency+=(long long)cw_keyer_sidetone_frequency;
+//            } else if (transmitter->txmode==modeCWL) {
+//                txFrequency-=(long long)cw_keyer_sidetone_frequency;
+//            }
+//        }
 
         phase=(long)((4294967296.0*(double)txFrequency)/122880000.0);
     }
@@ -794,12 +781,12 @@ static void new_protocol_high_priority() {
 
     int power=0;
     if (isTransmitting()) {
-        if (tune && !transmitter->tune_use_drive) {
-            double fac=sqrt((double)transmitter->tune_percent * 0.01);
-            power=(int)((double)transmitter->drive_level*fac);
-        } else {
+//        if (tune && !transmitter->tune_use_drive) {
+//            double fac=sqrt((double)transmitter->tune_percent * 0.01);
+//            power=(int)((double)transmitter->drive_level*fac);
+//        } else {
             power=transmitter->drive_level;
-        }
+//        }
     }
 
     high_priority_buffer_to_radio[345]=power&0xFF;
@@ -1623,7 +1610,7 @@ static void* iq_thread(void *data)
     long sequence;
     unsigned char *buffer;
 
-    fprintf(stderr, "iq_thread: ddc=%d\n",ddc);
+    fprintf(stderr, "iq_thread: ddc=%d\n", ddc);
     while (1)
     {
 #ifdef __APPLE__
@@ -1633,16 +1620,16 @@ static void* iq_thread(void *data)
         sem_post(&iq_sem_ready[ddc]);
         sem_wait(&iq_sem_buffer[ddc]);
 #endif
-        buffer=iq_buffer[ddc];
+        buffer = iq_buffer[ddc];
         if (buffer == NULL) continue;
         //
         //  Perform sequence check HERE for all cases
         //
-        sequence=((buffer[0]&0xFF)<<24)+((buffer[1]&0xFF)<<16)+((buffer[2]&0xFF)<<8)+(buffer[3]&0xFF);
-        if (ddc_sequence[ddc] !=sequence)
+        sequence = ((buffer[0]&0xFF)<<24)+((buffer[1]&0xFF)<<16)+((buffer[2]&0xFF)<<8)+(buffer[3]&0xFF);
+        if (ddc_sequence[ddc] != sequence)
         {
-            printf("DDC %d sequence error: expected %ld got %ld\n",ddc,ddc_sequence[ddc],sequence);
-            ddc_sequence[ddc]=sequence;
+            printf("DDC %d sequence error: expected %ld got %ld\n", ddc, ddc_sequence[ddc], sequence);
+            ddc_sequence[ddc] = sequence;
             sequence_errors++;
         }
         ddc_sequence[ddc]++;
@@ -1970,6 +1957,7 @@ void new_protocol_audio_samples(short left_audio_sample,short right_audio_sample
     audiobuffer[audioindex++]=left_audio_sample;
     audiobuffer[audioindex++]=right_audio_sample>>8;
     audiobuffer[audioindex++]=right_audio_sample;
+  //      fprintf(stderr, "L: %d  R: %d\n", left_audio_sample, right_audio_sample);
 
     if (audioindex>=sizeof(audiobuffer)) {
 
@@ -1987,6 +1975,7 @@ void new_protocol_audio_samples(short left_audio_sample,short right_audio_sample
         }
         audioindex=4;
         audiosequence++;
+//        fprintf(stderr, "sent audio...\n");
     }
 }
 

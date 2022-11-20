@@ -11,8 +11,8 @@ HermesFrame::HermesFrame(Radio *pUI, QWidget *parent) : QFrame(parent), ui(new U
     pui = pUI;
 
     radio_id = -1;
-    currentRxChannel = -1;
-    currentTxChannel = -1;
+    currentRxRfstream = -1;
+    currentTxRfstream = -1;
 
     connect(ui->hhTxPowerSlider, SIGNAL(valueChanged(int)), this, SLOT(adjustPower(int)));
     connect(ui->hhTxMicBoostCB, SIGNAL(toggled(bool)), this, SLOT(adjustMicBoost(bool)));
@@ -202,7 +202,7 @@ void HermesFrame::setAttenuation(bool button)
         atn = -ui->hhRxAttSlider->value() / 10;
 
     command.clear();
-    command.append((char)currentRxChannel);
+    command.append((char)currentRxRfstream);
     command.append((char)STARCOMMAND);
     command.append((char)SETATTENUATOR);
     command.append(QString("%1").arg(atn));
@@ -240,7 +240,7 @@ void HermesFrame::setOCOutputs(void)
         io = 6;
 
     command.clear();
-    command.append((char)currentRxChannel);
+    command.append((char)currentRxRfstream);
     command.append((char)STARCOMMAND);
     command.append((char)SETOCOUTPUT);
     command.append((char)io);
@@ -252,10 +252,10 @@ void HermesFrame::adjustPower(int pwr)
 {
     QByteArray command;
 
-    if (currentTxChannel < 0)
+    if (currentTxRfstream < 0)
         return;
     command.clear();
-    command.append((char)currentTxChannel);
+    command.append((char)currentTxRfstream);
     command.append((char)STARCOMMAND);
     command.append((char)SETPOWEROUT);
     command.append((char)pwr);
@@ -270,10 +270,10 @@ void HermesFrame::adjustMicBoost(bool enable)
 {
     QByteArray command;
 
-    if (currentTxChannel < 0)
+    if (currentTxRfstream < 0)
         return;
     command.clear();
-    command.append((char)currentTxChannel);
+    command.append((char)currentTxRfstream);
     command.append((char)STARCOMMAND);
     command.append((char)SETMICBOOST);
     command.append((char)enable);
@@ -289,7 +289,7 @@ void HermesFrame::enablePreamp(bool enable)
     QByteArray command;
 
     command.clear();
-    command.append((char)currentRxChannel);
+    command.append((char)currentRxRfstream);
     command.append((char)STARCOMMAND);
     command.append((char)SETPREAMP);
     command.append((char)enable);
@@ -305,7 +305,7 @@ void HermesFrame::enableDither(bool enable)
     QByteArray command;
 
     command.clear();
-    command.append((char)currentRxChannel);
+    command.append((char)currentRxRfstream);
     command.append((char)STARCOMMAND);
     command.append((char)SETDITHER);
     command.append((char)enable);
@@ -321,7 +321,7 @@ void HermesFrame::enableRandom(bool enable)
     QByteArray command;
 
     command.clear();
-    command.append((char)currentRxChannel);
+    command.append((char)currentRxRfstream);
     command.append((char)STARCOMMAND);
     command.append((char)SETRANDOM);
     command.append((char)enable);
@@ -344,7 +344,7 @@ void HermesFrame::setRxAntenna(void)
     if (ui->hhRxAnt2Radio->isChecked())
         ant = 2;
     command.clear();
-    command.append((char)currentRxChannel);
+    command.append((char)currentRxRfstream);
     command.append((char)STARCOMMAND);
     command.append((char)SETRXANT);
     command.append((char)ant);
@@ -360,7 +360,7 @@ void HermesFrame::setTxRelay(void)
     QByteArray command;
     char ant;
 
-    if (currentTxChannel < 0)
+    if (currentTxRfstream < 0)
         return;
     if (ui->hhTxAnt0Radio->isChecked())
         ant = 0;
@@ -369,7 +369,7 @@ void HermesFrame::setTxRelay(void)
     if (ui->hhTxAnt2Radio->isChecked())
         ant = 2;
     command.clear();
-    command.append((char)currentTxChannel);
+    command.append((char)currentTxRfstream);
     command.append((char)STARCOMMAND);
     command.append((char)SETTXRELAY);
     command.append((char)ant);
@@ -385,20 +385,20 @@ void HermesFrame::pwrSliderValueChanged(int pwr)
 //    if (tuning) return;
     QByteArray command;
 
-    if (currentTxChannel < 0)
+    if (currentTxRfstream < 0)
         return;
-    if (pui->mode[pui->channels[currentRxChannel].index].getMode() == MODE_AM || pui->mode[pui->channels[currentRxChannel].index].getMode() == MODE_SAM)
+    if (pui->mode[pui->rfstream[currentRxRfstream].index].getMode() == MODE_AM || pui->mode[pui->rfstream[currentRxRfstream].index].getMode() == MODE_SAM)
     {
         fprintf(stderr, "TX Gain slider: %d\n", pwr);
         command.clear();
-        command.append((char)currentTxChannel);
+        command.append((char)currentTxRfstream);
         command.append((char)SETTXAMCARLEV);
         command.append(QString("%1").arg(pwr/1000.0));
     }
     else
     {
         command.clear();
-        command.append((char)currentTxChannel);
+        command.append((char)currentTxRfstream);
         command.append((char)SETMICGAIN);
         command.append(QString("%1").arg(pwr/1000.0));
     }
@@ -413,13 +413,13 @@ void HermesFrame::pwrSliderValueChanged(int pwr)
 
 void HermesFrame::tunePwrSliderValueChanged(int pwr)
 {
-    if (currentTxChannel < 0)
+    if (currentTxRfstream < 0)
         return;
     if (!tuning) return;
     QByteArray command;
     fprintf(stderr, "Tune slider: %d", pwr);
     command.clear();
-    command.append((char)currentTxChannel);
+    command.append((char)currentTxRfstream);
     command.append((char)SETTXAMCARLEV);
     command.append(QString("%1").arg(pwr/1000.0));
     emit hhcommand(command);
@@ -434,7 +434,7 @@ void HermesFrame::getSerial(void)
     QByteArray command;
 
     command.clear();
-    command.append((char)currentRxChannel);
+    command.append((char)currentRxRfstream);
     command.append((char)STARGETSERIAL);
     emit hhcommand(command);
 } // end getSerial

@@ -119,7 +119,7 @@ public:
     void    paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget);
     QRectF  boundingRect() const;
     int     itemType;
-    int8_t  currentChannel;
+    int8_t  currentRfstream;
     int plotHeight;
 
 private:
@@ -252,7 +252,7 @@ public:
 //    void setBand(QString b);
 //    void setFilter(QString f);
 //    void setBandLimits(long long min,long long max);
-    int8_t  currentChannel;
+    int8_t  currentRfstream;
 
 signals:
     void frequencyMoved(int steps,int step);
@@ -347,7 +347,7 @@ public:
     void setFilter(int low,int high);
     void updateSpectrumFrame(SPECTRUM);
     int samplerate();
-    int8_t currentChannel;
+    int8_t currentRfstream;
     int8_t index;
 
     int getHigh();

@@ -30,8 +30,8 @@
 #include "hermes.h"
 
 
-RECEIVER *receiver[MAX_RECEIVERS];
-TRANSMITTER *transmitter; // FIXME: change to allow multiple attached transmitters
+extern RECEIVER *receiver[MAX_RECEIVERS];
+extern TRANSMITTER *transmitter; // FIXME: change to allow multiple attached transmitters
 
 static RFUNIT rfunit[35]; // max channels defined in dspserver
 
@@ -853,6 +853,7 @@ void send_Mic_buffer(float sample)
     cli_addr.sin_port = htons(MIC_AUDIO_PORT); // + rfunit[0].radio_id);
 
     buffer.radio_id = rfunit[0].radio_id;
+    inet_ntop(AF_INET, &(discovered[rfunit[0].radio_id].info.network.address.sin_addr), buffer.ipaddr, INET_ADDRSTRLEN);
     buffer.tx = 0;
     buffer.length = 512 * sizeof(float);
 
@@ -1041,12 +1042,12 @@ void* rxaudio_send(void* arg)
             continue;
         }
         
-        memcpy((char*)buffer, (char*)item->buffer, 512);
+        memcpy((char*)buffer, (char*)item->buffer, 512 * sizeof(short));
         for (int j=0; j<256; j++)
         {
             lsample = buffer[j*2];
             rsample = buffer[(j*2)+1];
-            
+        //    fprintf(stderr, "L: %d  R: %d\n", lsample, rsample);
             switch (protocol)
             {
                 case ORIGINAL_PROTOCOL:
@@ -1116,9 +1117,11 @@ void* rx_audio_thread(void* arg)
 //            fprintf(stderr, "RX audio bytes: %d\n", bytes_read);
             if (bytes_read > 30)
             {
+         //       fprintf(stderr, "L: %d  R: %d\n", buffer[100], buffer[101]);
                 item = malloc(sizeof(*item));
-                item->buffer = malloc(512 * sizeof(short));
+                item->buffer = (char*)malloc(512 * sizeof(short));
                 memcpy(item->buffer, (char*)&buffer, 512 * sizeof(short));
+           //     fprintf(stderr, "L: %d  R: %d\n", (short)item->buffer[100], (short)item->buffer[101]);
                 sem_wait(&rxaudio_semaphore[idx]);
                 TAILQ_INSERT_TAIL(&rxaudio_buffer, item, entries);
                 sem_post(&rxaudio_semaphore[idx]);

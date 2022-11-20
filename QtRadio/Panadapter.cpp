@@ -1483,7 +1483,7 @@ void Panadapter::setFrequency(long long f)
         return;
 
     command.clear();
-    command.append((char)currentChannel);
+    command.append((char)currentRfstream);
     command.append((char)SETNOTCHFILTERTUNE);
     command.append(QString("%1").arg(frequency/1000000.0f));
     qDebug("Spec: ch: %d  Comm: %d\n", (char)command[0], (char)command[1]);
@@ -1652,7 +1652,7 @@ int Panadapter::addNotchFilter()   // KD0OSS
     double audio_freq = abs((notchFilterFO[notchFilterIndex]/* - frequency*/)); // Convert to audio frequency in Hz
     line.sprintf("%lf %lf", audio_freq, notchFilterBW[notchFilterIndex]);
     command.clear();
-    command.append((char)currentChannel);
+    command.append((char)currentRfstream);
     command.append((char)SETNOTCHFILTER);
     command.append((char)index+1);
     command.append(line);
@@ -1692,7 +1692,7 @@ void Panadapter::updateNotchFilter(int index)   // KD0OSS
                 audio_freq = abs((notchFilterFO[i]/* - frequency*/)); // Convert to audio frequency in Hz
                 line.sprintf("%lf %lf", audio_freq, notchFilterBW[i]);
                 command.clear();
-                command.append((char)currentChannel);
+                command.append((char)currentRfstream);
                 command.append((char)EDITNOTCHFILTER);
                 command.append((char)i+1);
                 command.append(line);
@@ -1714,7 +1714,7 @@ void Panadapter::updateNotchFilter(int index)   // KD0OSS
         audio_freq = abs((notchFilterFO[index]/* - frequency*/)); // Convert to audio frequency in Hz
         line.sprintf("%lf %lf", audio_freq, notchFilterBW[index]);
         command.clear();
-        command.append((char)currentChannel);
+        command.append((char)currentRfstream);
         command.append((char)EDITNOTCHFILTER);
         command.append((char)index+1);
         command.append(line);
@@ -1732,13 +1732,13 @@ void Panadapter::enableNotchFilter(bool enable)   // KD0OSS
     {
 //        if (notchFilterBand[index] != band && enable) continue;
         command.clear();
-        command.append((char)currentChannel);
+        command.append((char)currentRfstream);
         command.append((char)ENABLENOTCHFILTER);
         command.append((char)enable);
         emit send_spectrum_command(command);
 
         command.clear();
-        command.append((char)currentChannel);
+        command.append((char)currentRfstream);
         command.append((char)SETNOTCHFILTERTUNE);
         command.append(QString("%1").arg(frequency/1000000.0f));
         emit send_spectrum_command(command);
@@ -1774,7 +1774,7 @@ void Panadapter::deleteNotchFilter(void)   // KD0OSS
     notchFilterBand[notchFilterSelected] = "na";
     notchFilterEnabled[notchFilterSelected] = false;
     command.clear();
-    command.append((char)currentChannel);
+    command.append((char)currentRfstream);
     command.append((char)DELNOTCHFILTER);
     command.append((char)notchFilterSelected);
     emit send_spectrum_command(command);
@@ -1791,7 +1791,7 @@ void Panadapter::deleteAllNotchFilters(void)   // KD0OSS
 //        enableNotchFilter(idx, false);
         notchFilterEnabled[idx] = false;
         notchFilterBand[idx] = "na";
-        command.append((char)currentChannel);
+        command.append((char)currentRfstream);
         command.append((char)DELNOTCHFILTER);
         command.append((char)idx);
         emit send_spectrum_command(command);

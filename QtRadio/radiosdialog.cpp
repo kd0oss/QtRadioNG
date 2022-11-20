@@ -6,10 +6,12 @@ RadiosDialog::RadiosDialog(QWidget *parent): QDialog(parent), ui(new Ui::RadiosD
     ui->setupUi(this);
 
     servers = 0;
-    selected_channel = -1;
-    active_channels = 0;
+    selected_rfstream = -1;
+    active_rfstreams = 0;
     txrxPair[0] = -1;
     txrxPair[1] = -1;
+    local_audio = false;
+    local_mic_audio = false;
 
     for (int i=0;i<4;i++)
     {
@@ -20,7 +22,7 @@ RadiosDialog::RadiosDialog(QWidget *parent): QDialog(parent), ui(new Ui::RadiosD
     for (int i=0;i<8;i++)
     {
         receivers_active[i] = false;
-        receiver_channel[i] = -1;
+        receiver_rfstream[i] = -1;
     }
 
     ui->receiver1Ckb->setEnabled(false);
@@ -55,11 +57,11 @@ void RadiosDialog::fillRadioList()
 {
     for (int i=0;i<active_radios;i++)
     {
-        for (int x=0;x<active_channels;x++)
+        for (int x=0;x<active_rfstreams;x++)
         {
-            if (channels[x].radio.radio_id == i)
+            if (rfstream[x].radio.radio_id == i)
             {
-                ui->radioList->addItem(QString("%1   %2   %3   %4").arg(i+1).arg(channels[x].radio.radio_name).arg(channels[x].radio.mac_address).arg(channels[x].radio.ip_address));
+                ui->radioList->addItem(QString("%1   %2   %3   %4").arg(i+1).arg(rfstream[x].radio.radio_name).arg(rfstream[x].radio.mac_address).arg(rfstream[x].radio.ip_address));
                 break;
             }
         }
@@ -69,7 +71,7 @@ void RadiosDialog::fillRadioList()
 
 void RadiosDialog::startRadio()
 {
-    if (selected_channel < 0) return;
+    if (selected_rfstream < 0) return;
 
     receivers_active[0] = ui->receiver1Ckb->isChecked();
     receivers_active[1] = ui->receiver2Ckb->isChecked();
@@ -81,10 +83,10 @@ void RadiosDialog::startRadio()
     receivers_active[7] = ui->receiver8Ckb->isChecked();
 
     if (ui->transPairedCB->currentIndex() > 0 && txrxPair[0] > -1)
-        txrxPair[1] = receiver_channel[ui->transPairedCB->currentIndex()-1];
+        txrxPair[1] = receiver_rfstream[ui->transPairedCB->currentIndex()-1];
 
-    remote_audio = ui->radioAudioRemoteChk->isChecked();
-    remote_mic_audio = ui->radioMicRemoteChk->isChecked();
+    local_audio = ui->radioAudioLocalChk->isChecked();
+    local_mic_audio = ui->radioMicLocalChk->isChecked();
 
     if (ui->radio48000Chk->isChecked())
         sample_rate[0] = 48000;
@@ -109,18 +111,18 @@ void RadiosDialog::startRadio()
 
 void RadiosDialog::getRadioDetails()
 {
-    int ch = 0;
+    int index = 0;
     int radio_id = ui->radioList->currentItem()->text().split(" ").at(0).toInt() - 1;
 
     txrxPair[0] = -1;
     txrxPair[1] = -1;
 
-    selected_channel = radio_id;
-    for (int x=0;x<active_channels;x++)
+    selected_rfstream = radio_id;
+    for (int x=0;x<active_rfstreams;x++)
     {
-        if (channels[x].radio.radio_id == radio_id)
+        if (rfstream[x].radio.radio_id == radio_id)
         {
-            radio_type = channels[x].radio.radio_type;
+            radio_type = rfstream[x].radio.radio_type;
             break;
         }
     }
@@ -149,11 +151,11 @@ void RadiosDialog::getRadioDetails()
     ui->transPairedCB->clear();
     ui->transPairedCB->addItem("None");
 
-    for (int x=0;x<MAX_CHANNELS;x++)
+    for (int x=0;x<active_rfstreams;x++)
     {
-        if (channels[x].radio.radio_id == radio_id)
+        if (rfstream[x].radio.radio_id == radio_id)
         {
-            if (channels[x].radio.local_audio)
+            if (rfstream[x].radio.local_audio)
                 ui->radioAudioLocalChk->setEnabled(true);
             else
             {
@@ -162,7 +164,7 @@ void RadiosDialog::getRadioDetails()
                 ui->radioAudioLocalChk->setEnabled(false);
             }
 
-            if (channels[x].radio.local_mic)
+            if (rfstream[x].radio.local_mic)
                 ui->radioMicLocalChk->setEnabled(true);
             else
             {
@@ -172,66 +174,66 @@ void RadiosDialog::getRadioDetails()
             }
         }
 
-        if (ch >= 8) break;
-        if (channels[x].dsp_channel != -1 && channels[x].radio.radio_id == radio_id)
+        if (index >= 8) break;
+        if (rfstream[x].radio.radio_id == radio_id)
         {
-            if (channels[x].isTX)
+            if (rfstream[x].isTX)
                 txrxPair[0] = x;
             else
-                switch (ch)
+                switch (index)
                 {
                 case 0:
                     ui->receiver1Ckb->setEnabled(true);
                     ui->transPairedCB->addItem("Recv 1");
-                    receiver_channel[ch] = x;
+                    receiver_rfstream[index] = x;
                     break;
 
                 case 1:
                     ui->receiver2Ckb->setEnabled(true);
                     ui->transPairedCB->addItem("Recv 2");
-                    receiver_channel[ch] = x;
+                    receiver_rfstream[index] = x;
                     break;
 
                 case 2:
                     ui->receiver3Ckb->setEnabled(true);
                     ui->transPairedCB->addItem("Recv 3");
-                    receiver_channel[ch] = x;
+                    receiver_rfstream[index] = x;
                     break;
 
                 case 3:
                     ui->receiver4Ckb->setEnabled(true);
                     ui->transPairedCB->addItem("Recv 4");
-                    receiver_channel[ch] = x;
+                    receiver_rfstream[index] = x;
                     break;
 
                 case 4:
                     ui->receiver5Ckb->setEnabled(true);
                     ui->transPairedCB->addItem("Recv 5");
-                    receiver_channel[ch] = x;
+                    receiver_rfstream[index] = x;
                     break;
 
                 case 5:
                     ui->receiver6Ckb->setEnabled(true);
                     ui->transPairedCB->addItem("Recv 6");
-                    receiver_channel[ch] = x;
+                    receiver_rfstream[index] = x;
                     break;
 
                 case 6:
                     ui->receiver7Ckb->setEnabled(true);
                     ui->transPairedCB->addItem("Recv 7");
-                    receiver_channel[ch] = x;
+                    receiver_rfstream[index] = x;
                     break;
 
                 case 7:
                     ui->receiver8Ckb->setEnabled(true);
                     ui->transPairedCB->addItem("Recv 8");
-                    receiver_channel[ch] = x;
+                    receiver_rfstream[index] = x;
                     break;
 
                 default:
                     break;
                 }
-            ch++;
+            index++;
         }
     }
 } // end getRadioDetails

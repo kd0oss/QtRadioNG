@@ -12,8 +12,8 @@ Sdr1000Frame::Sdr1000Frame(Radio *pUI, QWidget *parent) : QFrame(parent), ui(new
     pui = pUI;
 
     radio_id = -1;
-    currentRxChannel = -1;
-    currentTxChannel = -1;
+    currentRxRfstream = -1;
+    currentTxRfstream = -1;
 
     // Load hardware settings
     settings = new QSettings("FreeSDR", "QtRadioII");
@@ -127,7 +127,7 @@ void Sdr1000Frame::setAttenuation(bool button)
         atn = -ui->hhRxAttSlider->value();
 
     command.clear();
-    command.append((char)currentRxChannel);
+    command.append((char)currentRxRfstream);
     command.append((char)STARCOMMAND);
     command.append((char)SETATTENUATOR);
     command.append(QString("%1").arg(atn));

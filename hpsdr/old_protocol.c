@@ -187,8 +187,8 @@ static int mic_samples=0;
 static int mic_sample_divisor=1;
 
 static int local_ptt=0;
-static int dash=0;
-static int dot=0;
+//static int dash=0;
+//static int dot=0;
 
 static double micinputbuffer[MAX_BUFFER_SIZE*2];
 
@@ -785,36 +785,36 @@ static long long channel_freq(int chan) {
         //  vfonum=get_tx_vfo();
         vfonum = 0;
         freq=receiver[vfonum]->frequency - receiver[vfonum]->lo;
-        if (receiver[vfonum]->ctun) freq += receiver[vfonum]->offset;
-        if (transmitter != NULL)
-        {
-            if (transmitter->xit_enabled) {
-                freq+=transmitter->xit;
-            }
-        }
-        if (!cw_is_on_vfo_freq) {
-            if (receiver[vfonum]->mode==modeCWU) {
-                freq+=(long long)cw_keyer_sidetone_frequency;
-            } else if (receiver[vfonum]->mode==modeCWL) {
-                freq-=(long long)cw_keyer_sidetone_frequency;
-            }
-        }
+//        if (receiver[vfonum]->ctun) freq += receiver[vfonum]->offset;
+//        if (transmitter != NULL)
+//        {
+//            if (transmitter->xit_enabled) {
+//                freq+=transmitter->xit;
+//            }
+//        }
+//        if (!cw_is_on_vfo_freq) {
+//            if (receiver[vfonum]->mode==modeCWU) {
+//                freq+=(long long)cw_keyer_sidetone_frequency;
+//            } else if (receiver[vfonum]->mode==modeCWL) {
+//                freq-=(long long)cw_keyer_sidetone_frequency;
+//            }
+//        }
     } else {
         //
         // determine RX frequency associated with VFO #vfonum
         // This is the center freq in CTUN mode.
         //
         freq=receiver[vfonum]->frequency-receiver[vfonum]->lo;
-        if (receiver[vfonum]->rit_enabled) {
-            freq+=receiver[vfonum]->rit;
-        }
-        if (cw_is_on_vfo_freq) {
-            if (receiver[vfonum]->mode==modeCWU) {
-                freq-=(long long)cw_keyer_sidetone_frequency;
-            } else if (receiver[vfonum]->mode==modeCWL) {
-                freq+=(long long)cw_keyer_sidetone_frequency;
-            }
-        }
+//        if (receiver[vfonum]->rit_enabled) {
+//            freq+=receiver[vfonum]->rit;
+//        }
+//        if (cw_is_on_vfo_freq) {
+//            if (receiver[vfonum]->mode==modeCWU) {
+//                freq-=(long long)cw_keyer_sidetone_frequency;
+//            } else if (receiver[vfonum]->mode==modeCWL) {
+//                freq+=(long long)cw_keyer_sidetone_frequency;
+//            }
+//        }
     }
     return freq;
 }
@@ -1111,23 +1111,23 @@ static int iq_samples;
 
 static void process_control_bytes() {
     int previous_ptt;
-    int previous_dot;
-    int previous_dash;
+//    int previous_dot;
+//    int previous_dash;
 
     // do not set ptt. In PURESIGNAL, this would stop the
     // receiver sending samples to WDSP abruptly.
     // Do the RX-TX change only via ext_mox_update.
     previous_ptt=local_ptt;
-    previous_dot=dot;
-    previous_dash=dash;
+//    previous_dot=dot;
+//    previous_dash=dash;
     local_ptt=(control_in[0]&0x01)==0x01;
-    dash=(control_in[0]&0x02)==0x02;
-    dot=(control_in[0]&0x04)==0x04;
+//    dash=(control_in[0]&0x02)==0x02;
+//    dot=(control_in[0]&0x04)==0x04;
 
-    if (cw_keyer_internal) {
+//    if (cw_keyer_internal) {
         // Stops CAT cw transmission if paddle hit in "internal" CW
-        if ((dash || dot) && cw_keyer_internal) cw_key_hit=1;
-    } else {
+//        if ((dash || dot) && cw_keyer_internal) cw_key_hit=1;
+//    } else {
 #ifdef LOCALCW
         //
         // report "key hit" event to the local keyer
@@ -1135,7 +1135,7 @@ static void process_control_bytes() {
         if (dash != previous_dash) keyer_event(0, dash);
         if (dot  != previous_dot ) keyer_event(1, dot );
 #endif
-    }
+//    }
 
     //////// if (previous_ptt!=local_ptt) {
     ////////   g_idle_add(ext_mox_update,(gpointer)(long)(local_ptt));
@@ -1217,8 +1217,8 @@ static int rx1channel;
 static int rx2channel;
 
 static void process_ozy_byte(int b) {
-    int i,j;
-    float fsample;
+//    int i,j;
+//    float fsample;
     switch(state) {
     case SYNC_0:
         if (b==SYNC) {
@@ -1460,10 +1460,7 @@ static void process_bandscope_buffer(char  *buffer) {
 */
 
 void ozy_send_buffer() {
-    // int txmode=get_tx_mode();
-    // int txvfo=get_tx_vfo();
     int i;
-    //BAND *band;
     sem_wait(&ozy_sem);
     int num_hpsdr_receivers=how_many_receivers();
     int rx1channel = first_receiver_channel();
@@ -1753,13 +1750,13 @@ void ozy_send_buffer() {
             {
                 if (isTransmitting() || (transmitter->txmode == modeCWU) || (transmitter->txmode == modeCWL))
                 {
-                    if (tune && !transmitter->tune_use_drive)
-                    {
-                        double fac=sqrt((double)transmitter->tune_percent * 0.01);
-                        power=(int)((double)transmitter->drive_level*fac);
-                    } else {
+//                    if (tune && !transmitter->tune_use_drive)
+//                    {
+//                        double fac=sqrt((double)transmitter->tune_percent * 0.01);
+//                        power=(int)((double)transmitter->drive_level*fac);
+//                    } else {
                         power=transmitter->drive_level;
-                    }
+//                    }
                 }
             }
 
@@ -1979,13 +1976,13 @@ void ozy_send_buffer() {
 //            fprintf(stderr, "here 27..\n");
             output_buffer[C0]=0x1E;
             output_buffer[C1]=0x00;
-            if (transmitter != NULL)
-            {
-                if ((transmitter->txmode==modeCWU || transmitter->txmode==modeCWL) && !tune && cw_keyer_internal && !transmitter->twotone) {
-                    output_buffer[C1]|=0x01;
-                }
-            }
-            else
+//            if (transmitter != NULL)
+//            {
+//                if ((transmitter->txmode==modeCWU || transmitter->txmode==modeCWL) && !tune && cw_keyer_internal && !transmitter->twotone) {
+//                    output_buffer[C1]|=0x01;
+//                }
+//            }
+//            else
                 output_buffer[C1]|=0x01;
             output_buffer[C2]=cw_keyer_sidetone_volume;
             output_buffer[C3]=cw_keyer_ptt_delay;

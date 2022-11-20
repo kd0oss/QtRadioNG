@@ -61,7 +61,7 @@
 #include <event2/bufferevent_ssl.h>
 
 #define SPECTRUM_BUFFER_SIZE 8192
-#define MAX_CHANNELS         35  // Internal stream management not related to WDSP channels.
+#define MAX_RFSTREAMS        35
 #define MAX_WDSP_CHANNELS    31  // Max channels defined in WDSP documentation.
 
 #define RX_IQ_PORT_0     10000
@@ -167,16 +167,16 @@ enum CLIENT_TYPE {
     MONITOR
 };
 
-enum CLIENT_CONNECTION {
-    connection_unknown,
-    connection_tcp = 0
-} client_connection;
+//enum CLIENT_CONNECTION {
+//    connection_unknown,
+//    connection_tcp = 0
+//} client_connection;
 
 typedef struct _client_entry {
-    int                        client_type[MAX_CHANNELS];
+    int                        client_type[MAX_RFSTREAMS];
     struct sockaddr_in         client;
     struct bufferevent        *bev;
-    bool                       channel_enabled[MAX_CHANNELS];
+    bool                       rfstream_enabled[MAX_RFSTREAMS];
     TAILQ_ENTRY(_client_entry) entries;
 } client_entry;
 
@@ -188,6 +188,7 @@ typedef struct _memory_entry {
 typedef struct _mic_buffer
 {
     int8_t    radio_id;
+    char      ipaddr[INET_ADDRSTRLEN];
     int8_t    tx;
     short int length;
     float     fwd_pwr;
@@ -229,7 +230,7 @@ typedef struct _spectrum
     char           *samples; // not used here, just a place holder for client side consistancy.
 } SPECTRUM;
 
-typedef struct _channel
+typedef struct _rfstream
 {
     int8_t    id;
     XCVR      radio;
@@ -240,26 +241,26 @@ typedef struct _channel
     int8_t    index;
     bool      isTX;
     bool      enabled;
-} CHANNEL;
+} RFSTREAM;
 
-extern short int active_channels;
+extern short int active_rfstreams;
 extern double mic_src_ratio;
 extern bool wideband_enabled;
 
-char servername[21];
-int panadapterMode;
-int rxMeterMode;
-int txMeterMode;
-bool bUseNB;
-bool bUseNB2;
-float multimeterCalibrationOffset;
-float displayCalibrationOffset;
+extern char servername[21];
+extern int panadapterMode;
+extern int rxMeterMode;
+extern int txMeterMode;
+extern bool bUseNB;
+extern bool bUseNB2;
+extern float multimeterCalibrationOffset;
+extern float displayCalibrationOffset;
 
 void server_init(int receiver);
 void tx_init(void);
 void spectrum_init(void);
 void initAnalyzer(int, int, int, int);
-void start_rx_audio(int8_t channel);
+void start_rx_audio(int8_t stream);
 void enable_wideband(int8_t, bool);
 int widebandInitAnalyzer(int, int);
 void spectrum_timer_init(int);

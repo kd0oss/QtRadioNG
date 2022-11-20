@@ -35,12 +35,13 @@
 #define true  1
 #define false 0
 
+float multimeterCalibrationOffset;
+
 extern int encoding;
 extern int send_audio;
 extern int sample_rate;
 extern int zoom;
 extern int low, high;
-extern bool audio_enabled[MAX_CHANNELS];
 extern sem_t bufferevent_semaphore,
              iq_semaphore,
              wb_iq_semaphore,
@@ -49,8 +50,17 @@ extern sem_t bufferevent_semaphore,
 int8_t active_receivers = 0;
 int8_t active_transmitters = 0;
 
-extern timer_t spectrum_timerid[MAX_CHANNELS];
+extern timer_t spectrum_timerid[MAX_RFSTREAMS];
 extern float *widebandBuffer[5];
+
+bool bUseNB2 = false;
+bool bUseNB = false;
+bool audio_enabled[MAX_RFSTREAMS];
+int rxMeterMode;
+int txMeterMode;
+int lastMode;
+int panadapterMode;
+float displayCalibrationOffset;
 
 
 float getFilterSizeCalibrationOffset()
@@ -66,7 +76,7 @@ void init_analyzer(int disp, int length)
     multimeterCalibrationOffset = -41.0f;
     displayCalibrationOffset = -48.0f;
 
-    initAnalyzer(disp, 120, 15, length);
+    initAnalyzer(disp, 128, 15, length);
 } // end init_analyzer
 
 
@@ -263,105 +273,105 @@ int widebandInitAnalyzer(int disp, int pixels)
 } // end windbandInitAnalyzer
 
 
-void wb_destroy_analyzer(int8_t ch)
+void wb_destroy_analyzer(int8_t stream)
 {
   //  sem_wait(&wb_iq_semaphore);
-    if (!channels[ch].enabled)
-        DestroyAnalyzer(ch);
+    if (!rfstream[stream].enabled)
+        DestroyAnalyzer(rfstream[stream].dsp_channel);
  //   sem_post(&wb_iq_semaphore);
 } // end wb_destroy_analyzer
 
 
-void shutdown_client_channels(struct _client_entry *current_item)
+void shutdown_client_rfstreams(struct _client_entry *current_item)
 {
-    for (int i=0;i<MAX_CHANNELS;i++)
+    for (int i=0;i<MAX_RFSTREAMS;i++)
     {
-        if (current_item->channel_enabled[i])
+        if (current_item->rfstream_enabled[i])
         {
             sem_wait(&iq_semaphore);
-            if (channels[i].isTX)
+            if (rfstream[i].isTX)
                 active_transmitters--;
             else
                 active_receivers--;
             sem_post(&iq_semaphore);
 
             sem_wait(&bufferevent_semaphore);
-            current_item->channel_enabled[i] = false;
-            if (channels[i].enabled)
+            current_item->rfstream_enabled[i] = false;
+            if (rfstream[i].enabled)
             {
-                DestroyAnalyzer(channels[i].dsp_channel);
-                CloseChannel(channels[i].dsp_channel);
-                channels[i].enabled = false;
+                DestroyAnalyzer(rfstream[i].dsp_channel);
+                CloseChannel(rfstream[i].dsp_channel);
+                rfstream[i].enabled = false;
             }
             sem_post(&bufferevent_semaphore);
 
             if (active_receivers == 0 && active_transmitters == 0)
                 setStopIQIssued(1);
-            fprintf(stderr, "STOPALLCLIENT: Channel %d closed.\n", i);
+            fprintf(stderr, "STOPALLCLIENT: rfstream %d closed.\n", i);
         }
     }
-} // end shutdown_client_channels
+} // end shutdown_client_rfstreams
 
 
-void shutdown_wideband_channels(struct _client_entry *item)
+void shutdown_wideband_rfstreams(struct _client_entry *item)
 {
-    for (int i=0;i<MAX_CHANNELS;i++)
+    for (int i=0;i<MAX_RFSTREAMS;i++)
     {
-        if (item->channel_enabled[i] && channels[i].spectrum.type == BS)
+        if (item->rfstream_enabled[i] && rfstream[i].spectrum.type == BS)
         {
-            channels[i].enabled = false;
-            DestroyAnalyzer(WIDEBAND_CHANNEL-channels[i].radio.radio_id);
-            if (widebandBuffer[channels[i].radio.radio_id] != NULL)
+            rfstream[i].enabled = false;
+            DestroyAnalyzer(WIDEBAND_CHANNEL-rfstream[i].radio.radio_id);
+            if (widebandBuffer[rfstream[i].radio.radio_id] != NULL)
             {
-                free(widebandBuffer[channels[i].radio.radio_id]);
-                widebandBuffer[channels[i].radio.radio_id] = NULL;
+                free(widebandBuffer[rfstream[i].radio.radio_id]);
+                widebandBuffer[rfstream[i].radio.radio_id] = NULL;
             }
         }
     }
-} // end shutdown_wideband_channels
+} // end shutdown_wideband_rfstreams
 
 
-void runXanbEXT(int8_t ch, double *data)
+void runXanbEXT(int8_t stream, double *data)
 {
-    xanbEXT(channels[ch].dsp_channel, data, data);
+    xanbEXT(rfstream[stream].dsp_channel, data, data);
 } // end runXanbEXT
 
 
-void runXnobEXT(int8_t ch, double *data)
+void runXnobEXT(int8_t stream, double *data)
 {
-    xnobEXT(channels[ch].dsp_channel, data, data);
+    xnobEXT(rfstream[stream].dsp_channel, data, data);
 } // end runNobEXT
 
 
-int runFexchange0(int8_t ch, double *data, double *dataout)
+int runFexchange0(int8_t stream, double *data, double *dataout)
 {
     int err=0;
-    fexchange0(channels[ch].dsp_channel, data, dataout, &err);
+    fexchange0(rfstream[stream].dsp_channel, data, dataout, &err);
     return err;
 } // endFexchange0
 
 
-void runSpectrum0(int8_t ch, double *data)
+void runSpectrum0(int8_t stream, double *data)
 {
-    Spectrum0(1, channels[ch].dsp_channel, 0, 0, data);
+    Spectrum0(1, rfstream[stream].dsp_channel, 0, 0, data);
 } // end runSpectrum0
 
 
-int runGetPixels(int8_t ch, float *data)
+int runGetPixels(int8_t stream, float *data)
 {
     int flag=0;
-    GetPixels(channels[ch].dsp_channel, 0, data, &flag);
+    GetPixels(rfstream[stream].dsp_channel, 0, data, &flag);
     return flag;
 } // end runGetPixels
 
 
-void runRXAGetaSipF1(int8_t ch, float *data, int samples)
+void runRXAGetaSipF1(int8_t stream, float *data, int samples)
 {
-    RXAGetaSipF1(channels[ch].dsp_channel, data, samples);
+    RXAGetaSipF1(rfstream[stream].dsp_channel, data, samples);
 } // end runRXAGetaSipF1
 
 
-void process_tx_iq_data(int channel, double *mic_buf, double *tx_IQ)
+void process_tx_iq_data(int stream, double *mic_buf, double *tx_IQ)
 {
     int error = 0;
 
@@ -371,10 +381,10 @@ void process_tx_iq_data(int channel, double *mic_buf, double *tx_IQ)
         sem_post(&iq_semaphore);
         return;
     }
-    fexchange0(channels[channel].dsp_channel, mic_buf, tx_IQ, &error);
+    fexchange0(rfstream[stream].dsp_channel, mic_buf, tx_IQ, &error);
     if (error != 0)
-        fprintf(stderr, "TX Error Ch: %d:  Error: %d\n", channel, error);
-    Spectrum0(1, channels[channel].dsp_channel, 0, 0, tx_IQ);
+        fprintf(stderr, "TX Error Ch: %d:  Error: %d\n", stream, error);
+    Spectrum0(1, rfstream[stream].dsp_channel, 0, 0, tx_IQ);
     sem_post(&iq_semaphore);
 } // end process_tx_iq_data
 
@@ -382,22 +392,22 @@ void process_tx_iq_data(int channel, double *mic_buf, double *tx_IQ)
 char *dsp_command(struct _client_entry *current_item, unsigned char *message)
 {
     char   answer[80];
-    int8_t ch = message[0];
+    int8_t stream = message[0];
     int rc = 0;
 
-    if (ch == -1)
+    if (stream == -1 || stream >= MAX_RFSTREAMS)
         goto badcommand;
 
     if (message[1] == STARCOMMAND)
     {
         fprintf(stderr,"HARDWARE DIRECTED: ");
-        fprintf(stderr, "Message for Ch: %d  [%u] [%u]\n", ch, (uint8_t)message[1], (uint8_t)message[2]);
-        if (current_item->client_type[ch] == CONTROL)
+        fprintf(stderr, "Message for Rf stream: %d  [%u] [%u]\n", stream, (uint8_t)message[1], (uint8_t)message[2]);
+        if (current_item->client_type[stream] == CONTROL)
         {
             // if privilged client, forward the message to the hardware
             if (message[2] == ATTACHRX || message[2] == ATTACHTX)
             {
-                make_connection((short int)ch);
+                make_connection((short int)stream);
             }
             else
             {
@@ -405,13 +415,13 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
                 {
                     unsigned char command[64];
                     command[0] = DETACH;
-                    //command[1] = (char)channels[ch].index;
-                    command[1] = (char)channels[ch].radio.radio_id;
-                    hwSendStarCommand(ch, command, 2);
-                    fprintf(stderr, "** Channel %d detached. **\n", ch);
+                    //command[1] = (char)rfstream[stream].index;
+                    command[1] = (char)rfstream[stream].radio.radio_id;
+                    hwSendStarCommand(stream, command, 2);
+                    fprintf(stderr, "** Rf stream %d detached. **\n", stream);
                 }
                 else
-                    hwSendStarCommand(ch, message+2, 62);
+                    hwSendStarCommand(stream, message+2, 62);
             }
             /////                answer_question(message, role, bev);
         }
@@ -480,7 +490,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             sprintf(h, "%d;", high);
             strcat(answer, h);
             char c[50];
-            sprintf(c, "%d;", ch);
+            sprintf(c, "%d;", stream);
             strcat(answer, c);
 
             hdr[0] = ((strlen(answer)+1) & 0xff00) >> 8;
@@ -494,15 +504,15 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
 
         case GETPSINFO:
         {
-            if (!channels[ch].isTX) break;
+            if (!rfstream[stream].isTX) break;
             int info[16];
             char hdr[4];
 
-            GetPSInfo(channels[ch].dsp_channel, &info[0]);
+            GetPSInfo(rfstream[stream].dsp_channel, &info[0]);
 
             hdr[0] = (sizeof(info) & 0xff00) >> 8;
             hdr[1] = (sizeof(info) & 0xff);
-            hdr[2] = ch;
+            hdr[2] = stream;
             hdr[3] = GETPSINFO;
             bufferevent_write(current_item->bev, hdr, 4);
             bufferevent_write(current_item->bev, &info, sizeof(info));
@@ -511,15 +521,15 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
 
         case GETPSMAXTX:
         {
-            if (!channels[ch].isTX) break;
+            if (!rfstream[stream].isTX) break;
             double max;
             char hdr[4];
 
-            GetPSMaxTX(channels[ch].dsp_channel, &max);
+            GetPSMaxTX(rfstream[stream].dsp_channel, &max);
 
             hdr[0] = (sizeof(double) & 0xff00) >> 8;
             hdr[1] = (sizeof(double) & 0xff);
-            hdr[2] = ch;
+            hdr[2] = stream;
             hdr[3] = GETPSMAXTX;
             bufferevent_write(current_item->bev, hdr, 4);
             bufferevent_write(current_item->bev, &max, sizeof(double));
@@ -528,15 +538,15 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
 
         case GETPSHWPEAK:
         {
-            if (!channels[ch].isTX) break;
+            if (!rfstream[stream].isTX) break;
             double peak;
             char hdr[4];
 
-            GetPSHWPeak(channels[ch].dsp_channel, &peak);
+            GetPSHWPeak(rfstream[stream].dsp_channel, &peak);
 
             hdr[0] = (sizeof(double) & 0xff00) >> 8;
             hdr[1] = (sizeof(double) & 0xff);
-            hdr[2] = ch;
+            hdr[2] = stream;
             hdr[3] = GETPSMAXTX;
             bufferevent_write(current_item->bev, hdr, 4);
             bufferevent_write(current_item->bev, &peak, sizeof(double));
@@ -549,18 +559,18 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
     }
     else
     {
-        fprintf(stderr, "Message for ch: %d -> [%u] [%u] [%u]\n", (uint8_t)message[0], (uint8_t)message[1], (uint8_t)message[2], (uint8_t)message[3]);
+        fprintf(stderr, "Message for rf stream: %d -> [%u] [%u] [%u]\n", (uint8_t)message[0], (uint8_t)message[1], (uint8_t)message[2], (uint8_t)message[3]);
         switch ((uint8_t)message[1])
         {
         case SETMAIN:
         {
-            if (current_item->client_type[ch] != CONTROL)
+            if (current_item->client_type[stream] != CONTROL)
             {
                 sdr_log(SDR_LOG_INFO, "Set to CONTROL allowed\n");
                 sem_wait(&bufferevent_semaphore);
                 //TAILQ_REMOVE(&Client_list, current_item, entries);
                 //TAILQ_INSERT_HEAD(&Client_list, current_item, entries);
-                current_item->client_type[ch] = CONTROL;
+                current_item->client_type[stream] = CONTROL;
                 sem_post(&bufferevent_semaphore);
             }
         }
@@ -568,16 +578,16 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
 
         case STARTXCVR:
         {
-            if (!channels[ch].isTX)
+            if (!rfstream[stream].isTX)
             {
-                int8_t rx = channels[ch].dsp_channel;
+                int8_t rx = rfstream[stream].dsp_channel;
 
                 int buffer_size = 512;
-                if (channels[ch].protocol == 1)
+                if (rfstream[stream].protocol == 1)
                     buffer_size = 1024;
 
                 OpenChannel(rx, buffer_size, 2048, 48000, 48000, 48000, 0, 0, 0.010, 0.025, 0.000, 0.010, 0);
-                printf("Ch: %d  --  RX channel %d opened.\n", ch, rx);fflush(stdout);
+                printf("Rf stream: %d  --  DSP channel %d opened.\n", stream, rx);fflush(stdout);
 
                 create_anbEXT(rx, 0, buffer_size, 48000, 0.0001, 0.0001, 0.0001, 0.05, 20);
                 create_nobEXT(rx, 0, 0, buffer_size, 48000, 0.0001, 0.0001, 0.0001, 0.05, 20);
@@ -634,21 +644,21 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
 
                 SetChannelState(rx, 1, 1);
                 sem_wait(&iq_semaphore);
-                channels[ch].enabled = true;
-                current_item->channel_enabled[ch] = true;
+                rfstream[stream].enabled = true;
+                current_item->rfstream_enabled[stream] = true;
                 active_receivers++;
                 sem_post(&iq_semaphore);
-                spectrum_timer_init(ch);
-                hw_startIQ(ch);
-                audio_enabled[ch] = false;
+                spectrum_timer_init(stream);
+                hw_startIQ(stream);
+                audio_enabled[stream] = false;
             }
             else
             {
-                int8_t tx = channels[ch].dsp_channel;
+                int8_t tx = rfstream[stream].dsp_channel;
                 if (tx < 0) break;
 
                 int buffer_size = 512;
-                if (channels[ch].protocol == 1)
+                if (rfstream[stream].protocol == 1)
                     buffer_size = 1024;
 
                 OpenChannel(tx, buffer_size, 2048, 48000, 96000, 192000, 1, 0, 0.010, 0.025, 0.000, 0.010, 0);
@@ -712,49 +722,49 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
                 SetDisplayDetectorMode(tx, 0, DETECTOR_MODE_PEAK/*display_detector_mode*/);
                 SetDisplayAverageMode(tx, 0, AVERAGE_MODE_NONE/*display_average_mode*/);
 
-                channels[ch].spectrum.sample_rate = 48000;
+                rfstream[stream].spectrum.sample_rate = 48000;
                 sem_wait(&iq_semaphore);
-                channels[ch].enabled = true;
-                current_item->channel_enabled[ch] = true;
+                rfstream[stream].enabled = true;
+                current_item->rfstream_enabled[stream] = true;
                 active_transmitters++;
                 sem_post(&iq_semaphore);
-                spectrum_timer_init(ch);
-                hw_startIQ(ch);
+                spectrum_timer_init(stream);
+                hw_startIQ(stream);
             }
         }
             break;
 
         case STOPXCVR:
         {
-            timer_delete(spectrum_timerid[ch]);
+            timer_delete(spectrum_timerid[stream]);
             usleep(5000);
             sem_wait(&iq_semaphore);
-            if (channels[ch].isTX)
+            if (rfstream[stream].isTX)
                 active_transmitters--;
             else
                 active_receivers--;
             sem_post(&iq_semaphore);
 
             sem_wait(&bufferevent_semaphore);
-            current_item->channel_enabled[ch] = false;
-            if (channels[ch].enabled)
+            current_item->rfstream_enabled[stream] = false;
+            if (rfstream[stream].enabled)
             {
-                DestroyAnalyzer(channels[ch].dsp_channel);
-                CloseChannel(channels[ch].dsp_channel);
-                channels[ch].enabled = false;
+                DestroyAnalyzer(rfstream[stream].dsp_channel);
+                CloseChannel(rfstream[stream].dsp_channel);
+                rfstream[stream].enabled = false;
             }
             sem_post(&bufferevent_semaphore);
 
             if (active_receivers == 0 && active_transmitters == 0)
                 setStopIQIssued(1);
-            fprintf(stderr, "STOPXCVR: Channel %d closed.\n", ch);
+            fprintf(stderr, "STOPXCVR: Rf stream %d closed.\n", stream);
         }
             break;
 
         case STARTIQ:
         {
     //        hw_startIQ(ch);
-            fprintf(stderr, "************** IQ thread started for Channel: %d\n", ch);
+            fprintf(stderr, "************** IQ thread started for Rf stream: %d\n", stream);
         }
             break;
 
@@ -762,7 +772,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             int pos = 0;
             pos = message[2];
-            SetRXAANFPosition(channels[ch].dsp_channel, pos);
+            SetRXAANFPosition(rfstream[stream].dsp_channel, pos);
         }
             break;
 
@@ -770,7 +780,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             int pos = 0;
             pos = message[2];
-            SetRXAANRPosition(channels[ch].dsp_channel, pos);
+            SetRXAANRPosition(rfstream[stream].dsp_channel, pos);
         }
             break;
 
@@ -778,7 +788,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             int pos = 0;
             pos = message[2];
-            SetRXAEMNRPosition(channels[ch].dsp_channel, pos);
+            SetRXAEMNRPosition(rfstream[stream].dsp_channel, pos);
         }
             break;
 
@@ -786,7 +796,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             int pos = 0;
             pos = message[2];
-            SetTXAFMEmphPosition(channels[ch].dsp_channel, pos);
+            SetTXAFMEmphPosition(rfstream[stream].dsp_channel, pos);
         }
             break;
 
@@ -794,8 +804,8 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             int run = 0;
             run = message[2];
-            SetTXACompressorRun(channels[ch].dsp_channel, run);
-            SetTXAosctrlRun(channels[ch].dsp_channel, run);
+            SetTXACompressorRun(rfstream[stream].dsp_channel, run);
+            SetTXAosctrlRun(rfstream[stream].dsp_channel, run);
         }
             break;
 
@@ -803,7 +813,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             int run = 0;
             run = message[2];
-            SetRXAEMNRaeRun(channels[ch].dsp_channel, run);
+            SetRXAEMNRaeRun(rfstream[stream].dsp_channel, run);
             fprintf(stderr, "SetRXAEMNRaeRun: %d\n", run);
         }
             break;
@@ -812,7 +822,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {   // Methods: 0 = Gaussian speech distribution, linear amplitude scale; 1 = Gaussian speech distribution, log amplitude scale; 2 = Gamma speech distribution
             int method = 0;
             method = message[2];
-            SetRXAEMNRgainMethod(channels[ch].dsp_channel, method);
+            SetRXAEMNRgainMethod(rfstream[stream].dsp_channel, method);
             fprintf(stderr, "SetRXAEMNRgainMethod: %d\n", method);
         }
             break;
@@ -821,7 +831,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {   // Methods: 0 = Optimal Smoothing Minimum Statistics (OSMS); 1 = Minimum Mean‐Square Error (MMSE)
             int method = 0;
             method = message[2];
-            SetRXAEMNRnpeMethod(channels[ch].dsp_channel, method);
+            SetRXAEMNRnpeMethod(rfstream[stream].dsp_channel, method);
             fprintf(stderr, "SetRXAEMNRnpeMethod: %d\n", method);
         }
             break;
@@ -830,7 +840,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             int agc = 0;
             agc = message[2];
-            SetRXAAGCMode(channels[ch].dsp_channel, agc);
+            SetRXAAGCMode(rfstream[stream].dsp_channel, agc);
         }
             break;
 
@@ -838,67 +848,67 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             double agc = 0.0f;
             agc = atof((const char*)(message+2));
-            SetRXAAGCFixed(channels[ch].dsp_channel, agc);
+            SetRXAAGCFixed(rfstream[stream].dsp_channel, agc);
         }
             break;
 
         case SETRXAGCATTACK:
         {
             int attack = atoi((const char*)(message+2));
-            SetRXAAGCAttack(channels[ch].dsp_channel, attack);
+            SetRXAAGCAttack(rfstream[stream].dsp_channel, attack);
         }
             break;
 
         case SETRXAGCDECAY:
         {
             int decay = atoi((const char*)(message+2));
-            SetRXAAGCDecay(channels[ch].dsp_channel, decay);
+            SetRXAAGCDecay(rfstream[stream].dsp_channel, decay);
         }
             break;
 
         case SETRXAGCSLOPE:
         {
             int slope = atoi((const char*)(message+2));
-            SetRXAAGCSlope(channels[ch].dsp_channel, slope);
+            SetRXAAGCSlope(rfstream[stream].dsp_channel, slope);
         }
             break;
 
         case SETRXAGCHANG:
         {
             int hang = atoi((const char*)(message+2));
-            SetRXAAGCHang(channels[ch].dsp_channel, hang);
+            SetRXAAGCHang(rfstream[stream].dsp_channel, hang);
         }
             break;
 
         case SETTXLEVELERST:
-            SetTXALevelerSt(channels[ch].dsp_channel, atoi((const char*)(message+2)));
+            SetTXALevelerSt(rfstream[stream].dsp_channel, atoi((const char*)(message+2)));
             break;
 
         case SETRXAGCHANGLEVEL:
         {
             double level = atof((const char*)(message+2));
-            SetRXAAGCHangLevel(channels[ch].dsp_channel, level);
+            SetRXAAGCHangLevel(rfstream[stream].dsp_channel, level);
         }
             break;
 
         case SETTXLEVELERATTACK:
         {
             int attack = atoi((const char*)(message+2));
-            SetTXALevelerAttack(channels[ch].dsp_channel, attack);
+            SetTXALevelerAttack(rfstream[stream].dsp_channel, attack);
         }
             break;
 
         case SETTXLEVELERDECAY:
         {
-            int dekay = atoi((const char*)(message+2));
-            SetTXALevelerDecay(channels[ch].dsp_channel, dekay);
+            int decay = atoi((const char*)(message+2));
+            SetTXALevelerDecay(rfstream[stream].dsp_channel, decay);
         }
             break;
 
         case SETRXAGCHANGTHRESH:
         {
             int thresh = atoi((const char*)(message+2));
-            SetRXAAGCHangThreshold(channels[ch].dsp_channel, thresh);
+            SetRXAAGCHangThreshold(rfstream[stream].dsp_channel, thresh);
         }
             break;
 
@@ -908,19 +918,19 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             double size = 0.0f;
             double rate = 0.0f;
             sscanf((const char*)(message+2), "%lf %lf %lf", &thresh, &size, &rate);
-            SetRXAAGCThresh(channels[ch].dsp_channel, thresh, size, rate);
+            SetRXAAGCThresh(rfstream[stream].dsp_channel, thresh, size, rate);
         }
             break;
 
         case SETRXAGCTOP:
         {
             double max_agc = atof((const char*)(message+2));
-            SetRXAAGCTop(channels[ch].dsp_channel, max_agc);
+            SetRXAAGCTop(rfstream[stream].dsp_channel, max_agc);
         }
             break;
 
         case ENABLERXEQ:
-            SetRXAEQRun(channels[ch].dsp_channel, message[2]);
+            SetRXAEQRun(rfstream[stream].dsp_channel, message[2]);
             break;
 
         case SETRXEQPRO:
@@ -930,40 +940,40 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
 
             sscanf((const char*)(message+3), "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf",
                    &gain[0], &gain[1], &gain[2], &gain[3], &gain[4], &gain[5], &gain[6], &gain[7], &gain[8], &gain[9], &gain[10]);
-            SetRXAEQProfile(channels[ch].dsp_channel, message[1], freq, gain);
+            SetRXAEQProfile(rfstream[stream].dsp_channel, message[1], freq, gain);
         }
             break;
 
         case SETRXAEQWINTYPE:
-            SetRXAEQWintype(channels[ch].dsp_channel, message[2]);
+            SetRXAEQWintype(rfstream[stream].dsp_channel, message[2]);
             break;
 
         case SETTXEQPRO:
         {
-            if (channels[ch].dsp_channel < 0) break;
+            if (rfstream[stream].dsp_channel < 0) break;
 
             double freq[11] = {0.0, 32.0, 63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0};
             double gain[11];
 
             sscanf((const char*)(message+3), "%lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf",
                    &gain[0], &gain[1], &gain[2], &gain[3], &gain[4], &gain[5], &gain[6], &gain[7], &gain[8], &gain[9], &gain[10]);
-            SetTXAEQProfile(channels[ch].dsp_channel, message[1], freq, gain);
+            SetTXAEQProfile(rfstream[stream].dsp_channel, message[1], freq, gain);
         }
             break;
 
         case SETTXAEQWINTYPE:
-            SetTXAEQWintype(channels[ch].dsp_channel, message[2]);
+            SetTXAEQWintype(rfstream[stream].dsp_channel, message[2]);
             break;
 
         case ENABLETXEQ:
-            SetTXAEQRun(channels[ch].dsp_channel, message[2]);
+            SetTXAEQRun(rfstream[stream].dsp_channel, message[2]);
             break;
 
         case SETTXALCATTACK:
         {
             int attack = 0;
             sscanf((const char*)(message+2), "%d", &attack);
-            SetTXAALCAttack(channels[ch].dsp_channel, attack);
+            SetTXAALCAttack(rfstream[stream].dsp_channel, attack);
         }
             break;
 
@@ -971,7 +981,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             int decay = 0;
             sscanf((const char*)(message+2), "%d", &decay);
-            SetTXAALCDecay(channels[ch].dsp_channel, decay);
+            SetTXAALCDecay(rfstream[stream].dsp_channel, decay);
         }
             break;
 
@@ -979,14 +989,14 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             double maxgain = 0.0f;
             sscanf((const char*)(message+2), "%lf", &maxgain);
-            SetTXAALCMaxGain(channels[ch].dsp_channel, maxgain);
+            SetTXAALCMaxGain(rfstream[stream].dsp_channel, maxgain);
         }
             break;
 
         case SETTXAPREGENRUN:
         {
             int run = message[2];
-            SetTXAPreGenRun(channels[ch].dsp_channel, run);
+            SetTXAPreGenRun(rfstream[stream].dsp_channel, run);
             fprintf(stderr, "SetTXAPreGenRun: %d\n", run);
         }
             break;
@@ -994,7 +1004,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         case SETTXAPREGENMODE:
         {  // Modes:  Tone = 0; Noise = 2; Sweep = 3; Sawtooth = 4; Triangle = 5; Pulse = 6; Silence = 99
             int mode = message[2];
-            SetTXAPreGenMode(channels[ch].dsp_channel, mode);
+            SetTXAPreGenMode(rfstream[stream].dsp_channel, mode);
             fprintf(stderr, "SetTXAPreGenMode: %d\n", mode);
         }
             break;
@@ -1004,7 +1014,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             double mag = 0.0f;
             sscanf((const char*)(message+2), "%lf", &mag);
             if (mag < 0.0f || mag > 1.0f) break;
-            SetTXAPreGenToneMag(channels[ch].dsp_channel, mag);
+            SetTXAPreGenToneMag(rfstream[stream].dsp_channel, mag);
             fprintf(stderr, "SetTXAPreGenToneMag: %lf\n", mag);
         }
             break;
@@ -1013,7 +1023,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             double freq = 0.0f;
             sscanf((const char*)(message+2), "%lf", &freq);
-            SetTXAPreGenToneFreq(channels[ch].dsp_channel, freq);
+            SetTXAPreGenToneFreq(rfstream[stream].dsp_channel, freq);
             fprintf(stderr, "SetTXAPreGenTonefreq: %lf\n", freq);
         }
             break;
@@ -1023,7 +1033,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             double mag = 0.0f;
             sscanf((const char*)(message+2), "%lf", &mag);
             if (mag < 0.0f || mag > 1.0f) break;
-            SetTXAPreGenNoiseMag(channels[ch].dsp_channel, mag);
+            SetTXAPreGenNoiseMag(rfstream[stream].dsp_channel, mag);
             fprintf(stderr, "SetTXAPreGenNoiseMag: %lf\n", mag);
         }
             break;
@@ -1033,7 +1043,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             double mag = 0.0f;
             sscanf((const char*)(message+2), "%lf", &mag);
             if (mag < 0.0f || mag > 1.0f) break;
-            SetTXAPreGenSweepMag(channels[ch].dsp_channel, mag);
+            SetTXAPreGenSweepMag(rfstream[stream].dsp_channel, mag);
             fprintf(stderr, "SetTXAPreGenSweepMag: %lf\n", mag);
         }
             break;
@@ -1043,7 +1053,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             double freq1 = 0.0f;
             double freq2 = 0.0f;
             sscanf((const char*)(message+2), "%lf %lf", &freq1, &freq2);
-            SetTXAPreGenSweepFreq(channels[ch].dsp_channel, freq1, freq2);
+            SetTXAPreGenSweepFreq(rfstream[stream].dsp_channel, freq1, freq2);
             fprintf(stderr, "SetTXAPreGenTonefreq: Freq 1: %lf   Freq 2: %lf\n", freq1, freq2);
         }
             break;
@@ -1052,7 +1062,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             double rate = 0.0f;
             sscanf((const char*)(message+2), "%lf", &rate);
-            SetTXAPreGenSweepRate(channels[ch].dsp_channel, rate);
+            SetTXAPreGenSweepRate(rfstream[stream].dsp_channel, rate);
             fprintf(stderr, "SetTXAPreGenSweepRate: %lf\n", rate);
         }
             break;
@@ -1062,7 +1072,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             double mag = 0.0f;
             sscanf((const char*)(message+2), "%lf", &mag);
             if (mag < 0.0f || mag > 1.0f) break;
-            SetTXAPreGenSawtoothMag(channels[ch].dsp_channel, mag);
+            SetTXAPreGenSawtoothMag(rfstream[stream].dsp_channel, mag);
             fprintf(stderr, "SetTXAPreGenSawtoothMag: %lf\n", mag);
         }
             break;
@@ -1071,7 +1081,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             double freq = 0.0f;
             sscanf((const char*)(message+2), "%lf", &freq);
-            SetTXAPreGenSawtoothFreq(channels[ch].dsp_channel, freq);
+            SetTXAPreGenSawtoothFreq(rfstream[stream].dsp_channel, freq);
             fprintf(stderr, "SetTXAPreGenSawtoothfreq: %lf\n", freq);
         }
             break;
@@ -1081,7 +1091,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             double mag = 0.0f;
             sscanf((const char*)(message+2), "%lf", &mag);
             if (mag < 0.0f || mag > 1.0f) break;
-            SetTXAPreGenTriangleMag(channels[ch].dsp_channel, mag);
+            SetTXAPreGenTriangleMag(rfstream[stream].dsp_channel, mag);
             fprintf(stderr, "SetTXAPreGenTriangleMag: %lf\n", mag);
         }
             break;
@@ -1090,7 +1100,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             double freq = 0.0f;
             sscanf((const char*)(message+2), "%lf", &freq);
-            SetTXAPreGenTriangleFreq(channels[ch].dsp_channel, freq);
+            SetTXAPreGenTriangleFreq(rfstream[stream].dsp_channel, freq);
             fprintf(stderr, "SetTXAPreGenTrianglefreq: %lf\n", freq);
         }
             break;
@@ -1100,7 +1110,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             double mag = 0.0f;
             sscanf((const char*)(message+2), "%lf", &mag);
             if (mag < 0.0f || mag > 1.0f) break;
-            SetTXAPreGenPulseMag(channels[ch].dsp_channel, mag);
+            SetTXAPreGenPulseMag(rfstream[stream].dsp_channel, mag);
             fprintf(stderr, "SetTXAPreGenPulseMag: %lf\n", mag);
         }
             break;
@@ -1109,7 +1119,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             double freq = 0.0f;
             sscanf((const char*)(message+2), "%lf", &freq);
-            SetTXAPreGenPulseFreq(channels[ch].dsp_channel, freq);
+            SetTXAPreGenPulseFreq(rfstream[stream].dsp_channel, freq);
             fprintf(stderr, "SetTXAPreGenPulsefreq: %lf\n", freq);
         }
             break;
@@ -1119,7 +1129,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             double dc = 0.0f;
             sscanf((const char*)(message+2), "%lf", &dc);
             if (dc < 0.0f || dc > 1.0f) break;
-            SetTXAPreGenPulseDutyCycle(channels[ch].dsp_channel, dc);
+            SetTXAPreGenPulseDutyCycle(rfstream[stream].dsp_channel, dc);
             fprintf(stderr, "SetTXAPreGenPulseDutyCycle: %lf\n", dc);
         }
             break;
@@ -1128,7 +1138,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             double freq = 0.0f;
             sscanf((const char*)(message+2), "%lf", &freq);
-            SetTXAPreGenPulseToneFreq(channels[ch].dsp_channel, freq);
+            SetTXAPreGenPulseToneFreq(rfstream[stream].dsp_channel, freq);
             fprintf(stderr, "SetTXAPreGenPulseTonefreq: %lf\n", freq);
         }
             break;
@@ -1137,7 +1147,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             double transtime = 0.0f;
             sscanf((const char*)(message+2), "%lf", &transtime);
-            SetTXAPreGenPulseTransition(channels[ch].dsp_channel, transtime);
+            SetTXAPreGenPulseTransition(rfstream[stream].dsp_channel, transtime);
             fprintf(stderr, "SetTXAPreGenPulseTransition: %lf\n", transtime);
         }
             break;
@@ -1145,7 +1155,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         case SETTXAPOSTGENRUN:
         {
             int run = message[2];
-            SetTXAPostGenRun(channels[ch].dsp_channel, run);
+            SetTXAPostGenRun(rfstream[stream].dsp_channel, run);
             fprintf(stderr, "SetTXAPostGenRun: %d\n", run);
         }
             break;
@@ -1153,7 +1163,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         case SETTXAPOSTGENMODE:
         {  // Modes:  Tone = 0; Two‐Tone = 1; Sweep = 3; Silence = 99
             int mode = message[2];
-            SetTXAPostGenMode(channels[ch].dsp_channel, mode);
+            SetTXAPostGenMode(rfstream[stream].dsp_channel, mode);
             fprintf(stderr, "SetTXAPostGenMode: %d\n", mode);
         }
             break;
@@ -1163,7 +1173,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             double mag = 0.0f;
             sscanf((const char*)(message+2), "%lf", &mag);
             if (mag < 0.0f || mag > 1.0f) break;
-            SetTXAPostGenToneMag(channels[ch].dsp_channel, mag);
+            SetTXAPostGenToneMag(rfstream[stream].dsp_channel, mag);
             fprintf(stderr, "SetTXAPostGenToneMag: %lf\n", mag);
         }
             break;
@@ -1172,7 +1182,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             double freq = 0.0f;
             sscanf((const char*)(message+2), "%lf", &freq);
-            SetTXAPostGenToneFreq(channels[ch].dsp_channel, freq);
+            SetTXAPostGenToneFreq(rfstream[stream].dsp_channel, freq);
             fprintf(stderr, "SetTXAPostGenTonefreq: %lf\n", freq);
         }
             break;
@@ -1183,7 +1193,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             double mag2 = 0.0f;
             sscanf((const char*)(message+2), "%lf %lf", &mag1, &mag2);
             if (mag1 < 0.0f || mag1 > 1.0f || mag2 < 0.0f || mag2 > 1.0f) break;
-            SetTXAPostGenTTMag(channels[ch].dsp_channel, mag1, mag2);
+            SetTXAPostGenTTMag(rfstream[stream].dsp_channel, mag1, mag2);
             fprintf(stderr, "SetTXAPostGenTTMag: Mag 1: %lf   Mag 2: %lf\n", mag1, mag2);
         }
             break;
@@ -1193,7 +1203,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             double freq1 = 0.0f;
             double freq2 = 0.0f;
             sscanf((const char*)(message+2), "%lf %lf", &freq1, &freq2);
-            SetTXAPostGenTTFreq(channels[ch].dsp_channel, freq1, freq2);
+            SetTXAPostGenTTFreq(rfstream[stream].dsp_channel, freq1, freq2);
             fprintf(stderr, "SetTXAPostGenTTfreq: Freq 1: %lf   Freq 2: %lf\n", freq1, freq2);
         }
             break;
@@ -1203,7 +1213,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             double mag = 0.0f;
             sscanf((const char*)(message+2), "%lf", &mag);
             if (mag < 0.0f || mag > 1.0f) break;
-            SetTXAPostGenSweepMag(channels[ch].dsp_channel, mag);
+            SetTXAPostGenSweepMag(rfstream[stream].dsp_channel, mag);
             fprintf(stderr, "SetTXAPostGenSweepMag: %lf\n", mag);
         }
             break;
@@ -1213,7 +1223,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             double freq1 = 0.0f;
             double freq2 = 0.0f;
             sscanf((const char*)(message+2), "%lf %lf", &freq1, &freq2);
-            SetTXAPostGenSweepFreq(channels[ch].dsp_channel, freq1, freq2);
+            SetTXAPostGenSweepFreq(rfstream[stream].dsp_channel, freq1, freq2);
             fprintf(stderr, "SetTXAPostGenTonefreq: Freq 1: %lf   Freq 2: %lf\n", freq1, freq2);
         }
             break;
@@ -1222,7 +1232,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             double rate = 0.0f;
             sscanf((const char*)(message+2), "%lf", &rate);
-            SetTXAPostGenSweepRate(channels[ch].dsp_channel, rate);
+            SetTXAPostGenSweepRate(rfstream[stream].dsp_channel, rate);
             fprintf(stderr, "SetTXAPostGenSweepRate: %lf\n", rate);
         }
             break;
@@ -1235,29 +1245,29 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             sem_wait(&bufferevent_semaphore);
             if (current_item->client_type != CONTROL)
             {
-                channels[ch].spectrum.nsamples = samp;
-                channels[ch].spectrum.fps = fps;
+                rfstream[stream].spectrum.nsamples = samp;
+                rfstream[stream].spectrum.fps = fps;
             }
             else
             {
-                channels[ch].spectrum.nsamples = samp;
-                channels[ch].spectrum.fps = fps;
+                rfstream[stream].spectrum.nsamples = samp;
+                rfstream[stream].spectrum.fps = fps;
             }
             int buffer_size = 512;
-            if (channels[ch].protocol == 1)
+            if (rfstream[stream].protocol == 1)
                 buffer_size = 1024;
 
-            if (!channels[ch].isTX)
-                initAnalyzer(channels[ch].dsp_channel, samp, fps, buffer_size);
+            if (!rfstream[stream].isTX)
+                initAnalyzer(rfstream[stream].dsp_channel, samp, fps, buffer_size);
             else
-                initAnalyzer(channels[ch].dsp_channel, samp, fps, buffer_size);
+                initAnalyzer(rfstream[stream].dsp_channel, samp, fps, buffer_size);
             sem_post(&bufferevent_semaphore);
             sdr_log(SDR_LOG_INFO, "Spectrum fps set to = '%d'  Samples = '%d'\n", fps, samp);
         }
             break;
 
         case SETFREQ:
-            hwSetFrequency(ch, atoll((const char*)(message+2)));
+            hwSetFrequency(stream, atoll((const char*)(message+2)));
             fprintf(stderr, "Set frequency: %lld\n", atoll((const char*)(message+2)));
             break;
 
@@ -1270,156 +1280,156 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             switch (mode)
             {
             case USB:
-                if (!channels[ch].isTX)
+                if (!rfstream[stream].isTX)
                 {
-                    SetRXAMode(channels[ch].dsp_channel, RXA_USB);
-                    RXASetPassband(channels[ch].dsp_channel, 150, 2850);
+                    SetRXAMode(rfstream[stream].dsp_channel, RXA_USB);
+                    RXASetPassband(rfstream[stream].dsp_channel, 150, 2850);
                 }
                 else
                 {
-                    SetTXAMode(channels[ch].dsp_channel, TXA_USB);
-                    SetTXABandpassFreqs(channels[ch].dsp_channel, 150, 2850);
+                    SetTXAMode(rfstream[stream].dsp_channel, TXA_USB);
+                    SetTXABandpassFreqs(rfstream[stream].dsp_channel, 150, 2850);
                 }
                 sdr_log(SDR_LOG_INFO, "Mode set to USB\n");
                 break;
             case LSB:
-                if (!channels[ch].isTX)
+                if (!rfstream[stream].isTX)
                 {
-                    SetRXAMode(channels[ch].dsp_channel, RXA_LSB);
-                    RXASetPassband(channels[ch].dsp_channel, -2850, -150);
+                    SetRXAMode(rfstream[stream].dsp_channel, RXA_LSB);
+                    RXASetPassband(rfstream[stream].dsp_channel, -2850, -150);
                 }
                 else
                 {
-                    SetTXAMode(channels[ch].dsp_channel, TXA_LSB);
-                    SetTXABandpassFreqs(channels[ch].dsp_channel, -2850, -150);
+                    SetTXAMode(rfstream[stream].dsp_channel, TXA_LSB);
+                    SetTXABandpassFreqs(rfstream[stream].dsp_channel, -2850, -150);
                 }
                 sdr_log(SDR_LOG_INFO, "Mode set to LSB\n");
                 break;
             case AM:
-                if (!channels[ch].isTX)
+                if (!rfstream[stream].isTX)
                 {
-                    SetRXAMode(channels[ch].dsp_channel, RXA_AM);
-                    RXASetPassband(channels[ch].dsp_channel, -2850, 2850);
+                    SetRXAMode(rfstream[stream].dsp_channel, RXA_AM);
+                    RXASetPassband(rfstream[stream].dsp_channel, -2850, 2850);
                 }
                 else
                 {
-                    SetTXAMode(channels[ch].dsp_channel, TXA_AM);
-                    SetTXABandpassFreqs(channels[ch].dsp_channel, -2850, 2850);
+                    SetTXAMode(rfstream[stream].dsp_channel, TXA_AM);
+                    SetTXABandpassFreqs(rfstream[stream].dsp_channel, -2850, 2850);
                 }
                 break;
             case SAM:
-                if (!channels[ch].isTX)
+                if (!rfstream[stream].isTX)
                 {
-                    SetRXAMode(channels[ch].dsp_channel, RXA_SAM);
-                    RXASetPassband(channels[ch].dsp_channel, -2850, 2850);
+                    SetRXAMode(rfstream[stream].dsp_channel, RXA_SAM);
+                    RXASetPassband(rfstream[stream].dsp_channel, -2850, 2850);
                 }
                 else
                 {
-                    SetTXAMode(channels[ch].dsp_channel, TXA_SAM);
-                    SetTXABandpassFreqs(channels[ch].dsp_channel, -2850, 2850);
+                    SetTXAMode(rfstream[stream].dsp_channel, TXA_SAM);
+                    SetTXABandpassFreqs(rfstream[stream].dsp_channel, -2850, 2850);
                 }
                 break;
             case FM:
-                if (!channels[ch].isTX)
+                if (!rfstream[stream].isTX)
                 {
-                    SetRXAMode(channels[ch].dsp_channel, RXA_FM);
-                    RXASetPassband(channels[ch].dsp_channel, -4800, 4800);
+                    SetRXAMode(rfstream[stream].dsp_channel, RXA_FM);
+                    RXASetPassband(rfstream[stream].dsp_channel, -4800, 4800);
                 }
                 else
                 {
-                    SetTXAMode(channels[ch].dsp_channel, TXA_FM);
-                    SetTXABandpassFreqs(channels[ch].dsp_channel, -4800, 4800);
+                    SetTXAMode(rfstream[stream].dsp_channel, TXA_FM);
+                    SetTXABandpassFreqs(rfstream[stream].dsp_channel, -4800, 4800);
                 }
                 break;
             case DSB:
-                if (!channels[ch].isTX)
+                if (!rfstream[stream].isTX)
                 {
-                    SetRXAMode(channels[ch].dsp_channel, RXA_DSB);
-                    RXASetPassband(channels[ch].dsp_channel, 150, 2850);
+                    SetRXAMode(rfstream[stream].dsp_channel, RXA_DSB);
+                    RXASetPassband(rfstream[stream].dsp_channel, 150, 2850);
                 }
                 else
                 {
-                    SetTXAMode(channels[ch].dsp_channel, TXA_DSB);
-                    SetTXABandpassFreqs(channels[ch].dsp_channel, 150, 2850);
+                    SetTXAMode(rfstream[stream].dsp_channel, TXA_DSB);
+                    SetTXABandpassFreqs(rfstream[stream].dsp_channel, 150, 2850);
                 }
                 break;
             case CWU:
-                if (!channels[ch].isTX)
+                if (!rfstream[stream].isTX)
                 {
-                    SetRXAMode(channels[ch].dsp_channel, RXA_CWU);
-                    RXASetPassband(channels[ch].dsp_channel, 150, 2850);
+                    SetRXAMode(rfstream[stream].dsp_channel, RXA_CWU);
+                    RXASetPassband(rfstream[stream].dsp_channel, 150, 2850);
                 }
                 else
                 {
-                    SetTXAMode(channels[ch].dsp_channel, TXA_CWU);
-                    SetTXABandpassFreqs(channels[ch].dsp_channel, 150, 2850);
+                    SetTXAMode(rfstream[stream].dsp_channel, TXA_CWU);
+                    SetTXABandpassFreqs(rfstream[stream].dsp_channel, 150, 2850);
                 }
                 break;
             case CWL:
-                if (!channels[ch].isTX)
+                if (!rfstream[stream].isTX)
                 {
-                    SetRXAMode(channels[ch].dsp_channel, RXA_CWL);
-                    RXASetPassband(channels[ch].dsp_channel, -2850, -150);
+                    SetRXAMode(rfstream[stream].dsp_channel, RXA_CWL);
+                    RXASetPassband(rfstream[stream].dsp_channel, -2850, -150);
                 }
                 else
                 {
-                    SetTXAMode(channels[ch].dsp_channel, TXA_CWL);
-                    SetTXABandpassFreqs(channels[ch].dsp_channel, -2850, -150);
+                    SetTXAMode(rfstream[stream].dsp_channel, TXA_CWL);
+                    SetTXABandpassFreqs(rfstream[stream].dsp_channel, -2850, -150);
                 }
                 break;
             case DIGU:
-                if (!channels[ch].isTX)
+                if (!rfstream[stream].isTX)
                 {
-                    SetRXAMode(channels[ch].dsp_channel, RXA_DIGU);
-                    RXASetPassband(channels[ch].dsp_channel, 150, 2850);
+                    SetRXAMode(rfstream[stream].dsp_channel, RXA_DIGU);
+                    RXASetPassband(rfstream[stream].dsp_channel, 150, 2850);
                 }
                 else
                 {
-                    SetTXAMode(channels[ch].dsp_channel, TXA_DIGU);
-                    SetTXABandpassFreqs(channels[ch].dsp_channel, 150, 2850);
+                    SetTXAMode(rfstream[stream].dsp_channel, TXA_DIGU);
+                    SetTXABandpassFreqs(rfstream[stream].dsp_channel, 150, 2850);
                 }
                 break;
             case DIGL:
-                if (!channels[ch].isTX)
+                if (!rfstream[stream].isTX)
                 {
-                    SetRXAMode(channels[ch].dsp_channel, RXA_DIGL);
-                    RXASetPassband(channels[ch].dsp_channel, -2850, -150);
+                    SetRXAMode(rfstream[stream].dsp_channel, RXA_DIGL);
+                    RXASetPassband(rfstream[stream].dsp_channel, -2850, -150);
                 }
                 else
                 {
-                    SetTXAMode(channels[ch].dsp_channel, TXA_DIGL);
-                    SetTXABandpassFreqs(channels[ch].dsp_channel, -2850, -150);
+                    SetTXAMode(rfstream[stream].dsp_channel, TXA_DIGL);
+                    SetTXABandpassFreqs(rfstream[stream].dsp_channel, -2850, -150);
                 }
                 break;
             case SPEC:
-                if (!channels[ch].isTX)
+                if (!rfstream[stream].isTX)
                 {
-                    SetRXAMode(channels[ch].dsp_channel, RXA_SPEC);
-                    RXASetPassband(channels[ch].dsp_channel, 150, 2850);
+                    SetRXAMode(rfstream[stream].dsp_channel, RXA_SPEC);
+                    RXASetPassband(rfstream[stream].dsp_channel, 150, 2850);
                 }
                 else
                 {
-                    SetTXAMode(channels[ch].dsp_channel, TXA_SPEC);
-                    SetTXABandpassFreqs(channels[ch].dsp_channel, 150, 2850);
+                    SetTXAMode(rfstream[stream].dsp_channel, TXA_SPEC);
+                    SetTXABandpassFreqs(rfstream[stream].dsp_channel, 150, 2850);
                 }
                 break;
             case DRM:
-                if (!channels[ch].isTX)
+                if (!rfstream[stream].isTX)
                 {
-                    SetRXAMode(channels[ch].dsp_channel, RXA_DRM);
-                    RXASetPassband(channels[ch].dsp_channel, 150, 2850);
+                    SetRXAMode(rfstream[stream].dsp_channel, RXA_DRM);
+                    RXASetPassband(rfstream[stream].dsp_channel, 150, 2850);
                 }
                 else
                 {
-                    SetTXAMode(channels[ch].dsp_channel, TXA_DRM);
-                    SetTXABandpassFreqs(channels[ch].dsp_channel, 150, 2850);
+                    SetTXAMode(rfstream[stream].dsp_channel, TXA_DRM);
+                    SetTXABandpassFreqs(rfstream[stream].dsp_channel, 150, 2850);
                 }
                 break;
             default:
-                if (!channels[ch].isTX)
-                    RXASetPassband(channels[ch].dsp_channel, -4800, 4800);
+                if (!rfstream[stream].isTX)
+                    RXASetPassband(rfstream[stream].dsp_channel, -4800, 4800);
                 else
-                    SetTXABandpassFreqs(channels[ch].dsp_channel, -4800, 4800);
+                    SetTXABandpassFreqs(rfstream[stream].dsp_channel, -4800, 4800);
             }
         }
             break;
@@ -1428,15 +1438,15 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             int low, high;
             sscanf((const char*)(message+2), "%d,%d", &low, &high);
-            if (channels[ch].isTX)
+            if (rfstream[stream].isTX)
             {
-                printf("TX: %d  Low: %d   High: %d\n", channels[ch].dsp_channel, low, high);
-                SetTXABandpassFreqs(channels[ch].dsp_channel, (double)low, (double)high);
+                printf("TX: %d  Low: %d   High: %d\n", rfstream[stream].dsp_channel, low, high);
+                SetTXABandpassFreqs(rfstream[stream].dsp_channel, (double)low, (double)high);
             }
             else
             {
-                printf("RX: %d  Low: %d   High: %d\n", channels[ch].dsp_channel, low, high);
-                RXASetPassband(channels[ch].dsp_channel, (double)low, (double)high);
+                printf("RX: %d  Low: %d   High: %d\n", rfstream[stream].dsp_channel, low, high);
+                RXASetPassband(rfstream[stream].dsp_channel, (double)low, (double)high);
             }
         }
             break;
@@ -1459,10 +1469,10 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
 
         case ENABLEAUDIO:
         {
-            for (int i=0;i<MAX_CHANNELS;i++)
+            for (int i=0;i<MAX_RFSTREAMS;i++)
                 audio_enabled[i] = false;
             bool enabled = (bool)message[2];
-            audio_enabled[ch] = enabled;
+            audio_enabled[stream] = enabled;
         }
             break;
 
@@ -1471,7 +1481,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             int ntok, bufsize, rate, channels, micEncoding;
             if (current_item->client_type != CONTROL)
             {
-                fprintf(stderr, "Not CONTROL type client.\n");
+                fprintf(stderr, "STARTAUDIO: Not CONTROL type client...aborting command.\n");
                 break;
             }
 
@@ -1482,7 +1492,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             rate = 8000;
             channels = 1;
             micEncoding = 0;
-            ntok = sscanf((const char*)(message+1), "%d,%d,%d,%d", &bufsize, &rate, &channels, &micEncoding);
+            ntok = sscanf((const char*)(message+1), "%d,%d,%d,%d,%d", &bufsize, &rate, &channels, &micEncoding, &radioMic);
 
             if (ntok >= 1)
             {
@@ -1520,7 +1530,11 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
                     micEncoding = MIC_ENCODING_ALAW;
                 }
             }
-
+            if (ntok >= 5)
+            {
+                if (radioMic)
+                    fprintf(stderr, "Using radio microphone.\n");
+            }
             sem_wait(&audiostream_sem);
             audiostream_conf.bufsize = bufsize;
             audiostream_conf.samplerate = rate;
@@ -1544,7 +1558,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             break;
 
         case SETPAN:
-            SetRXAPanelPan(channels[ch].dsp_channel, atof((const char*)(message+2)));
+            SetRXAPanelPan(rfstream[stream].dsp_channel, atof((const char*)(message+2)));
             break;
 
         case SETPANADAPTERMODE:
@@ -1560,13 +1574,13 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             if (sscanf((const char*)(message+2), "%d,%d,%lf,%lf", &taps, &delay, &gain, &leakage) != 4)
                 goto badcommand;
 
-            SetRXAANFVals(channels[ch].dsp_channel, taps, delay, gain, leakage);
+            SetRXAANFVals(rfstream[stream].dsp_channel, taps, delay, gain, leakage);
             fprintf(stderr, "Set RX ANF values: Taps: %d  Delay: %d  Gain: %lf  Leakage: %lf\n", taps, delay, gain, leakage);
         }
             break;
 
         case SETANF:
-            SetRXAANFRun(channels[ch].dsp_channel, message[2]);
+            SetRXAANFRun(rfstream[stream].dsp_channel, message[2]);
             break;
 
         case SETNRVALS:
@@ -1577,25 +1591,25 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             if (sscanf((const char*)(message+2), "%d,%d,%f,%f", &taps, &delay, (float*)&gain, (float*)&leakage) != 4)
                 goto badcommand;
 
-            SetRXAANRVals(channels[ch].dsp_channel, taps, delay, gain, leakage);
+            SetRXAANRVals(rfstream[stream].dsp_channel, taps, delay, gain, leakage);
         }
             break;
 
         case SETTXACFIRRUN:
-            SetTXACFIRRun(channels[ch].dsp_channel, message[2]);
+            SetTXACFIRRun(rfstream[stream].dsp_channel, message[2]);
             break;
 
         case SETNR:
-            SetRXAANRRun(channels[ch].dsp_channel, message[2]);
+            SetRXAANRRun(rfstream[stream].dsp_channel, message[2]);
             break;
 
         case SETNB:
-            SetEXTANBRun(channels[ch].dsp_channel, message[2]);
+            SetEXTANBRun(rfstream[stream].dsp_channel, message[2]);
             bUseNB = message[1];
             break;
 
         case SETNB2:
-            SetEXTNOBRun(channels[ch].dsp_channel, message[2]);
+            SetEXTNOBRun(rfstream[stream].dsp_channel, message[2]);
             bUseNB2 = message[1];
             break;
 
@@ -1603,28 +1617,28 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         {
             double thresh;
             sscanf((const char*)(message+2), "%lf", &thresh);
-            SetEXTNOBThreshold(channels[ch].dsp_channel, thresh);
+            SetEXTNOBThreshold(rfstream[stream].dsp_channel, thresh);
         }
             break;
 
         case SETEXTNOBMODE:
-            SetEXTNOBMode(channels[ch].dsp_channel, message[2]);
+            SetEXTNOBMode(rfstream[stream].dsp_channel, message[2]);
             break;
 
         case SETSQUELCHVAL:
-            SetRXAAMSQThreshold(channels[ch].dsp_channel, atof((const char*)(message+2)));
+            SetRXAAMSQThreshold(rfstream[stream].dsp_channel, atof((const char*)(message+2)));
             fprintf(stderr, "Squelch thresh: %lf dBm\n", atof((const char*)(message+2)));
             break;
 
         case SETSQUELCHSTATE:
-            SetRXAAMSQRun(channels[ch].dsp_channel, message[2]);
+            SetRXAAMSQRun(rfstream[stream].dsp_channel, message[2]);
             break;
 
         case SETWINDOW:
-            if (!channels[ch].isTX)
-                SetRXABandpassWindow(channels[ch].dsp_channel, atoi((const char*)(message+2)));
+            if (!rfstream[stream].isTX)
+                SetRXABandpassWindow(rfstream[stream].dsp_channel, atoi((const char*)(message+2)));
             else
-                SetTXABandpassWindow(channels[ch].dsp_channel, atoi((const char*)(message+2)));
+                SetTXABandpassWindow(rfstream[stream].dsp_channel, atoi((const char*)(message+2)));
             break;
 
         case SETCLIENT:
@@ -1632,23 +1646,23 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             break;
 
         case SETRXOUTGAIN:
-            SetRXAPanelGain1(channels[ch].dsp_channel, (double)atof((const char*)(message+2))/100.0);
+            SetRXAPanelGain1(rfstream[stream].dsp_channel, (double)atof((const char*)(message+2))/100.0);
             break;
 
         case SETTXAPANELSELECT:
-            SetTXAPanelSelect(channels[ch].dsp_channel, atoi((const char*)(message+2)));
+            SetTXAPanelSelect(rfstream[stream].dsp_channel, atoi((const char*)(message+2)));
             break;
 
         case SETMICGAIN:
         {
             double gain;
 
-            if (channels[ch].dsp_channel == -1) break;
+            if (rfstream[stream].dsp_channel == -1) break;
 
             if (sscanf((const char*)(message+2), "%lf", (double*)&gain) > 1)
                 goto badcommand;
 
-            SetTXAPanelGain1(channels[ch].dsp_channel, pow(10.0, gain / 20.0));
+            SetTXAPanelGain1(rfstream[stream].dsp_channel, pow(10.0, gain / 20.0));
             fprintf(stderr, "Mic gain: %lf\n", pow(10.0, gain / 20.0));
         }
             break;
@@ -1656,23 +1670,23 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
         case SETSAMPLERATE:
         {
 
-            fprintf(stderr, "Set sample rate for ch: %d  rx: %d\n", ch, channels[ch].dsp_channel);
+            fprintf(stderr, "Set sample rate for rf stream: %d  rx dsp: %d\n", stream, rfstream[stream].dsp_channel);
             if (sscanf((const char*)(message+2), "%ld", (long*)&sample_rate) > 1)
                 goto badcommand;
 
-            channels[ch].spectrum.sample_rate = sample_rate;
-            SetChannelState(channels[ch].dsp_channel, 0, 1);
-            hwSetSampleRate(ch, sample_rate);
-            SetDSPSamplerate(ch, sample_rate);
+            rfstream[stream].spectrum.sample_rate = sample_rate;
+            SetChannelState(rfstream[stream].dsp_channel, 0, 1);
+            hwSetSampleRate(stream, sample_rate);
+            SetDSPSamplerate(rfstream[stream].dsp_channel, sample_rate);
   //          int buffer_size = 512;
-  //          if (channels[ch].protocol == 1)
+  //          if (rfstream[stream].protocol == 1)
  //               buffer_size = 1024;
  //           init_analyzer(ch, buffer_size);
  //           SetInputSamplerate(ch, sample_rate);
-            SetEXTANBSamplerate(ch, sample_rate);
-            SetEXTNOBSamplerate(ch, sample_rate);
-            setSpeed(ch, sample_rate);
-            SetChannelState(channels[ch].dsp_channel, 1, 0);
+            SetEXTANBSamplerate(rfstream[stream].dsp_channel, sample_rate);
+            SetEXTNOBSamplerate(rfstream[stream].dsp_channel, sample_rate);
+            setSpeed(stream, sample_rate);
+            SetChannelState(rfstream[stream].dsp_channel, 1, 0);
         }
             break;
 
@@ -1682,24 +1696,24 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             char user[20];
             char pass[20];
 
-            if (channels[ch].dsp_channel == -1) break;
+            if (rfstream[stream].dsp_channel == -1) break;
 
             if (sscanf((const char*)(message+2), "%lf %s %s", (double*)&level, user, pass) > 3)
                 goto badcommand;
 
-            SetTXAAMCarrierLevel(channels[ch].dsp_channel, level * 10.0);
+            SetTXAAMCarrierLevel(rfstream[stream].dsp_channel, level * 10.0);
             fprintf(stderr, "AM carrier level: %lf\n", level * 10.0);
         }
             break;
 
         case SETRXBPASSWIN:
-            SetRXABandpassWindow(channels[ch].dsp_channel, atoi((const char*)(message+2)));
-            RXANBPSetWindow(channels[ch].dsp_channel, atoi((const char*)(message+2)));
+            SetRXABandpassWindow(rfstream[stream].dsp_channel, atoi((const char*)(message+2)));
+            RXANBPSetWindow(rfstream[stream].dsp_channel, atoi((const char*)(message+2)));
             break;
 
         case SETTXBPASSWIN:
-            if (channels[ch].dsp_channel > -1)
-                SetTXABandpassWindow(channels[ch].dsp_channel, atoi((const char*)(message+2)));
+            if (rfstream[stream].dsp_channel > -1)
+                SetTXABandpassWindow(rfstream[stream].dsp_channel, atoi((const char*)(message+2)));
             break;
 
         case SETRXAMETER:
@@ -1715,58 +1729,58 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             int ints = 0;
             int spi = 0;
             sscanf((const char*)(message+2), "%d %d", &ints, &spi);
-            SetPSIntsAndSpi(channels[ch].dsp_channel, ints, spi);
+            SetPSIntsAndSpi(rfstream[stream].dsp_channel, ints, spi);
         }
             break;
 
         case SETPSSTABILIZE:
-            SetPSStabilize(channels[ch].dsp_channel, message[2]);
+            SetPSStabilize(rfstream[stream].dsp_channel, message[2]);
             break;
 
         case SETPSMAPMODE:
-            SetPSMapMode(channels[ch].dsp_channel, message[2]);
+            SetPSMapMode(rfstream[stream].dsp_channel, message[2]);
             break;
 
         case SETPSHWPEAK:
-            SetPSHWPeak(channels[ch].dsp_channel, atof((const char*)(message+2)));
+            SetPSHWPeak(rfstream[stream].dsp_channel, atof((const char*)(message+2)));
             break;
 
         case SETPSCONTROL:
         {
             int mode = message[2];
             if (mode == 0) //reset
-                SetPSControl(channels[ch].dsp_channel, 1, 0, 0, 0);
+                SetPSControl(rfstream[stream].dsp_channel, 1, 0, 0, 0);
             if (mode == 1) //mancal
-                SetPSControl(channels[ch].dsp_channel, 0, 1, 0, 0);
+                SetPSControl(rfstream[stream].dsp_channel, 0, 1, 0, 0);
             if (mode == 2) //automode
-                SetPSControl(channels[ch].dsp_channel, 0, 0, 1, 0);
+                SetPSControl(rfstream[stream].dsp_channel, 0, 0, 1, 0);
             if (mode == 3) //turnon
-                SetPSControl(channels[ch].dsp_channel, 0, 0, 0, 1);
+                SetPSControl(rfstream[stream].dsp_channel, 0, 0, 0, 1);
         }
             break;
 
         case SETPSMOXDELAY:
-            SetPSMoxDelay(channels[ch].dsp_channel, atof((const char*)(message+2)));
+            SetPSMoxDelay(rfstream[stream].dsp_channel, atof((const char*)(message+2)));
             break;
 
         case SETPSTXDELAY:
-            SetPSTXDelay(channels[ch].dsp_channel, atof((const char*)(message+2)));
+            SetPSTXDelay(rfstream[stream].dsp_channel, atof((const char*)(message+2)));
             break;
 
         case SETPSLOOPDELAY:
-            SetPSLoopDelay(channels[ch].dsp_channel, atof((const char*)(message+2)));
+            SetPSLoopDelay(rfstream[stream].dsp_channel, atof((const char*)(message+2)));
             break;
 
         case SETPSMOX:
-            SetPSMox(channels[ch].dsp_channel, message[2]);
+            SetPSMox(rfstream[stream].dsp_channel, message[2]);
             break;
 
         case SETPSFEEDBACKRATE:
-            SetPSFeedbackRate(channels[ch].dsp_channel, atoi((const char*)(message+2)));
+            SetPSFeedbackRate(rfstream[stream].dsp_channel, atoi((const char*)(message+2)));
             break;
 
         case ENABLENOTCHFILTER:
-            RXANBPSetNotchesRun(channels[ch].dsp_channel, message[2]);
+            RXANBPSetNotchesRun(rfstream[stream].dsp_channel, message[2]);
             sdr_log(SDR_LOG_INFO, "Notch filter set to: %d\n", message[2]);
             break;
 
@@ -1776,7 +1790,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             int ret = 0;
         //    printf("%s\n", message+2);
             sscanf((const char*)(message+3), "%lf %lf", &fcenter, &fwidth);
-            ret = RXANBPAddNotch(channels[ch].dsp_channel, message[2]-1, fcenter, fwidth, true);
+            ret = RXANBPAddNotch(rfstream[stream].dsp_channel, message[2]-1, fcenter, fwidth, true);
             sdr_log(SDR_LOG_INFO, "Notch filter added: Id: %d  F: %lf   W: %lf  Ret: %d\n", message[2]-1, fcenter, fwidth, ret);
         }
             break;
@@ -1786,7 +1800,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             double fcenter;
         //    printf("%s\n", message+2);
             sscanf((const char*)(message+2), "%lf", &fcenter);
-            RXANBPSetTuneFrequency(channels[ch].dsp_channel, fcenter * 100000.0f);
+            RXANBPSetTuneFrequency(rfstream[stream].dsp_channel, fcenter * 100000.0f);
             sdr_log(SDR_LOG_INFO, "Notch filter set tune frequency:  Freq: %lf\n", fcenter);
         }
             break;
@@ -1796,7 +1810,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             double fshift;
         //    printf("%s\n", message+2);
             sscanf((const char*)(message+2), "%lf", &fshift);
-            RXANBPSetShiftFrequency(channels[ch].dsp_channel, fshift);
+            RXANBPSetShiftFrequency(rfstream[stream].dsp_channel, fshift);
             sdr_log(SDR_LOG_INFO, "Notch filter set shift frequency:  Shift Freq: %lf\n", fshift);
         }
             break;
@@ -1806,53 +1820,53 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
             double fcenter, fwidth;
         //    printf("%s\n", message+2);
             sscanf((const char*)(message+3), "%lf %lf", &fcenter, &fwidth);
-            RXANBPEditNotch(channels[ch].dsp_channel, message[2]-1, fcenter, fwidth, true);
+            RXANBPEditNotch(rfstream[stream].dsp_channel, message[2]-1, fcenter, fwidth, true);
             sdr_log(SDR_LOG_INFO, "Notch filter updated: Id: %d  F: %lf   W: %lf\n", message[2]-1, fcenter, fwidth);
         }
             break;
 
         case DELNOTCHFILTER:
         {
-            RXANBPDeleteNotch(channels[ch].dsp_channel, message[2]);
+            RXANBPDeleteNotch(rfstream[stream].dsp_channel, message[2]);
             sdr_log(SDR_LOG_INFO, "Notch filter id: %d deleted.\n", message[1]);
         }
             break;
 
         case MOX:
         {
-            int8_t radio_id = channels[ch].radio.radio_id;
+            int8_t radio_id = rfstream[stream].radio.radio_id;
             char user[20];
             char pass[20];
             bool mox = false;
 
-            if (!channels[ch].isTX) break;
+            if (!rfstream[stream].isTX) break;
 
             if (sscanf((const char*)(message+2), "%d %s %s", (int*)&mox, user, pass) > 3)
                 goto badcommand;
 
-            channels[ch].radio.mox = mox;
+            rfstream[stream].radio.mox = mox;
 
             if (mox)  // FIXME: Need to make some changes for full duplex operation.
             {
-                for (int i=0;i<MAX_CHANNELS;i++)
+                for (int i=0;i<MAX_RFSTREAMS;i++)
                 {
-                    if (channels[i].radio.radio_id == radio_id && channels[i].enabled && !channels[i].isTX)
-                        SetChannelState(channels[i].dsp_channel, 0, 1);
+                    if (rfstream[i].radio.radio_id == radio_id && rfstream[i].enabled && !rfstream[i].isTX)
+                        SetChannelState(rfstream[i].dsp_channel, 0, 1);
                 }
-                SetChannelState(channels[ch].dsp_channel, 1, 0);
-                hwSetMox(ch, mox);
+                SetChannelState(rfstream[stream].dsp_channel, 1, 0);
+                hwSetMox(stream, mox);
             }
             else
             {
-                hwSetMox(ch, mox);
-                SetChannelState(channels[ch].dsp_channel, 0, 1);
-                for (int i=0;i<MAX_CHANNELS;i++)
+                hwSetMox(stream, mox);
+                SetChannelState(rfstream[stream].dsp_channel, 0, 1);
+                for (int i=0;i<MAX_RFSTREAMS;i++)
                 {
-                    if (channels[i].radio.radio_id == radio_id && channels[i].enabled && !channels[i].isTX)
-                        SetChannelState(channels[i].dsp_channel, 1, 0);
+                    if (rfstream[i].radio.radio_id == radio_id && rfstream[i].enabled && !rfstream[i].isTX)
+                        SetChannelState(rfstream[i].dsp_channel, 1, 0);
                 }
             }
-            sdr_log(SDR_LOG_INFO, "Mox set to: %d for tx channel %d\n", mox, channels[ch].dsp_channel);
+            sdr_log(SDR_LOG_INFO, "Mox set to: %d for tx channel %d\n", mox, rfstream[stream].dsp_channel);
         }
             break;
 
@@ -1863,7 +1877,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
     }
     return "OK";
 badcommand:
-    sdr_log(SDR_LOG_INFO, "DSP_COM: invalid command: %d  on Ch: %d\n", message[1], ch);
+    sdr_log(SDR_LOG_INFO, "DSP_COM: invalid command: %d for Rf stream: %d\n", message[1], stream);
     return "ERROR";
 } // end dsp_command
 

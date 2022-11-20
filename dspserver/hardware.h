@@ -33,9 +33,9 @@
 extern "C" {
 #endif
 #include <stdbool.h>
-#include "server.h"
+//#include "server.h"
 
-#define WIDEBAND_CHANNEL MAX_CHANNELS-1
+#define WIDEBAND_CHANNEL MAX_RFSTREAMS-1
 
 // Response buffers passed to hw_send must be this size
 #define HW_RESPONSE_SIZE          64
@@ -105,7 +105,7 @@ typedef struct _bufferwb {
     int16_t        data[16384];
 } BUFFERWB;
 
-extern CHANNEL channels[MAX_CHANNELS];
+extern RFSTREAM rfstream[MAX_RFSTREAMS];
 //extern int iq_socket;
 extern short int connected_radios;
 extern int sampleRate;
@@ -116,9 +116,9 @@ extern int rxOnly;
 extern char *manifest_xml[5];
 
 // values saved from last change to send to slaves
-long long lastFreq;
-int lastMode;
-bool audio_enabled[MAX_CHANNELS];
+extern long long lastFreq;
+extern int lastMode;
+extern bool audio_enabled[MAX_RFSTREAMS];
 
 
 /* --------------------------------------------------------------------------*/
@@ -209,7 +209,7 @@ void hwRestoreState();
 * @return
 */
 int make_connection(short int);
-void setSpeed(int channel, int s);
+void setSpeed(int stream, int s);
 
 extern int hwSetSampleRate(int, long);
 
@@ -239,6 +239,7 @@ void hw_stopIQ(void);
 
 extern int audio_socket;
 extern int radioMic;
+extern int local_audio;
 extern struct sockaddr_in audio_addr, server_audio_addr;
 extern socklen_t audio_length, server_audio_length;
 

@@ -57,7 +57,7 @@
 
 
 #include "audiostream.h"
-#include "server.h"
+//#include "server.h"
 #include "buffer.h"
 #include "util.h"
 

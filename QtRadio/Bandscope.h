@@ -37,7 +37,7 @@ public:
     void connect();
     void disconnect();
 
-    int8_t channel;
+    int8_t rfstream;
     int8_t radio_id;
 
 public slots:

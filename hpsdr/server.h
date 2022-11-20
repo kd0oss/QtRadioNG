@@ -124,6 +124,7 @@ typedef struct _bufferwb {
 typedef struct _mic_buffer
 {
     int8_t    radio_id;
+    char      ipaddr[INET_ADDRSTRLEN];
     int8_t    tx;
     short int length;
     float     fwd_pwr;

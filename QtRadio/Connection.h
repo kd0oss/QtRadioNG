@@ -72,7 +72,7 @@
 #define READ_SPECTRUM         8
 #define READ_WIDEBAND         9
 
-#define MAX_CHANNELS         35
+#define MAX_RFSTREAMS         35
 
 typedef enum {
     RXS, TXS, BS
@@ -108,18 +108,19 @@ typedef struct _spectrum
     char           *samples; // not used here, just a place holder for client side consistancy.
 } SPECTRUM;
 
-typedef struct _channel
+typedef struct _rfstream
 {
     int8_t    id;
     XCVR      radio;
     SPECTRUM  spectrum;
-    int8_t    dsp_channel;
+    int8_t    dummy;    // not used here, just a place holder for client side consistancy.
     int8_t    protocol;
     long long frequency;
     int8_t    index;
     bool      isTX;
     bool      enabled;
-} CHANNEL;
+} RFSTREAM;
+
 
 class ServerConnection : public QObject {
     Q_OBJECT
@@ -131,13 +132,16 @@ public:
     QString  manifest_xml[4];
     int      available_xcvrs[4];
     bool     receivers_active[8];
-    int8_t   receiver_channel[8];
+    int8_t   receiver_rfstream[8];
     long     sample_rate;
-    CHANNEL  channels[35];
+    //CHANNEL  channels[35];
+    RFSTREAM  rfstream[35];
     int8_t   txrxPair;
-    int      active_channels;
+    int      active_rfstreams;
     int      active_radios;
-    int      selected_channel;
+    int      selected_rfstream;
+    bool     local_audio;
+    bool     local_mic;
 
     void    connect(QString host, int receiver);
     void    freeBuffers(char* header, char* buffer);
@@ -159,7 +163,7 @@ public slots:
     void sendCommand(QByteArray command);
 
 signals:
-    void isConnected(bool*, int8_t*, int8_t*);
+    void isConnected(bool*, int8_t*, int8_t*, bool*, bool*);
     void disconnected(QString message);
     void header(char* header);
     void audioBuffer(char* header, char* buffer);
@@ -174,10 +178,9 @@ signals:
     void setChkTX(bool);  // password style server
     void resetbandedges(double loffset);
 //    void setFPS();
-    void hardware(QString);
     void activateRadioSig();
     void setSampleRate(long);
-    void setCurrentChannel(int);
+    void setCurrentRfstream(int);
     void send_command(QByteArray command);
 
 private:
@@ -239,7 +242,7 @@ public slots:
 signals:
     void isConnected();
     void disconnected(QString message);
-    void spectrumBuffer(CHANNEL);
+    void spectrumBuffer(RFSTREAM);
     void send_spectrum_command(QByteArray);
 };
 
@@ -322,7 +325,7 @@ public:
     MicAudioConnection();
     virtual ~MicAudioConnection();
     void    connect(QString host, int receiver);
-    void    sendAudio(int8_t channel, int length, unsigned char* data);
+    void    sendAudio(int8_t stream, int length, unsigned char* data);
 
 private:
     QTcpSocket  *tcpSocket;

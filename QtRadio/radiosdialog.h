@@ -20,16 +20,16 @@ public:
     QString radio_type;
     int     available_xcvrs[4];
     int     servers;
-    int8_t  selected_channel;
+    int8_t  selected_rfstream;
     bool    receivers_active[8];
-    int8_t  receiver_channel[8];
-    bool    remote_audio;
-    bool    remote_mic_audio;
+    int8_t  receiver_rfstream[8];
+    bool    local_audio;
+    bool    local_mic_audio;
     long    sample_rate[8];
     int     active_radios;
-    int     active_channels;
+    int     active_rfstreams;
     int8_t  txrxPair[2];
-    CHANNEL *channels;
+    RFSTREAM *rfstream;
 
     void fillRadioList();
 

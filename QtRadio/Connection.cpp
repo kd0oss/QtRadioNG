@@ -58,7 +58,7 @@ ServerConnection::ServerConnection()
     state = READ_HEADER;
     bytes = 0;
     active_radios = 0;
-    active_channels = 0;
+    active_rfstreams = 0;
     hdr = (char*)malloc(HEADER_SIZE_2_1);  // HEADER_SIZE is larger than AUTIO_HEADER_SIZE so it is OK for both
     SemSpectrum.release();
     muted = false;
@@ -154,9 +154,6 @@ void ServerConnection::disconnect()
         // tcpSocket=NULL;
 
     }
-    // close the hardware panel, if any
-
-    emit hardware(QString(""));
 } // end disconnnect
 
 
@@ -187,14 +184,13 @@ void ServerConnection::connected()
 {
     qDebug() << "ServerConnection::Connected" << tcpSocket->isValid();
 
-    for (int i=0;i<MAX_CHANNELS;i++)
+    for (int i=0;i<MAX_RFSTREAMS;i++)
     {
-        channels[i].id = i;
-        channels[i].radio.radio_id = -1;
-        channels[i].index = -1;
-        channels[i].dsp_channel = -1;
-        channels[i].enabled = false;
-        channels[i].isTX = false;
+        rfstream[i].id = i;
+        rfstream[i].radio.radio_id = -1;
+        rfstream[i].index = -1;
+        rfstream[i].enabled = false;
+        rfstream[i].isTX = false;
     }
     ////    emit isConnected();
     state = READ_HEADER;
@@ -211,22 +207,6 @@ void ServerConnection::connected()
     qbyte.append((char)QUESTION);
     qbyte.append((char)QINFO);
     //   sendCommand(qbyte);
-    /*
-    qbyte.append((char)QUESTION);
-    qbyte.append((char)QDSPVERSION);
-    sendCommand(qbyte);
-    qbyte.clear();
-    qbyte.append((char)QUESTION);
-    qbyte.append((char)QLOFFSET);
-    sendCommand(qbyte);
-    qbyte.clear();
-    qbyte.append((char)QUESTION);
-    qbyte.append((char)QCOMMPROTOCOL1);
-    sendCommand(qbyte);
-    qbyte.clear();
-    amSlave = true;
-    serverver = 0;
-    */
 } // end connected
 
 
@@ -243,7 +223,7 @@ void ServerConnection::sendCommand(QByteArray command)
 
     if (tcpSocket != NULL && tcpSocket->isValid() && tcpSocket->isWritable())
     {
-        qDebug("Server: ch: %d  Comm: %u\n", (char)command[0], (unsigned char)command[1]);
+        qDebug("Server: Rf stream: %d  Comm: %u\n", (char)command[0], (unsigned char)command[1]);
         memcpy(buffer, command.constData(), command.size());
         bytesWritten = tcpSocket->write(buffer, SEND_BUFFER_SIZE);
         if (bytesWritten != SEND_BUFFER_SIZE)
@@ -302,7 +282,7 @@ void ServerConnection::cmdSocketData()
                         active_radios = hdr[3];
                         bytes = 0;
                         radio_index = 0;
-                        active_channels = 0;
+                        active_rfstreams = 0;
                         state = READ_MANIFEST;
                         break;
 
@@ -360,8 +340,8 @@ void ServerConnection::cmdSocketData()
                 int zoom = z.toInt();
                 int left = l.toInt();
                 int right = r.toInt();
-                int current_channel = c.toInt();
-                //             emit setCurrentChannel(current_channel);
+                int current_rfstream = c.toInt();
+                //             emit setCurrentRfsteam(current_rfstream);
                 emit slaveSetFreq(newf);
                 //          emit slaveSetFilter(left, right);
                 //            emit slaveSetZoom(zoom);
@@ -785,7 +765,6 @@ void ServerConnection::createChannels(int radios)
     int  radio_id = 0;
     char radio_type[25];
     char radio_name[25];
-    int  num_chs = 0;
     int  num_rcvrs = 0;
     bool bs_capable = false;
 
@@ -886,49 +865,47 @@ void ServerConnection::createChannels(int radios)
                                                             int ant_switch = 0;
                                                             sscanf(line, "%*s %d %*s", &ant_switch);
                                                             for (;r<num_rcvrs;r++)
-                                                            {   // setup receive channels
-                                                                channels[active_channels].radio.radio_id = active_radios-1;
-                                                                strcpy(channels[active_channels].radio.ip_address, ip_addr);
-                                                                strcpy(channels[active_channels].radio.mac_address, mac_addr);
-                                                                channels[active_channels].radio.local_audio = local_audio;
-                                                                channels[active_channels].radio.local_mic = local_mic;
-                                                                channels[active_channels].radio.ant_switch = ant_switch;
-                                                                channels[active_channels].dsp_channel = num_chs++;
-                                                                channels[active_channels].index = r;
-                                                                channels[active_channels].id = active_channels;
-                                                                channels[active_channels].radio.bandscope_capable = bs_capable;
-                                                                strcpy(channels[active_channels].radio.radio_type, radio_type);
-                                                                strcpy(channels[active_channels].radio.radio_name, radio_name);
-                                                                channels[active_channels].isTX = false;
-                                                                channels[active_channels].enabled = false;
-                                                                channels[active_channels].spectrum.samples = NULL;
-                                                                active_channels++;
+                                                            {   // setup receive streams
+                                                                rfstream[active_rfstreams].radio.radio_id = active_radios-1;
+                                                                strcpy(rfstream[active_rfstreams].radio.ip_address, ip_addr);
+                                                                strcpy(rfstream[active_rfstreams].radio.mac_address, mac_addr);
+                                                                rfstream[active_rfstreams].radio.local_audio = local_audio;
+                                                                rfstream[active_rfstreams].radio.local_mic = local_mic;
+                                                                rfstream[active_rfstreams].radio.ant_switch = ant_switch;
+                                                                rfstream[active_rfstreams].index = r;
+                                                                rfstream[active_rfstreams].id = active_rfstreams;
+                                                                rfstream[active_rfstreams].radio.bandscope_capable = bs_capable;
+                                                                strcpy(rfstream[active_rfstreams].radio.radio_type, radio_type);
+                                                                strcpy(rfstream[active_rfstreams].radio.radio_name, radio_name);
+                                                                rfstream[active_rfstreams].isTX = false;
+                                                                rfstream[active_rfstreams].enabled = false;
+                                                                rfstream[active_rfstreams].spectrum.samples = NULL;
+                                                                active_rfstreams++;
                                                             }
                                                             for (;r<t+num_rcvrs;r++)
-                                                            {   // setup transmit channels
-                                                                channels[active_channels].radio.radio_id = active_radios-1;
-                                                                strcpy(channels[active_channels].radio.ip_address, ip_addr);
-                                                                strcpy(channels[active_channels].radio.mac_address, mac_addr);
-                                                                channels[active_channels].radio.local_audio = local_audio;
-                                                                channels[active_channels].radio.local_mic = local_mic;
-                                                                channels[active_channels].radio.ant_switch = ant_switch;
-                                                                channels[active_channels].dsp_channel = num_chs++;
-                                                                channels[active_channels].index = r;
-                                                                channels[active_channels].id = active_channels;
-                                                                channels[active_channels].radio.bandscope_capable = bs_capable;
-                                                                strcpy(channels[active_channels].radio.radio_type, radio_type);
-                                                                strcpy(channels[active_channels].radio.radio_name, radio_name);
-                                                                channels[active_channels].isTX = true;
-                                                                channels[active_channels].enabled = false;
-                                                                channels[active_channels].spectrum.samples = NULL;
-                                                                active_channels++;
+                                                            {   // setup transmit streams
+                                                                rfstream[active_rfstreams].radio.radio_id = active_radios-1;
+                                                                strcpy(rfstream[active_rfstreams].radio.ip_address, ip_addr);
+                                                                strcpy(rfstream[active_rfstreams].radio.mac_address, mac_addr);
+                                                                rfstream[active_rfstreams].radio.local_audio = local_audio;
+                                                                rfstream[active_rfstreams].radio.local_mic = local_mic;
+                                                                rfstream[active_rfstreams].radio.ant_switch = ant_switch;
+                                                                rfstream[active_rfstreams].index = r;
+                                                                rfstream[active_rfstreams].id = active_rfstreams;
+                                                                rfstream[active_rfstreams].radio.bandscope_capable = bs_capable;
+                                                                strcpy(rfstream[active_rfstreams].radio.radio_type, radio_type);
+                                                                strcpy(rfstream[active_rfstreams].radio.radio_name, radio_name);
+                                                                rfstream[active_rfstreams].isTX = true;
+                                                                rfstream[active_rfstreams].enabled = false;
+                                                                rfstream[active_rfstreams].spectrum.samples = NULL;
+                                                                active_rfstreams++;
                                                             }
                                                         }
             } // end if
         } // end for
         free(manifest);
     }
-    fprintf(stderr, "Active channels = %d\n", active_channels);
+    fprintf(stderr, "Active rf streams = %d\n", active_rfstreams);
 } // end createChannels
 
 
@@ -946,23 +923,26 @@ void ServerConnection::activateRadio()
     rd->available_xcvrs[2] = available_xcvrs[2];
     rd->available_xcvrs[3] = available_xcvrs[3];
     rd->active_radios = active_radios;
-    rd->active_channels = active_channels;
-    rd->channels = (CHANNEL*)&channels;
+    rd->active_rfstreams = active_rfstreams;
+    rd->rfstream = (RFSTREAM*)&rfstream;
     rd->fillRadioList();
     if (rd->exec() == QDialog::Accepted)
     {
         for (int i=0;i<8;i++)
         {
             receivers_active[i] = rd->receivers_active[i];
-            receiver_channel[i] = rd->receiver_channel[i];
+            receiver_rfstream[i] = rd->receiver_rfstream[i];
         }
         memcpy((int8_t*)&txrxPair, (int8_t*)&rd->txrxPair, 2);
         sample_rate = rd->sample_rate[0];
+        local_audio = rd->local_audio;
+        local_mic = rd->local_mic_audio;
+
         started = true;
     }
     delete rd;
     if (started)
-        emit isConnected((bool*)&receivers_active, (int8_t*)&receiver_channel, (int8_t*)&txrxPair);
+        emit isConnected((bool*)&receivers_active, (int8_t*)&receiver_rfstream, (int8_t*)&txrxPair, (bool*)&local_audio, (bool*)&local_mic);
 } // end activateRadio
 
 
@@ -1091,8 +1071,8 @@ void SpectrumConnection::spectrumSocketData()
     int     toRead;
     int     bytesRead = 0;
     int     thisRead = 0;
-    static  CHANNEL channel;
-    int     header_size = sizeof(CHANNEL);
+    static  RFSTREAM rfstream;
+    int     header_size = sizeof(RFSTREAM);
 
     if (bytes < 0)
     {
@@ -1115,7 +1095,7 @@ void SpectrumConnection::spectrumSocketData()
         {
         case READ_HEADER:
             //fprintf (stderr, "READ_HEADER: hdr size: %d bytes: %d\n", header_size, bytes);
-            thisRead = tcpSocket->read((char*)&channel+bytes, header_size - bytes);
+            thisRead = tcpSocket->read((char*)&rfstream+bytes, header_size - bytes);
             if (thisRead < 0)
             {
                 fprintf(stderr, "QtRadio: FATAL: READ_HEADER: error in read: %d\n", thisRead);
@@ -1125,7 +1105,7 @@ void SpectrumConnection::spectrumSocketData()
             bytes += thisRead;
             if (bytes == header_size)
             {
-                length = channel.spectrum.length;
+                length = rfstream.spectrum.length;
                 //     if ((length < 0) || (length > 4096))
                 if (length != 2000)
                 {
@@ -1135,7 +1115,7 @@ void SpectrumConnection::spectrumSocketData()
                 }
                 else
                 {
-                    channel.spectrum.samples = (char*)malloc(length);
+                    rfstream.spectrum.samples = (char*)malloc(length);
                     bytes = 0;
                     state = READ_SPECTRUM;
                 }
@@ -1143,13 +1123,13 @@ void SpectrumConnection::spectrumSocketData()
             break;
 
         case READ_SPECTRUM:
-            thisRead = tcpSocket->read(&channel.spectrum.samples[bytes], length - bytes);
+            thisRead = tcpSocket->read(&rfstream.spectrum.samples[bytes], length - bytes);
             bytes += thisRead;
             if (bytes == length)
             {
                 bytes = 0;
                 state = READ_HEADER;
-                emit spectrumBuffer(channel);
+                emit spectrumBuffer(rfstream);
             }
             break;
         default:
@@ -1173,7 +1153,7 @@ void SpectrumConnection::sendCommand(QByteArray command)
 
     if (tcpSocket != NULL && tcpSocket->isValid() && tcpSocket->isWritable())
     {
-        qDebug("Spec: ch: %d  Comm: %d\n", (char)command[0], (char)command[1]);
+        qDebug("Spectrum: rf stream: %d  Comm: %d\n", (char)command[0], (char)command[1]);
         memcpy(buffer, command.constData(), SEND_BUFFER_SIZE);
         bytesWritten = tcpSocket->write(buffer, SEND_BUFFER_SIZE);
         if (bytesWritten != SEND_BUFFER_SIZE)
@@ -1316,8 +1296,8 @@ void WidebandConnection::widebandSocketData()
     int     toRead;
     int     bytesRead=0;
     int     thisRead=0;
-    static  CHANNEL channel;
-    int     header_size=sizeof(CHANNEL);
+    static  RFSTREAM rfstream;
+    int     header_size=sizeof(RFSTREAM);
 
     if (bytes < 0)
     {
@@ -1338,7 +1318,7 @@ void WidebandConnection::widebandSocketData()
         {
         case READ_HEADER:
             //     fprintf(stderr, "READ_HEADER: hdr size: %d bytes: %d\n", header_size, bytes);
-            thisRead = tcpSocket->read((char*)&channel+bytes, header_size - bytes);
+            thisRead = tcpSocket->read((char*)&rfstream+bytes, header_size - bytes);
             if (thisRead < 0)
             {
                 fprintf(stderr, "QtRadio: FATAL: READ_HEADER: error in read: %d\n", thisRead);
@@ -1348,7 +1328,7 @@ void WidebandConnection::widebandSocketData()
             bytes += thisRead;
             if (bytes == header_size)
             {
-                length = channel.spectrum.length;
+                length = rfstream.spectrum.length;
                 if ((length < 512) || (length > 1920))
                     //         if (length != 512)
                 {
@@ -1358,7 +1338,7 @@ void WidebandConnection::widebandSocketData()
                 }
                 else
                 {
-                    channel.spectrum.samples = (char*)malloc(length);
+                    rfstream.spectrum.samples = (char*)malloc(length);
                     bytes = 0;
                     state = READ_WIDEBAND;
                 }
@@ -1366,13 +1346,13 @@ void WidebandConnection::widebandSocketData()
             break;
 
         case READ_WIDEBAND:
-            thisRead = tcpSocket->read(&channel.spectrum.samples[bytes], length - bytes);
+            thisRead = tcpSocket->read(&rfstream.spectrum.samples[bytes], length - bytes);
             bytes += thisRead;
             if (bytes == length)
             {
                 bytes = 0;
                 state = READ_HEADER;
-                emit bandscopeBuffer(channel.spectrum);
+                emit bandscopeBuffer(rfstream.spectrum);
             }
             break;
 
@@ -1733,7 +1713,7 @@ void MicAudioConnection::socketData()
 }
 
 
-void MicAudioConnection::sendAudio(int8_t channel, int length, unsigned char* data)
+void MicAudioConnection::sendAudio(int8_t stream, int length, unsigned char* data)
 {
     char buffer[MICS_BUFFER_SIZE];
     //    int  i;
@@ -1743,7 +1723,7 @@ void MicAudioConnection::sendAudio(int8_t channel, int length, unsigned char* da
     //      buffer[i] = 0;
     if (tcpSocket!=NULL && tcpSocket->isValid() && tcpSocket->isWritable())
     {
-        buffer[0] = channel;
+        buffer[0] = stream;
         buffer[1] = ISMIC;
         memcpy(&buffer[6], data, length);
         mutex.lock();

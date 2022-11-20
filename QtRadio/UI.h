@@ -105,32 +105,31 @@ public:
     QTimer           settingsTimer[MAX_RECEIVERS];
     QWidget         *hww;
     bool             receiver_active[MAX_RECEIVERS];
-    int8_t           receiver_channel[MAX_RECEIVERS];
-    int8_t           currentRxChannel;
-    int8_t           currentTxChannel;
+    int8_t           receiver_rfstream[MAX_RECEIVERS];
+    int8_t           currentRxRfstream;
+    int8_t           currentTxRfstream;
     int8_t           activeReceivers;
     int8_t           txrxPair[2];
     double           currentPwr;
     int              sampleRate[MAX_RECEIVERS];
     int              fps[MAX_RECEIVERS];
     int8_t           radio_index;
-    CHANNEL          channels[MAX_RECEIVERS];
+    RFSTREAM         rfstream[MAX_RECEIVERS];
     bool             radio_started;
+    int              notchFilterIndex[MAX_RECEIVERS];
+    long long        frequency[MAX_RECEIVERS];
+    long long        selectedFrequency;
+    long long        txFrequency;
+    bool             txNow;
+    int              cwPitch;
+    double           loffset;
+    bool             local_audio;
+    bool             local_mic;
+    bool             squelch;
+    float            squelchValue[MAX_RECEIVERS];
+    bool             modeFlag[MAX_RECEIVERS]; //Signals mode is changed from main menu
 
-    int       notchFilterIndex[MAX_RECEIVERS];
-    long long frequency[MAX_RECEIVERS];
-    long long selectedFrequency;
-    long long txFrequency;
-
-    bool   txNow;
-    int    cwPitch;
-    double loffset;
-
-    bool   squelch;
-    float  squelchValue[MAX_RECEIVERS];
-    bool   modeFlag[MAX_RECEIVERS]; //Signals mode is changed from main menu
-
-    void initializeReceiver(CHANNEL *channel);
+    void initializeReceiver(RFSTREAM *rfstream);
     long long rigctlGetFreq();
     QString rigctlGetMode();
     QString rigctlGetFilter();
@@ -147,7 +146,7 @@ public:
     void shutdownRadio(void);
     void saveSetting(QString, QString, QString, int8_t);
     QString loadSetting(QString, QString, int8_t);
-    int8_t getInternalIndex(int8_t channel_index);
+    int8_t getInternalIndex(int8_t rfstream_index);
 
 public slots:
     void bandChanged(int8_t, int8_t, int previousBand, int newBand);
@@ -216,10 +215,10 @@ public:
 
     Radio  *radio[MAX_RADIOS];
     bool    receiver_active[MAX_RECEIVERS];
-    int8_t  receiver_channel[MAX_RECEIVERS];
+    int8_t  receiver_rfstream[MAX_RECEIVERS];
 
-    int8_t currentRxChannel;
-    int8_t currentTxChannel;
+    int8_t currentRxRfstream;
+    int8_t currentTxRfstream;
     int8_t current_index;
     double currentPwr;
     bool squelch;
@@ -328,10 +327,10 @@ public slots:
     void actionLong();
 
 
-    void connected(bool*, int8_t*, int8_t*);
+    void connected(bool*, int8_t*, int8_t*, bool*, bool*);
     void disconnected(QString message);
     void audioBuffer(char* header,char* buffer);
-    void spectrumBuffer(CHANNEL);
+    void spectrumBuffer(RFSTREAM);
 
  //   void updateSpectrum();
     void masterButtonClicked(void);
@@ -387,6 +386,7 @@ public slots:
     void getBandFrequency();
     void vfoStepBtnClicked(int direction);
     void frequencyMoved(int,int);
+    void frequencyChanged(long long);
     void updateVFO(long long);
     void pttChange(int caller, bool ptt);
     void printStatusBar(QString message);
@@ -407,6 +407,7 @@ public slots:
 signals:
     void set_src_ratio(double ratio);
     void tuningEnable(bool);
+    void frequencyChanged(int8_t, long long);
 
 protected:
 //    void paintEvent(QPaintEvent*);
@@ -416,7 +417,7 @@ private slots:
     void on_zoomSpectrumSlider_sliderMoved(int position);
     void setAudioMuted(bool);
     void audioGainChanged(void);
-    void setCurrentChannel(int);
+    void setCurrentRfstream(int);
     void cessbOvershootChanged(bool);
     void aeFilterChanged(bool);
     void nrGainMethodChanged(int);

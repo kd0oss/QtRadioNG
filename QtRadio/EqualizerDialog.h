@@ -18,8 +18,8 @@ public:
     ~EqualizerDialog();
 
     ServerConnection *connection;
-    int8_t currentRxChannel;
-    int8_t currentTxChannel;
+    int8_t currentRxRfstream;
+    int8_t currentTxRfstream;
     
 public slots:
     void resetRx(void);

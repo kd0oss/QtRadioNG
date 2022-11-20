@@ -114,7 +114,7 @@ void Bandscope::connected()
 
     qDebug("Connected:  BS width: %d  Radio Id: %d", width(), (char)radio_id);
     command.clear();
-    command.append((char)channel);
+    command.append((char)rfstream);
     command.append((char)STARTBANDSCOPE);
     command.append((char)radio_id);
     command.append(QString("%1").arg(width()));
@@ -128,7 +128,7 @@ void Bandscope::disconnected()
     QByteArray command;
 
     command.clear();
-    command.append((char)channel);
+    command.append((char)rfstream);
     command.append((char)STOPBANDSCOPE);
     command.append((char)radio_id);
     connection->sendCommand(command);
@@ -144,7 +144,7 @@ void Bandscope::updateBandscope()
     if (!isConnected) return;
     qDebug("Resize:  BS width: %d", width());
     command.clear();
-    command.append((char)channel);
+    command.append((char)rfstream);
     command.append((char)UPDATEBANDSCOPE);
     command.append((char)radio_id);
     command.append(QString("%1").arg(width()));

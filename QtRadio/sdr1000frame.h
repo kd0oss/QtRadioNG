@@ -26,8 +26,8 @@ public:
     void shutDown(void);
 
     int8_t radio_id;
-    int8_t currentRxChannel;
-    int8_t currentTxChannel;
+    int8_t currentRxRfstream;
+    int8_t currentTxRfstream;
 
 private:
     Ui::Sdr1000Frame *ui;
