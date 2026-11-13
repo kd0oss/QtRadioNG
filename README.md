@@ -23,6 +23,59 @@ the speed and bandwidth requirements.  The user interface however only requires 
 bandwidth similar to an old dialup connection. This makes it ideal for operation over the
 internet.
 
+## Building
+
+The terminal programs (dspserver, hpsdr, hackrf_one, flexradio and the
+protocol plugins) build with CMake 3.16 or later:
+
+    cmake -B build -DWDSP_DIR=/path/to/wdsp
+    cmake --build build -j
+    ctest --test-dir build            # tests (Python 3 with numpy)
+    sudo cmake --install build        # optional, into /usr/local/bin
+
+The programs end up in `build/<program>/`. hackrf_one is skipped with a
+warning if libhackrf is not installed. These options turn programs off:
+
+* `-DBUILD_DSPSERVER=OFF`
+* `-DBUILD_HPSDR=OFF`
+* `-DBUILD_HACKRF_ONE=OFF`
+* `-DBUILD_FLEXRADIO=OFF`
+* `-DBUILD_PLUGINS=OFF`
+
+`-DBUILD_TESTING=OFF` skips the tests. Each program can also be built on
+its own from its directory (`cmake -S hpsdr -B build-hpsdr`). See
+dspserver/README.txt for WDSP.
+
+QtRadio keeps its qmake project (QtRadio/QtRadio.pro).
+
+## Several radios
+
+Several radio programs (hpsdr, hackrf_one, flexradio) can be connected to
+one dspserver at the same time: start each the usual way, in any order. Up
+to 5 radio programs and 5 radios (one hpsdr can serve more than one board)
+are supported.
+
+* dspserver numbers the radios in the order they first connect. That is the
+  number QtRadio shows in its radio list, whatever id the radio has in its
+  own program, so hpsdr's first board and a HackRF can both be radio 0
+  there.
+* If a radio program stops and starts again, its radio keeps its number. In
+  between, clients see it with "(offline)" after its name.
+* QtRadio uses one radio per session: pick it in the list that comes up
+  when connecting. To use two radios at once, run a second QtRadio and pick
+  the other radio there.
+* Each radio program gets its own block of UDP ports from dspserver: the
+  first connected uses ports 10000 to 10159 as before, the second 10200 to
+  10359, the third 10400 to 10559, and so on (+200 each). Open these on a
+  firewall between dspserver and a radio program on another machine. The
+  radio programs connect to dspserver on TCP port 10100.
+
+## Protocol plugins
+
+Modes that WDSP does not handle, such as M17 digital voice, are added by
+plugin programs that connect to dspserver and add a mode and a control panel
+to QtRadio. See plugins/README.md.
+
 Software is currently in alpha stage of development.
 
 More to come.

@@ -29,18 +29,11 @@
 
 #include <QtCore>
 
-#if QT_VERSION >= 0x050000
-#include <QtWidgets/QGraphicsView>
-#include <QtWidgets/QGraphicsScene>
-#include <QtWidgets/QGraphicsItem>
-#include <QtWidgets/QGraphicsItemGroup>
-#include <QtOpenGL/QGLWidget>
-#else
 #include <QGraphicsView>
 #include <QGraphicsScene>
 #include <QGraphicsItem>
 #include <QGraphicsItemGroup>
-#endif
+//#include <QtOpenGL/QGLWidget>
 
 #include <QPainter>
 #include <QAction>
@@ -74,7 +67,6 @@ public:
     int getHigh();
 
     void setAutomatic(bool state);
-    bool getAutomatic();
 
     int cy;         // current row
     int ypos;
@@ -119,7 +111,7 @@ public:
     void    paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget);
     QRectF  boundingRect() const;
     int     itemType;
-    int8_t  currentChannel;
+    int8_t  currentRfstream;
     int plotHeight;
 
 private:
@@ -252,7 +244,7 @@ public:
 //    void setBand(QString b);
 //    void setFilter(QString f);
 //    void setBandLimits(long long min,long long max);
-    int8_t  currentChannel;
+    int8_t  currentRfstream;
 
 signals:
     void frequencyMoved(int steps,int step);
@@ -339,15 +331,12 @@ public:
     int filterLow;
     int filterHigh;
 
-    void setObjectName(QString name);
-    void setGeometry(QRect rect);
-    void initialize();
     void setSampleRate(int r);
     void setFrequency(long long f);
     void setFilter(int low,int high);
     void updateSpectrumFrame(SPECTRUM);
     int samplerate();
-    int8_t currentChannel;
+    int8_t currentRfstream;
     int8_t index;
 
     int getHigh();
@@ -359,8 +348,6 @@ public:
     void setBand(QString b);
     void setFilter(QString f);
 
-    void setHost(QString h);
-    void setReceiver(int r);
 
     void setBandLimits(long long min,long long max);
 

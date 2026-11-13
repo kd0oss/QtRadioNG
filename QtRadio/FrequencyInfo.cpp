@@ -33,14 +33,6 @@ QString FrequencyInfo::getDescription() {
     return description;
 }
 
-int FrequencyInfo::getBand() {
-    return band;
-}
-
-bool FrequencyInfo::canTransmit() {
-    return transmit;
-}
-
 bool FrequencyInfo::isFrequency(long long frequency) {
     return frequency>=minFrequency && frequency<=maxFrequency;
 }

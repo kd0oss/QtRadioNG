@@ -40,6 +40,7 @@
 #define MODE_DIGL 9
 #define MODE_SAM 10
 #define MODE_DRM 11
+#define MODE_FMW 12     // wide band (broadcast) FM, demodulated by dspserver
 
 
 class Mode : public QObject {

@@ -5,11 +5,7 @@
 #include <QVector>
 #include <QSettings>
 
-#if QT_VERSION >= 0x050000
-#include <QtWidgets/QMenu>
-#else
 #include <QMenu>
-#endif
 
 #include "Bookmark.h"
 #include "Bookmarks.h"
@@ -21,7 +17,6 @@ public:
     void saveSettings(QSettings* settings);
     void loadSettings(QSettings* settings);
     void buildMenu(QMenu* menu);
-    void add(QString title,int band,long long frequency,int mode,int filter);
     void add(Bookmark* bookmark);
     void remove(int index);
     Bookmark* at(int index);

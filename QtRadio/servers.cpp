@@ -5,13 +5,8 @@
 #include <QColor>
 
 
-#if QT_VERSION >= 0x050000
-#include <QtWidgets/QMessageBox>
-#include <QtWidgets/QDialog>
-#else
 #include <QMessageBox>
 #include <QDialog>
-#endif
 
 
 #include "servers.h"
@@ -29,7 +24,7 @@ Servers::Servers(QDialog *parent) :  QDialog(parent), ui(new Ui::Servers)
     ui->setupUi(this);
     this->setAttribute(Qt::WA_DeleteOnClose);
     nam = new QNetworkAccessManager(this);
-    QObject::connect(nam, SIGNAL(finished(QNetworkReply*)), this, SLOT(finishedSlot(QNetworkReply*)));
+    QObject::connect(nam, &QNetworkAccessManager::finished, this, &Servers::finishedSlot);
     ui->treelist->setHeaderLabels(QString("Status;Call;Location;Band;Rig;Antenna;Last Report;IP").split(";"));
     ui->treelist->setColumnWidth( 0,140);
     //ui->treelist->setColumnWidth( 0,125);
@@ -41,7 +36,7 @@ Servers::Servers(QDialog *parent) :  QDialog(parent), ui(new Ui::Servers)
     ui->treelist->setColumnWidth( 6,150);
     ui->treelist->setColumnWidth( 7,125);
     QTimer *timer = new QTimer(this);
-    connect(timer, SIGNAL(timeout()), this, SLOT(TimerFired()));
+    connect(timer, &QTimer::timeout, this, &Servers::TimerFired);
     timer->start(60000); // 60 seconds
 
 
@@ -69,7 +64,7 @@ void Servers::refreshList()
 {
    ui->treelist->clear();
    QUrl url("http://qtradio.napan.ca/qtradio/qtradiolist.pl");
-   QNetworkReply* reply = nam->get(QNetworkRequest(url));
+   nam->get(QNetworkRequest(url));     // answered in finishedSlot
 }
 
 void Servers::finishedSlot(QNetworkReply* reply )
@@ -81,7 +76,7 @@ void Servers::finishedSlot(QNetworkReply* reply )
         QString replyString(replyBytes); // string
         //fprintf(stderr, "replyString length:%i\n", replyString.length());
         //qDebug() << replyString;
-         QStringList list =  replyString.split("\n", QString::SkipEmptyParts);
+         QStringList list =  replyString.split("\n", Qt::SkipEmptyParts);
          populateList(list);
     }
     // Some http error received
@@ -116,7 +111,7 @@ void Servers::addLine(QString line)
     }
     if (line.left(4) == "Idle"|| line.left(1) == "0"){
 
-      item->setBackgroundColor(1,QColor(Qt::green));
+        item->setBackground(1, QBrush(QColor(Qt::green)));
     }
     ui->treelist->addTopLevelItem(item);
 }

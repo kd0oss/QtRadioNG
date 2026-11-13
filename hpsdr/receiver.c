@@ -20,7 +20,7 @@ RECEIVER *create_receiver(int id, int buffer_size, int alexRxAntenna, int alexAt
     fprintf(stderr,"create_receiver: id=%d device=%d buffer_size=%d\n", id, radio->device, buffer_size);
     fflush(stderr);
 
-    RECEIVER *rx = (RECEIVER*)malloc(sizeof(RECEIVER));
+    RECEIVER *rx = (RECEIVER*)calloc(1, sizeof(RECEIVER));
     rx->id = id;
     pthread_mutex_init(&rx->mutex, NULL);
 
@@ -127,22 +127,6 @@ RECEIVER *create_receiver(int id, int buffer_size, int alexRxAntenna, int alexAt
 
     return rx;
 } // end create_receiver
-
-
-void dump_udp_buffer(unsigned char* buffer)
-{
-    unsigned int i;
-    fprintf(stderr, "udp ...\n");
-    for(i=0; i<1024; i+=16)
-    {
-        fprintf(stderr, "  [%04X] %02X%02X%02X%02X%02X%02X%02X%02X %02X%02X%02X%02X%02X%02X%02X%02X\n",
-                i,
-                buffer[i],buffer[i+1],buffer[i+2],buffer[i+3],buffer[i+4],buffer[i+5],buffer[i+6],buffer[i+7],
-                buffer[i+8],buffer[i+9],buffer[i+10],buffer[i+11],buffer[i+12],buffer[i+13],buffer[i+14],buffer[i+15]
-                );
-    }
-    fprintf(stderr, "\n");
-} // end dump_upd_buffer
 
 
 void add_iq_samples(RECEIVER *rx, double i_sample, double q_sample)

@@ -35,57 +35,9 @@ Calc::~Calc()
 }
 
 
-double Calc::SWR(int adc_fwd, int adc_rev)
-{
-    if(adc_fwd == 0 && adc_rev == 0)
-        return 1.0;
-    else if(adc_rev > adc_fwd)
-        return 50.0;
-
-    double Ef = ScaledVoltage(adc_fwd);
-    double Er = ScaledVoltage(adc_rev);
-
-    double swr = (Ef + Er)/(Ef - Er);
-
-    return swr;
-}
-
-
-double Calc::ScaledVoltage(int adc)
-{
-    double v_det = adc * 0.062963;			// scale factor in V/bit including pot ratio
-    double v_out = v_det * 10.39853;		// scale factor in V/V for bridge output to detector voltage
-    return v_out; //*PABandOffset(CurrentBand);
-}
-
-
-double Calc::ADCtodBm(int adc_data)
-{
-    if(adc_data == 0)
-        return 0;
-
-    double mult = 100000 / pow(225/1/*PABandOffset(CurrentBand)*/, 2);
-    return 10*log10(mult*pow(adc_data, 2));
-}
-
-
-double Calc::PAPower(int adc)
-{
-    double v_out = ScaledVoltage(adc);
-    double powr = v_out/100.0; //pow(adc, 2)/50;
-    powr = qMax(powr, 0.0);
-    return powr;
-}
-
-
 double Calc::WattsTodBm(double watts)
 {
     return 10*log10(watts/0.001);
 }
 
-
-double Calc::dBmToWatts(double dBm)
-{
-    return pow(10, dBm/10)*0.001;
-}
 

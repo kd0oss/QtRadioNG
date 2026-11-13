@@ -60,9 +60,9 @@ vfo::vfo(QWidget *parent) : QFrame(parent), ui(new Ui::vfo)
     ui->btnGrpBand->setId(ui->bandBtn_11, 11); // GEN
     ui->btnGrpBand->setId(ui->bandBtn_12, 12); // WWV
 
-    connect(ui->btnGrpBand, SIGNAL(buttonClicked(int)), this, SLOT(btnGrpClicked(int)));
-    connect(ui->hSlider, SIGNAL(valueChanged(int)), this, SLOT(processRIT(int)));
-    connect(ui->receiverSelectCB, SIGNAL(currentIndexChanged(int)), this, SLOT(changeReceiver(int)));
+    connect(ui->btnGrpBand, &QButtonGroup::idClicked, this, &vfo::btnGrpClicked);
+    connect(ui->hSlider, &QSlider::valueChanged, this, &vfo::processRIT);
+    connect(ui->receiverSelectCB, &QComboBox::currentIndexChanged, this, &vfo::changeReceiver);
 
 // Powermate related stuff
 #if defined(LINUX)
@@ -118,6 +118,7 @@ void vfo::processRIT(int rit)  //rit holds slider value
         emit frequencyMoved(prevRITfreq - rit, 1);
     }
     prevRITfreq = rit;
+    ui->label_5->setText(QString("%1").arg(rit));
 }
 
 void vfo::on_pBtnRIT_clicked()
@@ -163,22 +164,22 @@ void vfo::mousePressEvent(QMouseEvent *event)
 //qDebug()<<Q_FUNC_INFO<<": event x/y = "<<event->x()<<"/"<<event->y();
 
         //Check to see if we have right clicked on the band button group
-        if ((event->x() > 414) && (event->x() < 573) &&
-            (event->y() > 6) && (event->y() < 111)) {
+if ((event->pos().x() > 414) && (event->pos().x() < 573) &&
+    (event->pos().y() > 6) && (event->pos().y() < 111)) {
 //            storeVFO(); //make the selected button flash yellow & call store routine
             timer.start(500,this);
             ui->btnGrpBand->checkedButton()->setStyleSheet("background-color: yellow");
             emit rightBandClick();  //connected to Band:quickMemStore via UI:quickMemStore
 
         }   // Check to see if we have right clicked the RIT slider
-        else if ((event->x() > 189) && (event->x() < 403) &&
-                 (event->y() > 89) && (event->y() < 111)) {
+else if ((event->pos().x() > 189) && (event->pos().x() < 403) &&
+         (event->pos().y() > 89) && (event->pos().y() < 111)) {
                 ui->hSlider->setValue(0);
         }
         // We have clicked either on the display or somewhere else on the widget
 
         else {  // Check to see if we have clicked outside the vfo display area
-            digit = getDigit(event->x(), event->y());
+            digit = getDigit(event->pos().x(), event->pos().y());
 //qDebug()<<Q_FUNC_INFO<<": The value of digit is ..."<<digit;
             if (digit != 9) {       // getDigit returns 9 if click was outside display area.
                 if (digit < 9) {    // getDigit returns 0 ... 8 if we clicked on vfoA
@@ -243,13 +244,13 @@ void vfo::wheelEvent(QWheelEvent *event)
     QString str;
     long long x;
     int digit;
-    int direction = 1;
+    int direction = -1;
     bool isVfoA = true;
     static const int mult[9] = {100000000,10000000,1000000,100000,10000,1000,100,10,1};
 
-    digit = getDigit(event->x(), event->y());
+    digit = getDigit(event->position().x(), event->position().y());
     if (digit != 9) {  // getDigit returns 9 if click was outside display area so we just fall through.
-        if (event->delta() < 0) direction = -1;  // x becomes pos or neg depending on wheel rotation.
+        if (event->angleDelta().y() < 0) direction = 1;  // x becomes pos or neg depending on wheel rotation.
         if (digit > 9) { // getDigit returns 10 ... 18 if we clicked on vfoB
             digit = digit - 10; // so convert to 1 ... 8.
             isVfoA = false;
@@ -450,13 +451,6 @@ void vfo::writeSettings(QSettings* settings)
 }
 
 
-QString vfo::rigctlGetvfo()
-{
-    QString vfo;
-    vfo = selectedVFO;
-    return "VFO" + vfo;
-}
-
 void vfo::keyPressEvent( QKeyEvent * event){
     //qDebug() << event->key();
     if(event->key() == Qt::Key_Up) {
@@ -586,15 +580,6 @@ void vfo::refocus()
    ui->frame_2->setFocus();
 }
 
-long long vfo::getTxFrequency()
-{
-    if(selectedVFO == 'A') {
-        return readA();
-    } else {
-        return readB();
-    }
-}
-
 void vfo::setVfoBtnColour()
 {
     switch(selectedVFO) {
@@ -646,10 +631,5 @@ void vfo::pttChange(bool pttState)
         }
     }
     setVfoBtnColour();
-}
-
-bool vfo::getPtt()
-{
-    return ptt; //returns state of ptt. false = Rx, true =Tx
 }
 

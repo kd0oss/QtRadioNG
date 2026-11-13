@@ -1,0 +1,399 @@
+/*
+ * Mock libhackrf for testing hackrf_one without hardware.
+ *
+ * Streams int8 IQ in real time at the selected sample rate.  The signal is
+ * a set of carriers at absolute frequencies, so tuning behaves like a real
+ * radio, plus a DC offset (the HackRF LO spike) and a little noise.
+ *
+ *   MOCK_HACKRF_TONES  "freq_hz:amplitude,..."  default "14200000:60,14260000:20"
+ *   MOCK_HACKRF_DC     DC offset in LSB                default 8
+ *   MOCK_HACKRF_FM     "freq_hz:amplitude:deviation_hz:tone_hz"  one FM station,
+ *                      e.g. "98100000:50:68000:1000" (off by default)
+ *   MOCK_HACKRF_TX_CAPTURE  file to write 2^21 transmitted samples to (int8 IQ),
+ *                      taken 1 s after transmit starts
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <time.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#include <complex.h>
+#include <libhackrf/hackrf.h>
+
+#define MAX_TONES      8
+#define TRANSFER_BYTES 262144
+
+struct hackrf_device
+{
+    pthread_t   thread;
+    atomic_bool running;
+    pthread_t   tx_thread;
+    atomic_bool tx_running;
+    hackrf_sample_block_cb_fn tx_callback;
+    hackrf_sample_block_cb_fn callback;
+    void       *ctx;
+    atomic_long rate;
+    atomic_llong lo;
+};
+
+static double tone_freq[MAX_TONES];
+static double tone_amp[MAX_TONES];
+static int    ntones = 0;
+static double dc_offset = 8.0;
+static double fm_freq = 0.0, fm_amp = 0.0, fm_dev = 0.0, fm_tone = 0.0;
+
+#define FM_TABLE_BITS 16
+static double complex fm_table[1 << FM_TABLE_BITS];
+
+
+static void load_signal(void)
+{
+    const char *spec = getenv("MOCK_HACKRF_TONES");
+    char buf[512];
+
+    if (spec == NULL)
+        spec = "14200000:60,14260000:20";
+    snprintf(buf, sizeof(buf), "%s", spec);
+    ntones = 0;
+    for (char *tok = strtok(buf, ","); tok != NULL && ntones < MAX_TONES; tok = strtok(NULL, ","))
+    {
+        double f = 0.0, a = 0.0;
+        if (sscanf(tok, "%lf:%lf", &f, &a) == 2)
+        {
+            tone_freq[ntones] = f;
+            tone_amp[ntones] = a;
+            ntones++;
+        }
+    }
+    if (getenv("MOCK_HACKRF_FM") != NULL &&
+        sscanf(getenv("MOCK_HACKRF_FM"), "%lf:%lf:%lf:%lf", &fm_freq, &fm_amp, &fm_dev, &fm_tone) == 4)
+    {
+        for (int k = 0; k < (1 << FM_TABLE_BITS); k++)
+            fm_table[k] = cexp(I * 2.0 * M_PI * k / (double)(1 << FM_TABLE_BITS));
+        fprintf(stderr, "mock_hackrf: FM station %.0f Hz, deviation %.0f Hz, tone %.0f Hz\n", fm_freq, fm_dev, fm_tone);
+    }
+    if (getenv("MOCK_HACKRF_DC") != NULL)
+        dc_offset = atof(getenv("MOCK_HACKRF_DC"));
+    fprintf(stderr, "mock_hackrf: %d tones, DC %.1f\n", ntones, dc_offset);
+} // end load_signal
+
+
+static void *stream_thread(void *arg)
+{
+    hackrf_device *d = arg;
+    static uint8_t buffer[TRANSFER_BYTES];
+    double complex phasor[MAX_TONES];
+    uint32_t fm_phase = 0;
+    double complex fm_mod = 1.0;
+    struct timespec next;
+    unsigned int seed = 1;
+
+    for (int t = 0; t < ntones; t++)
+        phasor[t] = 1.0;
+    clock_gettime(CLOCK_MONOTONIC, &next);
+
+    while (atomic_load(&d->running))
+    {
+        long rate = atomic_load(&d->rate);
+        long long lo = atomic_load(&d->lo);
+        size_t n = TRANSFER_BYTES / 2;
+        double complex step[MAX_TONES];
+
+        for (int t = 0; t < ntones; t++)
+            step[t] = cexp(I * 2.0 * M_PI * (tone_freq[t] - (double)lo) / (double)rate);
+        double complex fm_mod_step = cexp(I * 2.0 * M_PI * fm_tone / (double)rate);
+        double fm_offset = fm_freq - (double)lo;
+        double fm_scale = 4294967296.0 / (double)rate;
+
+        for (size_t k = 0; k < n; k++)
+        {
+            double complex s = dc_offset;
+            for (int t = 0; t < ntones; t++)
+            {
+                s += tone_amp[t] * phasor[t];
+                phasor[t] *= step[t];
+            }
+            if (fm_amp > 0.0)
+            {
+                double inst = fm_offset + fm_dev * cimag(fm_mod);
+                fm_phase += (uint32_t)(int64_t)llround(inst * fm_scale);
+                s += fm_amp * fm_table[fm_phase >> (32 - FM_TABLE_BITS)];
+                fm_mod *= fm_mod_step;
+            }
+            seed = seed * 1103515245u + 12345u;
+            double ni = (double)((int)((seed >> 16) & 3) - 1.5);
+            seed = seed * 1103515245u + 12345u;
+            double nq = (double)((int)((seed >> 16) & 3) - 1.5);
+            double i = fmax(-127.0, fmin(127.0, creal(s) + ni));
+            double q = fmax(-127.0, fmin(127.0, cimag(s) + nq));
+            buffer[k * 2] = (uint8_t)(int8_t)lround(i);
+            buffer[k * 2 + 1] = (uint8_t)(int8_t)lround(q);
+        }
+        for (int t = 0; t < ntones; t++)
+            phasor[t] /= cabs(phasor[t]);
+        fm_mod /= cabs(fm_mod);
+
+        // real-time pacing
+        long ns = (long)(1e9 * (double)n / (double)rate);
+        next.tv_nsec += ns;
+        while (next.tv_nsec >= 1000000000L)
+        {
+            next.tv_sec++;
+            next.tv_nsec -= 1000000000L;
+        }
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, NULL);
+
+        hackrf_transfer tr;
+        memset(&tr, 0, sizeof(tr));
+        tr.device = d;
+        tr.buffer = buffer;
+        tr.buffer_length = TRANSFER_BYTES;
+        tr.valid_length = TRANSFER_BYTES;
+        tr.rx_ctx = d->ctx;
+        d->callback(&tr);
+    }
+    return NULL;
+} // end stream_thread
+
+
+int ADDCALL hackrf_init(void)
+{
+    load_signal();
+    return HACKRF_SUCCESS;
+}
+
+int ADDCALL hackrf_exit(void)
+{
+    return HACKRF_SUCCESS;
+}
+
+int ADDCALL hackrf_open_by_serial(const char* const serial, hackrf_device** device)
+{
+    (void)serial;
+    hackrf_device *d = calloc(1, sizeof(hackrf_device));
+    atomic_store(&d->rate, 10000000L);
+    atomic_store(&d->lo, 0LL);
+    *device = d;
+    return HACKRF_SUCCESS;
+}
+
+int ADDCALL hackrf_close(hackrf_device* device)
+{
+    hackrf_stop_rx(device);
+    hackrf_stop_tx(device);
+    free(device);
+    return HACKRF_SUCCESS;
+}
+
+int ADDCALL hackrf_start_rx(hackrf_device* device, hackrf_sample_block_cb_fn callback, void* rx_ctx)
+{
+    if (atomic_load(&device->running) || atomic_load(&device->tx_running))
+        return HACKRF_ERROR_BUSY;
+    device->callback = callback;
+    device->ctx = rx_ctx;
+    atomic_store(&device->running, true);
+    pthread_create(&device->thread, NULL, stream_thread, device);
+    fprintf(stderr, "mock_hackrf: streaming\n");
+    return HACKRF_SUCCESS;
+}
+
+int ADDCALL hackrf_stop_rx(hackrf_device* device)
+{
+    if (atomic_load(&device->running))
+    {
+        atomic_store(&device->running, false);
+        pthread_join(device->thread, NULL);
+        fprintf(stderr, "mock_hackrf: stopped\n");
+    }
+    return HACKRF_SUCCESS;
+}
+
+static void *tx_stream_thread(void *arg)
+{
+    hackrf_device *d = arg;
+    static uint8_t buffer[TRANSFER_BYTES];
+    struct timespec next;
+    long long sent = 0;
+    const char *capture = getenv("MOCK_HACKRF_TX_CAPTURE");
+    size_t cap_len = (size_t)1 << 21, cap_n = 0;
+    int8_t *cap = capture ? malloc(cap_len * 2) : NULL;
+    double power = 0.0;
+    long count = 0;
+
+    clock_gettime(CLOCK_MONOTONIC, &next);
+    while (atomic_load(&d->tx_running))
+    {
+        long rate = atomic_load(&d->rate);
+        size_t n = TRANSFER_BYTES / 2;
+        long ns = (long)(1e9 * (double)n / (double)rate);
+
+        next.tv_nsec += ns;
+        while (next.tv_nsec >= 1000000000L)
+        {
+            next.tv_sec++;
+            next.tv_nsec -= 1000000000L;
+        }
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, NULL);
+
+        hackrf_transfer tr;
+        memset(&tr, 0, sizeof(tr));
+        tr.device = d;
+        tr.buffer = buffer;
+        tr.buffer_length = TRANSFER_BYTES;
+        tr.valid_length = 0;
+        d->tx_callback(&tr);
+
+        const int8_t *s = (const int8_t*)buffer;
+        for (size_t k = 0; k < n; k++)
+            power += (double)s[k * 2] * s[k * 2] + (double)s[k * 2 + 1] * s[k * 2 + 1];
+        count += (long)n;
+        if (count >= rate)
+        {
+            fprintf(stderr, "mock_hackrf: TX level %.1f dBFS at LO %lld\n",
+                    10.0 * log10(power / (double)count / (127.0 * 127.0) + 1e-20), (long long)atomic_load(&d->lo));
+            power = 0.0;
+            count = 0;
+        }
+        if (cap != NULL && sent >= rate && cap_n < cap_len)
+        {
+            size_t m = (cap_len - cap_n < n) ? cap_len - cap_n : n;
+            memcpy(cap + cap_n * 2, buffer, m * 2);
+            cap_n += m;
+            if (cap_n == cap_len)
+            {
+                FILE *f = fopen(capture, "wb");
+                if (f != NULL)
+                {
+                    fwrite(cap, 1, cap_len * 2, f);
+                    fclose(f);
+                }
+                fprintf(stderr, "mock_hackrf: TX capture written to %s (LO %lld, rate %ld)\n", capture,
+                        (long long)atomic_load(&d->lo), rate);
+            }
+        }
+        sent += (long long)n;
+    }
+    free(cap);
+    return NULL;
+} // end tx_stream_thread
+
+
+int ADDCALL hackrf_start_tx(hackrf_device* device, hackrf_sample_block_cb_fn callback, void* tx_ctx)
+{
+    (void)tx_ctx;
+    if (atomic_load(&device->running) || atomic_load(&device->tx_running))
+        return HACKRF_ERROR_BUSY;
+    device->tx_callback = callback;
+    atomic_store(&device->tx_running, true);
+    pthread_create(&device->tx_thread, NULL, tx_stream_thread, device);
+    fprintf(stderr, "mock_hackrf: transmitting\n");
+    return HACKRF_SUCCESS;
+}
+
+int ADDCALL hackrf_stop_tx(hackrf_device* device)
+{
+    if (atomic_load(&device->tx_running))
+    {
+        atomic_store(&device->tx_running, false);
+        pthread_join(device->tx_thread, NULL);
+        fprintf(stderr, "mock_hackrf: transmit stopped\n");
+    }
+    return HACKRF_SUCCESS;
+}
+
+int ADDCALL hackrf_set_txvga_gain(hackrf_device* device, uint32_t value)
+{
+    (void)device;
+    fprintf(stderr, "mock_hackrf: TX VGA %u dB\n", value);
+    return HACKRF_SUCCESS;
+}
+
+int ADDCALL hackrf_set_sample_rate(hackrf_device* device, const double freq_hz)
+{
+    atomic_store(&device->rate, (long)freq_hz);
+    fprintf(stderr, "mock_hackrf: sample rate %.0f\n", freq_hz);
+    return HACKRF_SUCCESS;
+}
+
+uint32_t ADDCALL hackrf_compute_baseband_filter_bw(const uint32_t bandwidth_hz)
+{
+    return bandwidth_hz;
+}
+
+int ADDCALL hackrf_set_baseband_filter_bandwidth(hackrf_device* device, const uint32_t bandwidth_hz)
+{
+    (void)device;
+    fprintf(stderr, "mock_hackrf: baseband filter %u\n", bandwidth_hz);
+    return HACKRF_SUCCESS;
+}
+
+int ADDCALL hackrf_set_freq(hackrf_device* device, const uint64_t freq_hz)
+{
+    atomic_store(&device->lo, (long long)freq_hz);
+    fprintf(stderr, "mock_hackrf: LO %llu\n", (unsigned long long)freq_hz);
+    return HACKRF_SUCCESS;
+}
+
+int ADDCALL hackrf_set_lna_gain(hackrf_device* device, uint32_t value)
+{
+    (void)device;
+    fprintf(stderr, "mock_hackrf: LNA %u dB\n", value);
+    return HACKRF_SUCCESS;
+}
+
+int ADDCALL hackrf_set_vga_gain(hackrf_device* device, uint32_t value)
+{
+    (void)device;
+    fprintf(stderr, "mock_hackrf: VGA %u dB\n", value);
+    return HACKRF_SUCCESS;
+}
+
+int ADDCALL hackrf_set_amp_enable(hackrf_device* device, const uint8_t value)
+{
+    (void)device;
+    fprintf(stderr, "mock_hackrf: RF amp %u\n", value);
+    return HACKRF_SUCCESS;
+}
+
+int ADDCALL hackrf_set_antenna_enable(hackrf_device* device, const uint8_t value)
+{
+    (void)device;
+    fprintf(stderr, "mock_hackrf: antenna power %u\n", value);
+    return HACKRF_SUCCESS;
+}
+
+int ADDCALL hackrf_board_id_read(hackrf_device* device, uint8_t* value)
+{
+    (void)device;
+    *value = BOARD_ID_HACKRF1_OG;
+    return HACKRF_SUCCESS;
+}
+
+int ADDCALL hackrf_version_string_read(hackrf_device* device, char* version, uint8_t length)
+{
+    (void)device;
+    snprintf(version, length, "mock-2026");
+    return HACKRF_SUCCESS;
+}
+
+int ADDCALL hackrf_board_partid_serialno_read(hackrf_device* device, read_partid_serialno_t* read_partid_serialno)
+{
+    (void)device;
+    memset(read_partid_serialno, 0, sizeof(*read_partid_serialno));
+    read_partid_serialno->serial_no[3] = 0x1234abcd;
+    return HACKRF_SUCCESS;
+}
+
+const char* ADDCALL hackrf_error_name(enum hackrf_error errcode)
+{
+    return errcode == HACKRF_SUCCESS ? "HACKRF_SUCCESS" : "HACKRF_ERROR";
+}
+
+const char* ADDCALL hackrf_board_id_name(enum hackrf_board_id board_id)
+{
+    (void)board_id;
+    return "HackRF One (mock)";
+}

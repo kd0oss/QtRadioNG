@@ -99,7 +99,6 @@ extern RECEIVER *create_receiver(int id, int buffer_size, int alexRxAntenna, int
 extern void add_iq_samples(RECEIVER *rx, double i_sample,double q_sample);
 extern void add_div_iq_samples(RECEIVER *rx, double i0,double q0, double i1, double q1);
 extern void receiver_change_sample_rate(RECEIVER *rx, int sample_rate);
-extern void dump_udp_buffer(unsigned char* buffer);
 /* extern void receiver_change_sample_rate(RECEIVER *rx,int sample_rate);
 extern void receiver_change_adc(RECEIVER *rx,int adc);
 extern void receiver_frequency_changed(RECEIVER *rx);

@@ -23,7 +23,7 @@
 * This is still very much an Alpha version. It does still have problems and not everything is 
 * completed.
 *
-* To build the application there is a simple Makefile.
+* To build the application see CMakeLists.txt.
 *
 * To run the application just start ghpsdr once it is built.
 *
@@ -78,10 +78,12 @@
 * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 * 
 */
-#define false 0
-#define true  1
 
-const char *version = "20220108;-primary"; //YYYYMMDD; text desc
+/*
+ * Updates and additions by Rick Schnicker KD0OSS, 2022-2024
+ */
+
+const char *version = "20241108;-primary"; //YYYYMMDD; text desc
 
 #include <fcntl.h>
 #include <sys/types.h>
@@ -101,12 +103,12 @@ const char *version = "20220108;-primary"; //YYYYMMDD; text desc
 #include "wdsp.h"
 #include "audiostream.h"
 #include "hardware.h"
+#include "plugin.h"
 #include "version.h"
 #include "G711A.h"
 #include "util.h"
 #include "main.h"
 
-char propertyPath[128];
 
 enum {
     OPT_OFFSET = 1,
@@ -229,6 +231,7 @@ int main(int argc, char* argv[])
     audio_stream_reset();
     G711A_init();
     hw_init();
+    plugin_init();
 
     // create and start the tx_thread (see client.c)
     // the tx_thread reads the Mic_audio_stream queue, makes the sample rate adaption

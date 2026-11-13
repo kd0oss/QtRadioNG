@@ -42,6 +42,7 @@
 
 
 Additions and changes by Rick Schnicker KD0OSS 2021
+Updated to Qt6 libraries. Rick Schnicker KD0OSS 2024
 */
 
 #ifdef _OPENMP
@@ -49,20 +50,18 @@ Additions and changes by Rick Schnicker KD0OSS 2021
 #endif
 #include "Audio.h"
 
-
-
-Audio_playback::Audio_playback()
-    :   QIODevice()
+Audio_playback::Audio_playback():QIODevice()
 {
     recv_ts = 0;
-    audio_byte_order = QAudioFormat::LittleEndian;
     audio_encoding = 0;
     pdecoded_buffer = &queue;
 }
 
+
 Audio_playback::~Audio_playback()
 {
 }
+
 
 void Audio_playback::start()
 {
@@ -74,82 +73,87 @@ void Audio_playback::stop()
     close();
 }
 
-void Audio_playback::set_decoded_buffer(QHQueue<qint16> *pBuffer){
+
+void Audio_playback::set_decoded_buffer(QHQueue<qint16> *pBuffer)
+{
     pdecoded_buffer = pBuffer;
 }
 
-void Audio_playback::set_audio_byte_order(QAudioFormat::Endian byte_order){
-    audio_byte_order = byte_order;
-}
 
-void Audio_playback::set_audio_encoding(int encoding){
+void Audio_playback::set_audio_encoding(int encoding)
+{
     audio_encoding = encoding;
 }
 
 
-qint64 Audio_playback::readData(char *data, qint64 maxlen)
- {
-   qint64 bytes_read;
-   qint16 v;
-   qint64 bytes_to_read = maxlen > 2000 ? 2000: maxlen;
-   //qint64 bytes_to_read = maxlen;
-   int has_more;
-   // note both TCP and RTP audio enqueue PCM data in decoded_buffer
-   bytes_read = 0;
+bool Audio_playback::isSequential() const
+{
+    return true;   // a live audio stream: no size, no seeking
+}
 
-   if (pdecoded_buffer->isEmpty()) {
-       // probably not connected or late arrival of packets.  Send silence.
-       memset(data, 0, bytes_to_read);
-       bytes_read = bytes_to_read;
-   } else {
-       while ((!pdecoded_buffer->isEmpty()) && (bytes_read < bytes_to_read)){
-           v = pdecoded_buffer->dequeue();
-            switch(audio_byte_order) {
-            case QAudioFormat::LittleEndian:
+
+qint64 Audio_playback::bytesAvailable() const
+{
+    // Qt 6's QAudioSink reads in pull mode only as much as this reports, and
+    // stops pulling for good if it reports 0 (QTBUG-108672). readData() pads
+    // with silence when the decoded queue runs dry, so always report at least
+    // one chunk to keep the stream running, as QAudioOutput did in Qt 5.
+    const qint64 queued = (qint64)pdecoded_buffer->count() * (qint64)sizeof(qint16);
+    return qMax<qint64>(queued, 2000) + QIODevice::bytesAvailable();
+}
+
+
+qint64 Audio_playback::readData(char *data, qint64 maxlen)
+{
+    qint64 bytes_read;
+    qint16 v;
+    qint64 bytes_to_read = maxlen > 2000 ? 2000: maxlen;
+    int audio_byte_order =  0;
+    // note both TCP and RTP audio enqueue PCM data in decoded_buffer
+    bytes_read = 0;
+
+    if (pdecoded_buffer->isEmpty())
+    {
+        // probably not connected or late arrival of packets.  Send silence.
+        memset(data, 0, bytes_to_read);
+        bytes_read = bytes_to_read;
+    } else {
+        while ((!pdecoded_buffer->isEmpty()) && (bytes_read < bytes_to_read))
+        {
+            v = pdecoded_buffer->dequeue();
+            switch(audio_byte_order)
+            {
+            case 0:
                 data[bytes_read++]=(char)(v&0xFF);
                 data[bytes_read++]=(char)((v>>8)&0xFF);
                 break;
-            case QAudioFormat::BigEndian:
+            case 1:
                 data[bytes_read++]=(char)((v>>8)&0xFF);
                 data[bytes_read++]=(char)(v&0xFF);
                 break;
             }
         }
-       while (bytes_read < bytes_to_read) data[bytes_read++] = 0;
-   }
+        while (bytes_read < bytes_to_read) data[bytes_read++] = 0;
+    }
+    return bytes_read;
+}
 
-   return bytes_read;
- }
+qint64 Audio_playback::writeData(const char *data, qint64 len)
+{
+    Q_UNUSED(data)
+    Q_UNUSED(len)
+    return 0;
+}
 
- qint64 Audio_playback::writeData(const char *data, qint64 len){
-     Q_UNUSED(data)
-     Q_UNUSED(len)
-     return 0;
- }
 
-Audio::Audio() {
-    audio_output=NULL;
+Audio::Audio() : m_devices(new QMediaDevices(this))
+{
+    audio_output = NULL;
     connected = false;
-    sampleRate=8000;
+    sampleRate = 48000;
     audio_encoding = 0;
-    audio_channels=1;
-    audio_byte_order=QAudioFormat::LittleEndian;
-
-    //qDebug() << "Audio: LittleEndian=" << QAudioFormat::LittleEndian << " BigEndian=" << QAudioFormat::BigEndian;
-
-    audio_format.setSampleType(QAudioFormat::SignedInt);
-
-#if QT_VERSION >= 0x050000
-    audio_format.setSampleRate(sampleRate+(sampleRate==8000?SAMPLE_RATE_FUDGE:0));
-    audio_format.setChannelCount(audio_channels);
-#else
-    audio_format.setFrequency(sampleRate+(sampleRate==8000?SAMPLE_RATE_FUDGE:0));
-    audio_format.setChannels(audio_channels);
-#endif
-    audio_format.setSampleSize(16);
-    audio_format.setCodec("audio/pcm");
-    audio_format.setByteOrder(audio_byte_order);
-
+    audio_channels = 1;
+    initializeAudio(m_devices->defaultAudioOutput());
     audio_processing = new Audio_processing;
     audio_processing->set_audio_channels(audio_channels);
     audio_processing->set_audio_encoding(audio_encoding);
@@ -157,279 +161,109 @@ Audio::Audio() {
     audio_processing_thread = new QThread;
     //qDebug() << "QThread: audio_processing_thread = " << audio_processing_thread;
     audio_processing->moveToThread(audio_processing_thread);
-    connect(this,SIGNAL(audio_processing_process_audio(char*,char*,int)),audio_processing,SLOT(process_audio(char*,char*,int)));
+    connect(this,&Audio::audio_processing_process_audio,audio_processing,&Audio_processing::process_audio);
     audio_processing_thread->start(QThread::LowPriority);
-
-    audio_output_thread = new QThread;
-    //qDebug() << "QThread:  audio_output_thread = " << audio_output_thread;
+ //   connect(m_devices, SIGNAL(audioOutputsChanged()), this, SLOT(updateAudioDevices()));
+    m_audioOutput->start(m_audioPlayback.data());
+    fprintf(stderr, "Audio processing initialized.\n");
 }
 
-Audio::~Audio() {
-    disconnect(this,SIGNAL(audio_processing_process_audio(char*,char*,int)),audio_processing,SLOT(process_audio(char*,char*,int)));
+
+Audio::~Audio()
+{
+    disconnect(this,&Audio::audio_processing_process_audio,audio_processing,&Audio_processing::process_audio);
     audio_processing->deleteLater();
 }
 
-void Audio::clear_decoded_buffer(void){
-    decoded_buffer.clear();
+
+void Audio::initializeAudio(const QAudioDevice &deviceInfo)
+{
+    QAudioFormat format = deviceInfo.preferredFormat();
+
+    format.setSampleRate(sampleRate);
+    format.setSampleFormat(QAudioFormat::Int16);
+    format.setChannelCount(audio_channels);
+    m_audioPlayback.reset(new Audio_playback());
+    m_audioPlayback->set_decoded_buffer(&decoded_buffer);
+    m_audioOutput.reset(new QAudioSink(deviceInfo, format));
+    m_audioPlayback->start();
 }
 
-void Audio::get_audio_device(QAudioDeviceInfo * device){
-	*device = audio_device;
-}
 
-void Audio::get_audio_devices(QComboBox* comboBox) {
-    QList<QAudioDeviceInfo> devices=QAudioDeviceInfo::availableDevices(QAudio::AudioOutput);
-    QAudioDeviceInfo device_info;
-
-
-    //qDebug() << "Audio::get_audio_devices";
-    for (int i=0;i<devices.length();i++) {
-        device_info=devices.at(i);
-
-        //qDebug() << "Audio::get_audio_devices: " << device_info.deviceName();
-
-        //qDebug() << "    Codecs:";
-        QStringList codecs=device_info.supportedCodecs();
-        for (int j=0;j<codecs.size();j++) {
-             //qDebug() << "        " << codecs.at(j).toLocal8Bit().constData();
-        }
-
-        //qDebug() << "    Byte Orders";
-        QList<QAudioFormat::Endian> byteOrders=device_info.supportedByteOrders();
-        for (int j=0;j<byteOrders.size();j++) {
-             //qDebug() << "        " << (byteOrders.at(j)==QAudioFormat::BigEndian?"BigEndian":"LittleEndian");
-        }
-
-        //qDebug() << "    Sample Type";
-        QList<QAudioFormat::SampleType> sampleTypes=device_info.supportedSampleTypes();
-        for (int j=0;j<sampleTypes.size();j++) {
-            if(sampleTypes.at(j)==QAudioFormat::Unknown) {
-                //qDebug() << "        Unknown";
-            } else if(sampleTypes.at(j)==QAudioFormat::SignedInt) {
-                //qDebug() << "        SignedInt";
-            } else if(sampleTypes.at(j)==QAudioFormat::UnSignedInt) {
-                //qDebug() << "        UnSignedInt";
-            } else if(sampleTypes.at(j)==QAudioFormat::Float) {
-                //qDebug() << "        Float";
-            }
-        }
-
-
-        //qDebug() << "    Sample Rates";
-#if QT_VERSION >= 0x050000
-        QList<int> sampleRates=device_info.supportedSampleRates();
-#else
-        QList<int> sampleRates=device_info.supportedFrequencies();
-#endif
-        for (int j=0;j<sampleRates.size();j++) {
-            //qDebug() << "        " << sampleRates.at(j);
-        }
-
-        //qDebug() << "    Sample Sizes";
-        QList<int> sampleSizes=device_info.supportedSampleSizes();
-        for (int j=0;j<sampleSizes.size();j++) {
-            //qDebug() << "        " << sampleSizes.at(j);
-        }
-
-
-        //qDebug() << "    Channels";
-#if QT_VERSION >= 0x050000
-        QList<int> channels=device_info.supportedChannelCounts();
-#else
-         QList<int> channels=device_info.supportedChannels();
-#endif
-        for (int j=0;j<channels.size();j++) {
-            //qDebug() << "        " << channels.at(j);
-        }
-
-        comboBox->addItem(device_info.deviceName(),qVariantFromValue(device_info));
-        if (i==0) {
-            audio_device=device_info;
-        }
-    }
-
-    //qDebug() << "Audio::get_audio_devices: default is " << audio_device.deviceName();
-
-    audio_output = new QAudioOutput(audio_device, audio_format, this);
-    connected = connect(audio_output,SIGNAL(stateChanged(QAudio::State)),SLOT(stateChanged(QAudio::State)));
-
-    //qDebug() << "QAudioOutput: error=" << audio_output->error() << " state=" << audio_output->state();
-
-    if (connected) {
-        audio_output->setBufferSize(AUDIO_OUTPUT_BUFFER_SIZE);
-        audio_out= new Audio_playback;
-        audio_out->moveToThread(audio_output_thread);
-        audio_output_thread->start(QThread::HighestPriority);
-
-        audio_out->set_audio_byte_order(audio_format.byteOrder());
-        audio_out->set_audio_encoding(audio_encoding);
-        audio_out->set_decoded_buffer(&decoded_buffer);
-        audio_out->start();
-        audio_output->start(audio_out);
-
-#if QT_VERSION >= 0x050000
-        audio_processing->set_audio_channels(audio_format.channelCount());
-#else
-        audio_processing->set_audio_channels(audio_format.channels());
-#endif
-        audio_processing->set_audio_encoding(audio_encoding);
-        audio_processing->set_queue(&decoded_buffer);
-
-        if(audio_output->error()!=0) {
-            //qDebug() << "QAudioOutput: after start error=" << audio_output->error() << " state=" << audio_output->state();
-
-            //qDebug() << "Format:";
-#if QT_VERSION >= 0x050000
-            //qDebug() << "    sample rate: " << audio_format.sampleRate();
-#else
-            //qDebug() << "    sample rate: " << audio_format.frequency();
-#endif
-            //qDebug() << "    codec: " << audio_format.codec();
-            //qDebug() << "    byte order: " << audio_format.byteOrder();
-            //qDebug() << "    sample size: " << audio_format.sampleSize();
-            //qDebug() << "    sample type: " << audio_format.sampleType();
-#if QT_VERSION >= 0x050000
-            //qDebug() << "    channels: " << audio_format.channelCount();
-#else
-            //qDebug() << "    channels: " << audio_format.channels();
-#endif
-            audio_out->stop();
-            delete audio_out;
-            delete audio_output;
-            audio_output = NULL;
-            connected = false;
-        }
-    }
-    else {
-		delete audio_output;
-		audio_output = NULL;
-		connected = false;
-	}
-}
-
-void Audio::select_audio(QAudioDeviceInfo info,int rate,int channels,QAudioFormat::Endian byteOrder) {
+void Audio::select_audio(QAudioDevice info,int rate,int channels)
+{
+    QAudioFormat format = info.preferredFormat();
 
     //qDebug() << "selected audio " << info.deviceName() <<  " sampleRate:" << rate << " Channels: " << channels << " Endian:" << (byteOrder==QAudioFormat::BigEndian?"BigEndian":"LittleEndian");
 
     sampleRate=rate;
     audio_channels=channels;
-    audio_byte_order=byteOrder;
-
-    if (audio_output!=NULL) {
-        audio_out->stop();
-        delete audio_out;
-        delete audio_output;
-		audio_output = NULL;
-		connected = false;
-    }
-
-    audio_device=info;
-
-#if QT_VERSION >= 0x050000
-    audio_format.setSampleRate(sampleRate+(sampleRate==8000?SAMPLE_RATE_FUDGE:0));
-    audio_format.setChannelCount(audio_channels);
-#else
-    audio_format.setFrequency(sampleRate+(sampleRate==8000?SAMPLE_RATE_FUDGE:0));
-    audio_format.setChannels(audio_channels);
-#endif
-    audio_format.setByteOrder(audio_byte_order);
-
-    if (!audio_device.isFormatSupported(audio_format)) {
-        //qDebug()<<"Audio format not supported by device.";
-    }
-
-    audio_output = new QAudioOutput(audio_device, audio_format, this);
-    connected = connect(audio_output,SIGNAL(stateChanged(QAudio::State)),SLOT(stateChanged(QAudio::State)));
-
-    if(connected) {
-		audio_output->setBufferSize(AUDIO_OUTPUT_BUFFER_SIZE);
-		audio_out= new Audio_playback;
-
-		audio_out->moveToThread(audio_output_thread);
-		audio_output_thread->start(QThread::HighestPriority);
-
-		audio_out->set_audio_byte_order(audio_format.byteOrder());
-		audio_out->set_audio_encoding(audio_encoding);
-		audio_out->set_decoded_buffer(&decoded_buffer);
-		audio_out->start();
-		audio_output->start(audio_out);
-
-#if QT_VERSION >= 0x050000
-		 audio_processing->set_audio_channels(audio_format.channelCount());
-#else
-		audio_processing->set_audio_channels(audio_format.channels());
-#endif
-		audio_processing->set_audio_encoding(audio_encoding);
-		audio_processing->set_queue(&decoded_buffer);
-
-		if(audio_output->error()!=0) {
-            //qDebug() << "QAudioOutput: after start error=" << audio_output->error() << " state=" << audio_output->state();
-            //qDebug() << "Format:";
-#if QT_VERSION >= 0x050000
-            //qDebug() << "    sample rate: " << audio_format.sampleRate();
-#else
-            //qDebug() << "    sample rate: " << audio_format.frequency();
-#endif
-            //qDebug() << "    codec: " << audio_format.codec();
-            //qDebug() << "    byte order: " << audio_format.byteOrder();
-            //qDebug() << "    sample size: " << audio_format.sampleSize();
-            //qDebug() << "    sample type: " << audio_format.sampleType();
-#if QT_VERSION >= 0x050000
-            //qDebug() << "    channels: " << audio_format.channelCount();
-#else
-            //qDebug() << "    channels: " << audio_format.channels();
-#endif
-			audio_out->stop();
-			delete audio_out;
-			delete audio_output;
-            audio_output = NULL;
-            connected = false;
-		}
-	}
-	else {
-		delete audio_output;
-		audio_output = NULL;
-		connected = false;
-	}
+    format.setSampleRate(rate);
+    format.setChannelCount(channels);
+ //   m_audioOutput.reset(new QAudioSink(info, format));
 }
 
-void Audio::stateChanged(QAudio::State State){
-    switch (State) {
-        case QAudio::StoppedState:
-	case QAudio::SuspendedState:
-            if (audio_output->error() != QAudio::NoError) {
-                //qDebug() << "QAudioOutput: after start error=" << audio_output->error() << " state=" << State;
-            //audio_output->start(audio_out);
-            break;
-            }
-        case QAudio::IdleState:
-        case QAudio::ActiveState:
-        default:
- //           //qDebug() << "QAudioOutput: state changed" << " state=" << State;
-	    break;
-    }
-    return;
+
+void Audio::set_volume(qreal vol)
+{
+    m_audioOutput->setVolume(vol);
 }
 
-void Audio::set_audio_encoding(int enc){
-    audio_encoding = enc;
-    audio_out->set_audio_encoding(enc);
-    audio_processing->set_audio_encoding(enc);
+void Audio::clear_decoded_buffer(void)
+{
+    decoded_buffer.clear();
 }
 
-int Audio::get_audio_encoding() {
+
+int Audio::get_audio_encoding()
+{
     return audio_encoding;
 }
 
-void Audio::process_audio(char* header, char* buffer, int length){
-    emit audio_processing_process_audio(header,buffer,length);
+
+void Audio::set_audio_encoding(int enc)
+{
+    audio_encoding = enc;
+    m_audioPlayback->set_audio_encoding(enc);
+    audio_processing->set_audio_encoding(enc);
+    fprintf(stderr, "Set audio encoding to %d\n", enc);
 }
 
 
-Audio_processing::Audio_processing(){
+void Audio::get_audio_device(QAudioDevice * device){
+    *device = audio_device;
+}
+
+
+void Audio::deviceChanged(int index)
+{
+    m_audioPlayback->stop();
+    m_audioOutput->stop();
+    m_audioOutput->disconnect(this);
+    initializeAudio(devList->itemData(index).value<QAudioDevice>());
+}
+
+void Audio::updateAudioDevices(QComboBox *comboBox)
+{
+    devList = comboBox;
+    comboBox->clear();
+    const QList<QAudioDevice> devices = m_devices->audioOutputs();
+    for (const QAudioDevice &deviceInfo : devices)
+        comboBox->addItem(deviceInfo.description(), QVariant::fromValue(deviceInfo));
+}
+
+
+void Audio::process_audio(char* header, char* buffer, int length)
+{
+    emit audio_processing_process_audio(header, buffer, length);
+}
+
+
+Audio_processing::Audio_processing()
+{
     int sr_error;
 
-    src_state =  src_new (
+    src_state =  src_new(
                 //SRC_SINC_BEST_QUALITY,  // NOT USABLE AT ALL on Atom 300 !!!!!!!
                 //SRC_SINC_MEDIUM_QUALITY,
                 SRC_SINC_FASTEST,
@@ -438,23 +272,27 @@ Audio_processing::Audio_processing(){
                 1, &sr_error
               ) ;
 
-    if (src_state == 0) {
+    if (src_state == 0)
+    {
         //qDebug() <<  "Audio: SR INIT ERROR: " << src_strerror(sr_error);
     }
     init_decodetable();
     src_ratio = 1.0;
- //   codec2 = codec2_create(CODEC2_MODE_3200);
     pdecoded_buffer = &queue;
 }
 
-Audio_processing::~Audio_processing(){
+
+Audio_processing::~Audio_processing()
+{
      src_delete(src_state);
-  //   codec2_destroy(codec2);
 }
 
-void Audio_processing::set_queue(QHQueue<qint16> *buffer){
+
+void Audio_processing::set_queue(QHQueue<qint16> *buffer)
+{
     pdecoded_buffer = buffer;
 }
+
 
 void Audio_processing::set_audio_channels(int c){
     audio_channels = c;
@@ -470,17 +308,21 @@ void Audio_processing::set_audio_channels(int c){
                 c, &sr_error
               ) ;
 
-    if (src_state == 0) {
+    if (src_state == 0)
+    {
         //qDebug() <<  "Audio: SR INIT ERROR: " << src_strerror(sr_error);
     }
 }
 
-void Audio_processing::set_audio_encoding(int enc){
+
+void Audio_processing::set_audio_encoding(int enc)
+{
     audio_encoding = enc;
 }
 
-void Audio_processing::process_audio(char* header,char* buffer,int length) {
 
+void Audio_processing::process_audio(char* header, char* buffer, int length)
+{
     if (pdecoded_buffer->count() < 4000)
     {
         if (audio_encoding == 0) aLawDecode(buffer,length);
@@ -493,71 +335,53 @@ void Audio_processing::process_audio(char* header,char* buffer,int length) {
     if (buffer != NULL) free(buffer);
 }
 
-void Audio_processing::resample(int no_of_samples){
-    int i;
-    qint16 v;
-    int rc;
 
-    sr_data.data_in = buffer_in;
-    sr_data.data_out = buffer_out;
-    sr_data.input_frames = no_of_samples;
-    sr_data.src_ratio = src_ratio;
-    sr_data.output_frames = RESAMPLING_BUFFER_SIZE/2;
-    sr_data.end_of_input = 0;
-
-    rc = src_process(src_state, &sr_data);
-    if (rc) { //qDebug() << "SRATE: error: " << src_strerror (rc) << rc;
-    }
-    else {
-            #pragma omp parallel for schedule(static) ordered
-            for (i = 0; i < sr_data.output_frames_gen; i++){
-                v = buffer_out[i]*32767.0;
-                #pragma omp ordered
-                pdecoded_buffer->enqueue(v);
-            }
-    }
-}
-
-void Audio_processing::aLawDecode(char* buffer,int length) {
+void Audio_processing::aLawDecode(char* buffer,int length)
+{
     int i;
     qint16 v;
 
-    for (i=0; i < length; i++) {
+    for (i=0; i < length; i++)
+    {
         v=decodetable[buffer[i]&0xFF];
-        //buffer_in[i] = (float)v/32767.0f;
         pdecoded_buffer->enqueue(v);
     }
-    //resample(length);
 }
 
-void Audio_processing::pcmDecode(char* buffer,int length) {
+
+void Audio_processing::pcmDecode(char* buffer,int length)
+{
     int i;
     short v;
 
-    for (i=0; i < length; i+=2) {
+    for (i=0; i < length; i+=2)
+    {
         v = (buffer[i] & 0xff) | ((buffer[i+1] & 0xff) << 8);
-        //buffer_in[i/2] = (float)v/32767.0f;
         pdecoded_buffer->enqueue(v);
-        }
-    //resample(length/2);
+    }
 }
 
 
-void Audio_processing::init_decodetable() {
+void Audio_processing::init_decodetable()
+{
     //qDebug() << "init_decodetable";
     #pragma omp parallel for schedule(static)
-    for (int i = 0; i < 256; i++) {
+    for (int i = 0; i < 256; i++)
+    {
         int input = i ^ 85;
         int mantissa = (input & 15) << 4;
         int segment = (input & 112) >> 4;
         int value = mantissa + 8;
-        if (segment >= 1) {
+        if (segment >= 1)
+        {
             value += 256;
         }
-        if (segment > 1) {
+        if (segment > 1)
+        {
             value <<= (segment - 1);
         }
-        if ((input & 128) == 0) {
+        if ((input & 128) == 0)
+        {
             value = -value;
         }
         decodetable[i] = (short) value;

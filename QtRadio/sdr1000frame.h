@@ -1,13 +1,8 @@
 #ifndef SDR1000FRAME_H
 #define SDR1000FRAME_H
 
-//#include <QtCore>
-//#if QT_VERSION >= 0x050000
-//#include <QtWidgets/QFrame>
-//#else
 #include <QFrame>
 #include <QSettings>
-//#endif
 #include "UI.h"
 
 
@@ -23,11 +18,10 @@ public:
     explicit Sdr1000Frame(Radio *pUI, QWidget *parent = 0);
     ~Sdr1000Frame();
     void initializeRadio(void);
-    void shutDown(void);
 
     int8_t radio_id;
-    int8_t currentRxChannel;
-    int8_t currentTxChannel;
+    int8_t currentRxRfstream;
+    int8_t currentTxRfstream;
 
 private:
     Ui::Sdr1000Frame *ui;

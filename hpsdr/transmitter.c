@@ -40,21 +40,15 @@
 #include "old_protocol.h"
 
 
-#define min(x,y) (x<y?x:y)
-#define max(x,y) (x<y?y:x)
-
 int tx_filter_low = 150;
 int tx_filter_high = 2850;
 static double *cw_shape_buffer48 = NULL;
 static double *cw_shape_buffer192 = NULL;
-static int cw_shape = 0;
 
 
 TRANSMITTER *create_transmitter(int id, int buffer_size)
 {
-    int rc;
-
-    TRANSMITTER *tx = (TRANSMITTER*)malloc(sizeof(TRANSMITTER));
+    TRANSMITTER *tx = (TRANSMITTER*)calloc(1, sizeof(TRANSMITTER));
     tx->id = id;
     tx->dac = 0;
     tx->buffer_size = buffer_size;
@@ -143,56 +137,8 @@ TRANSMITTER *create_transmitter(int id, int buffer_size)
 } // end create_transmitter
 
 
-static double compute_power(double p)
-{
-    double interval = 10.0;
-    switch (pa_power)
-    {
-    case PA_1W:
-        interval = 100.0; // mW
-        break;
-    case PA_10W:
-        interval = 1.0; // W
-        break;
-    case PA_30W:
-        interval = 3.0; // W
-        break;
-    case PA_50W:
-        interval = 5.0; // W
-        break;
-    case PA_100W:
-        interval = 10.0; // W
-        break;
-    case PA_200W:
-        interval = 20.0; // W
-        break;
-    case PA_500W:
-        interval = 50.0; // W
-        break;
-    }
-    int i=0;
-    if (p > (double)pa_trim[10])
-    {
-        i = 9;
-    }
-    else
-    {
-        while (p > (double)pa_trim[i])
-        {
-            i++;
-        }
-        if (i > 0) i--;
-    }
-
-    double frac = (p - (double)pa_trim[i]) / ((double)pa_trim[i + 1] - (double)pa_trim[i]);
-    return interval * ((1.0 - frac) * (double)i + frac * (double)(i + 1));
-} // end compute_power
-
-
 void updateTx(TRANSMITTER *tx)
 {
-    int rc;
-
     //fprintf(stderr,"update_display: tx id=%d\n",tx->id);
  //   if (tx->displaying)
     {
@@ -396,11 +342,6 @@ void updateTx(TRANSMITTER *tx)
             }
             break;
         }
-
-        double fwd = compute_power(transmitter->fwd);
-        double rev = compute_power(transmitter->rev);
-
-       // fprintf(stderr, "transmitter: meter_update: fwd:%f->%f rev:%f->%f ex_fwd=%d alex_fwd=%d alex_rev=%d\n",transmitter->fwd,fwd,transmitter->rev,rev,exciter_power,alex_forward_power,alex_reverse_power);
 
         if (!duplex)
         {

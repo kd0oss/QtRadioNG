@@ -47,9 +47,9 @@
  */
 
 #include "Connection.h"
+#include "../plugins/include/plugin_protocol.h"
 #include "radiosdialog.h"
 #include <QDebug>
-#include <QRegExp>
 
 ServerConnection::ServerConnection()
 {
@@ -58,7 +58,7 @@ ServerConnection::ServerConnection()
     state = READ_HEADER;
     bytes = 0;
     active_radios = 0;
-    active_channels = 0;
+    active_rfstreams = 0;
     hdr = (char*)malloc(HEADER_SIZE_2_1);  // HEADER_SIZE is larger than AUTIO_HEADER_SIZE so it is OK for both
     SemSpectrum.release();
     muted = false;
@@ -69,8 +69,8 @@ ServerConnection::ServerConnection()
     available_xcvrs[1] = 0;
     available_xcvrs[2] = 0;
     available_xcvrs[3] = 0;
-    QObject::connect(this, SIGNAL(activateRadioSig()), this, SLOT(activateRadio()));
-    QObject::connect(this, SIGNAL(send_command(QByteArray)), this, SLOT(sendCommand(QByteArray)));
+    QObject::connect(this, &ServerConnection::activateRadioSig, this, &ServerConnection::activateRadio);
+    QObject::connect(this, &ServerConnection::send_command, this, &ServerConnection::sendCommand);
 } // end constructor
 
 
@@ -78,13 +78,6 @@ ServerConnection::~ServerConnection()
 {
     qDebug() << "ServerConnection::~Connection";
 } // end destructor
-
-
-QString ServerConnection::getHost()
-{
-    qDebug() << "ServerConnection::getHost: " << host;
-    return host;
-} // end getHost
 
 
 void ServerConnection::connect(QString h, int p)
@@ -100,17 +93,17 @@ void ServerConnection::connect(QString h, int p)
 
     tcpSocket = new QTcpSocket(this);
 
-    QObject::connect(tcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
-                     this, SLOT(socketError(QAbstractSocket::SocketError)));
+    QObject::connect(tcpSocket, &QTcpSocket::errorOccurred,
+                     this, &ServerConnection::socketError);
 
-    QObject::connect(tcpSocket, SIGNAL(connected()),
-                     this, SLOT(connected()));
+    QObject::connect(tcpSocket, &QTcpSocket::connected,
+                     this, &ServerConnection::connected);
 
-    QObject::connect(tcpSocket, SIGNAL(disconnected()),
-                     this, SLOT(disconnected()));
+    QObject::connect(tcpSocket, &QTcpSocket::disconnected,
+                     this, qOverload<>(&ServerConnection::disconnected));
 
-    QObject::connect(tcpSocket, SIGNAL(readyRead()),
-                     this, SLOT(cmdSocketData()));
+    QObject::connect(tcpSocket, &QTcpSocket::readyRead,
+                     this, &ServerConnection::cmdSocketData);
 
     // set the initial state
     state = READ_HEADER;
@@ -128,17 +121,17 @@ void ServerConnection::disconnected()
 
     if (tcpSocket != NULL)
     {
-        QObject::disconnect(tcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
-                            this, SLOT(socketError(QAbstractSocket::SocketError)));
+        QObject::disconnect(tcpSocket, &QTcpSocket::errorOccurred,
+                            this, &ServerConnection::socketError);
 
-        QObject::disconnect(tcpSocket, SIGNAL(connected()),
-                            this, SLOT(connected()));
+        QObject::disconnect(tcpSocket, &QTcpSocket::connected,
+                            this, &ServerConnection::connected);
 
-        QObject::disconnect(tcpSocket, SIGNAL(disconnected()),
-                            this, SLOT(disconnected()));
+        QObject::disconnect(tcpSocket, &QTcpSocket::disconnected,
+                            this, qOverload<>(&ServerConnection::disconnected));
 
-        QObject::disconnect(tcpSocket, SIGNAL(readyRead()),
-                            this, SLOT(cmdSocketData()));
+        QObject::disconnect(tcpSocket, &QTcpSocket::readyRead,
+                            this, &ServerConnection::cmdSocketData);
     }
 } // end disconnected
 
@@ -154,9 +147,6 @@ void ServerConnection::disconnect()
         // tcpSocket=NULL;
 
     }
-    // close the hardware panel, if any
-
-    emit hardware(QString(""));
 } // end disconnnect
 
 
@@ -187,14 +177,13 @@ void ServerConnection::connected()
 {
     qDebug() << "ServerConnection::Connected" << tcpSocket->isValid();
 
-    for (int i=0;i<MAX_CHANNELS;i++)
+    for (int i=0;i<MAX_RFSTREAMS;i++)
     {
-        channels[i].id = i;
-        channels[i].radio.radio_id = -1;
-        channels[i].index = -1;
-        channels[i].dsp_channel = -1;
-        channels[i].enabled = false;
-        channels[i].isTX = false;
+        rfstream[i].id = i;
+        rfstream[i].radio.radio_id = -1;
+        rfstream[i].index = -1;
+        rfstream[i].enabled = false;
+        rfstream[i].isTX = false;
     }
     ////    emit isConnected();
     state = READ_HEADER;
@@ -206,27 +195,17 @@ void ServerConnection::connected()
     qbyte.append((char)QUESTION);
     qbyte.append((char)STARHARDWARE);
     sendCommand(qbyte);
+    // protocol plugins (M17 ...): the list now, changes and status later
+    qbyte.clear();
+    qbyte.append((char)0);
+    qbyte.append((char)QUESTION);
+    qbyte.append((char)QPLUGINS);
+    sendCommand(qbyte);
     qbyte.clear();
     qbyte.append((char)0);
     qbyte.append((char)QUESTION);
     qbyte.append((char)QINFO);
     //   sendCommand(qbyte);
-    /*
-    qbyte.append((char)QUESTION);
-    qbyte.append((char)QDSPVERSION);
-    sendCommand(qbyte);
-    qbyte.clear();
-    qbyte.append((char)QUESTION);
-    qbyte.append((char)QLOFFSET);
-    sendCommand(qbyte);
-    qbyte.clear();
-    qbyte.append((char)QUESTION);
-    qbyte.append((char)QCOMMPROTOCOL1);
-    sendCommand(qbyte);
-    qbyte.clear();
-    amSlave = true;
-    serverver = 0;
-    */
 } // end connected
 
 
@@ -243,7 +222,7 @@ void ServerConnection::sendCommand(QByteArray command)
 
     if (tcpSocket != NULL && tcpSocket->isValid() && tcpSocket->isWritable())
     {
-        qDebug("Server: ch: %d  Comm: %u\n", (char)command[0], (unsigned char)command[1]);
+        qDebug("Server: Rf stream: %d  Comm: %u\n", (char)command[0], (unsigned char)command[1]);
         memcpy(buffer, command.constData(), command.size());
         bytesWritten = tcpSocket->write(buffer, SEND_BUFFER_SIZE);
         if (bytesWritten != SEND_BUFFER_SIZE)
@@ -290,10 +269,20 @@ void ServerConnection::cmdSocketData()
             if (bytes == 4)
             {
                 length = ((hdr[0] & 0xFF) << 8) + (hdr[1] & 0xFF);
-                if (length > 0)
+                msg_length = ((hdr[0] & 0xFF) << 8) + (hdr[1] & 0xFF);
+                if (msg_length > 0)
                 {
-                    switch (hdr[2])
+                    switch ((unsigned char)hdr[2])
                     {
+                    case CLIENT_PLUGIN_LIST:
+                    case CLIENT_PLUGIN_STATUS:
+                        msg_type = (unsigned char)hdr[2];
+                        msg_arg = (unsigned char)hdr[3];
+                        msg.clear();
+                        bytes = 0;
+                        state = READ_PLUGIN;
+                        break;
+
                     case READ_MANIFEST:
                         if (xml) free(xml);
                         xml = (char*)malloc(length);
@@ -302,7 +291,7 @@ void ServerConnection::cmdSocketData()
                         active_radios = hdr[3];
                         bytes = 0;
                         radio_index = 0;
-                        active_channels = 0;
+                        active_rfstreams = 0;
                         state = READ_MANIFEST;
                         break;
 
@@ -314,12 +303,41 @@ void ServerConnection::cmdSocketData()
                         break;
 
                     default:
+                        // unknown message: skip its payload to stay in step
                         bytes = 0;
+                        state = READ_SKIP;
                         break;
                     }
                 }
+                else
+                    bytes = 0;
             }
             break;
+
+        case READ_PLUGIN:
+        case READ_SKIP:
+        {
+            QByteArray part = tcpSocket->read(msg_length - bytes);
+            thisRead = part.size();
+            bytes += thisRead;
+            if (state == READ_PLUGIN)
+                msg.append(part);
+            if (bytes == msg_length)
+            {
+                if (state == READ_PLUGIN)
+                {
+                    QString text = QString::fromUtf8(msg.constData(), (int)qstrnlen(msg.constData(), msg.size()));
+                    if (msg_type == CLIENT_PLUGIN_LIST)
+                        emit pluginList(text);
+                    else
+                        emit pluginStatus(msg_arg, text);
+                }
+                msg.clear();
+                bytes = 0;
+                state = READ_HEADER;
+            }
+            break;
+        }
 
         case READ_MANIFEST:
             thisRead = tcpSocket->read(&xml[bytes], length - bytes);
@@ -351,24 +369,9 @@ void ServerConnection::cmdSocketData()
                 serverver = tmp[0].split(";").at(0).toLong();
                 QString f = tmp[1].split(";").at(3);
                 QString m = tmp[1].split(";").at(5);
-                QString z = tmp[1].split(";").at(7);
-                QString l = tmp[1].split(";").at(9);
-                QString r = tmp[1].split(";").at(11);
-                QString c = tmp[1].split(";").at(12);
                 long long newf = f.toLongLong();
                 int newmode = m.toInt();
-                int zoom = z.toInt();
-                int left = l.toInt();
-                int right = r.toInt();
-                int current_channel = c.toInt();
-                //             emit setCurrentChannel(current_channel);
                 emit slaveSetFreq(newf);
-                //          emit slaveSetFilter(left, right);
-                //            emit slaveSetZoom(zoom);
-                if (newmode != lastMode)
-                {
-                    //               emit slaveSetMode(newmode);
-                }
 
                 emit printStatusBar(" .. Info. ");    //added by gvj
                 lastFreq = newf;
@@ -532,7 +535,7 @@ void Connection::socketData()
                 version = hdr[1];
                 //    subversion = hdr[2];
                 queue.enqueue(new Buffer(hdr, buffer));
-                QTimer::singleShot(0, this, SLOT(processBuffer()));
+                QTimer::singleShot(0, this, &Connection::processBuffer);
                 hdr = (char*)malloc(15);
                 bytes = 0;
                 state = READ_HEADER_TYPE;
@@ -722,19 +725,6 @@ void ServerConnection::processBuffer()
 } // end processBuffer
 
 
-void ServerConnection::freeBuffers(char* header,char* buffer)
-{
-    if (header != NULL) free(header);
-    if (buffer != NULL) free(buffer);
-} // end freeBuffers
-
-
-bool ServerConnection::getSlave()
-{
-    return amSlave;
-} // end getSlave
-
-
 // added by gvj
 void ServerConnection::setMuted(bool muteState)
 {
@@ -748,7 +738,7 @@ QString ServerConnection::getXcvrProperty(int server, int xcvr, const QString pr
     QString     result;
     bool        found = false;
 
-    list = manifest_xml[server].split("\n", QString::SkipEmptyParts);
+    list = manifest_xml[server].split("\n", Qt::SkipEmptyParts);
     for (int i=0;i<list.count();i++)
     {
         if (list[i].contains("radio="))
@@ -784,14 +774,18 @@ void ServerConnection::createChannels(int radios)
     int  r = 0;
     int  radio_id = 0;
     char radio_type[25];
-    char radio_name[25];
-    int  num_chs = 0;
+    char radio_name[35];
     int  num_rcvrs = 0;
     bool bs_capable = false;
 
     active_radios = 0;
     for (int x=0;x<radios;x++)
     {
+        strcpy(ip_addr, "USB");
+        strcpy(mac_addr, "NA");
+        local_audio = false;
+        local_mic = false;
+        bs_capable = false;
         manifest = (char*)malloc(manifest_xml[x].length()+1);
         strcpy(manifest, manifest_xml[x].toLatin1().data());
 
@@ -886,49 +880,47 @@ void ServerConnection::createChannels(int radios)
                                                             int ant_switch = 0;
                                                             sscanf(line, "%*s %d %*s", &ant_switch);
                                                             for (;r<num_rcvrs;r++)
-                                                            {   // setup receive channels
-                                                                channels[active_channels].radio.radio_id = active_radios-1;
-                                                                strcpy(channels[active_channels].radio.ip_address, ip_addr);
-                                                                strcpy(channels[active_channels].radio.mac_address, mac_addr);
-                                                                channels[active_channels].radio.local_audio = local_audio;
-                                                                channels[active_channels].radio.local_mic = local_mic;
-                                                                channels[active_channels].radio.ant_switch = ant_switch;
-                                                                channels[active_channels].dsp_channel = num_chs++;
-                                                                channels[active_channels].index = r;
-                                                                channels[active_channels].id = active_channels;
-                                                                channels[active_channels].radio.bandscope_capable = bs_capable;
-                                                                strcpy(channels[active_channels].radio.radio_type, radio_type);
-                                                                strcpy(channels[active_channels].radio.radio_name, radio_name);
-                                                                channels[active_channels].isTX = false;
-                                                                channels[active_channels].enabled = false;
-                                                                channels[active_channels].spectrum.samples = NULL;
-                                                                active_channels++;
+                                                            {   // setup receive streams
+                                                                rfstream[active_rfstreams].radio.radio_id = active_radios-1;
+                                                                strcpy(rfstream[active_rfstreams].radio.ip_address, ip_addr);
+                                                                strcpy(rfstream[active_rfstreams].radio.mac_address, mac_addr);
+                                                                rfstream[active_rfstreams].radio.local_audio = local_audio;
+                                                                rfstream[active_rfstreams].radio.local_mic = local_mic;
+                                                                rfstream[active_rfstreams].radio.ant_switch = ant_switch;
+                                                                rfstream[active_rfstreams].index = r;
+                                                                rfstream[active_rfstreams].id = active_rfstreams;
+                                                                rfstream[active_rfstreams].radio.bandscope_capable = bs_capable;
+                                                                strcpy(rfstream[active_rfstreams].radio.radio_type, radio_type);
+                                                                strcpy(rfstream[active_rfstreams].radio.radio_name, radio_name);
+                                                                rfstream[active_rfstreams].isTX = false;
+                                                                rfstream[active_rfstreams].enabled = false;
+                                                                rfstream[active_rfstreams].spectrum.samples = NULL;
+                                                                active_rfstreams++;
                                                             }
                                                             for (;r<t+num_rcvrs;r++)
-                                                            {   // setup transmit channels
-                                                                channels[active_channels].radio.radio_id = active_radios-1;
-                                                                strcpy(channels[active_channels].radio.ip_address, ip_addr);
-                                                                strcpy(channels[active_channels].radio.mac_address, mac_addr);
-                                                                channels[active_channels].radio.local_audio = local_audio;
-                                                                channels[active_channels].radio.local_mic = local_mic;
-                                                                channels[active_channels].radio.ant_switch = ant_switch;
-                                                                channels[active_channels].dsp_channel = num_chs++;
-                                                                channels[active_channels].index = r;
-                                                                channels[active_channels].id = active_channels;
-                                                                channels[active_channels].radio.bandscope_capable = bs_capable;
-                                                                strcpy(channels[active_channels].radio.radio_type, radio_type);
-                                                                strcpy(channels[active_channels].radio.radio_name, radio_name);
-                                                                channels[active_channels].isTX = true;
-                                                                channels[active_channels].enabled = false;
-                                                                channels[active_channels].spectrum.samples = NULL;
-                                                                active_channels++;
+                                                            {   // setup transmit streams
+                                                                rfstream[active_rfstreams].radio.radio_id = active_radios-1;
+                                                                strcpy(rfstream[active_rfstreams].radio.ip_address, ip_addr);
+                                                                strcpy(rfstream[active_rfstreams].radio.mac_address, mac_addr);
+                                                                rfstream[active_rfstreams].radio.local_audio = local_audio;
+                                                                rfstream[active_rfstreams].radio.local_mic = local_mic;
+                                                                rfstream[active_rfstreams].radio.ant_switch = ant_switch;
+                                                                rfstream[active_rfstreams].index = r;
+                                                                rfstream[active_rfstreams].id = active_rfstreams;
+                                                                rfstream[active_rfstreams].radio.bandscope_capable = bs_capable;
+                                                                strcpy(rfstream[active_rfstreams].radio.radio_type, radio_type);
+                                                                strcpy(rfstream[active_rfstreams].radio.radio_name, radio_name);
+                                                                rfstream[active_rfstreams].isTX = true;
+                                                                rfstream[active_rfstreams].enabled = false;
+                                                                rfstream[active_rfstreams].spectrum.samples = NULL;
+                                                                active_rfstreams++;
                                                             }
                                                         }
             } // end if
         } // end for
         free(manifest);
     }
-    fprintf(stderr, "Active channels = %d\n", active_channels);
+    fprintf(stderr, "Active rf streams = %d\n", active_rfstreams);
 } // end createChannels
 
 
@@ -946,23 +938,26 @@ void ServerConnection::activateRadio()
     rd->available_xcvrs[2] = available_xcvrs[2];
     rd->available_xcvrs[3] = available_xcvrs[3];
     rd->active_radios = active_radios;
-    rd->active_channels = active_channels;
-    rd->channels = (CHANNEL*)&channels;
+    rd->active_rfstreams = active_rfstreams;
+    rd->rfstream = (RFSTREAM*)&rfstream;
     rd->fillRadioList();
     if (rd->exec() == QDialog::Accepted)
     {
         for (int i=0;i<8;i++)
         {
             receivers_active[i] = rd->receivers_active[i];
-            receiver_channel[i] = rd->receiver_channel[i];
+            receiver_rfstream[i] = rd->receiver_rfstream[i];
         }
         memcpy((int8_t*)&txrxPair, (int8_t*)&rd->txrxPair, 2);
-        sample_rate = rd->sample_rate[0];
+   //     sample_rate = rd->sample_rate[0];
+        local_audio = rd->local_audio;
+        local_mic = rd->local_mic_audio;
+
         started = true;
     }
     delete rd;
     if (started)
-        emit isConnected((bool*)&receivers_active, (int8_t*)&receiver_channel, (int8_t*)&txrxPair);
+        emit isConnected((bool*)&receivers_active, (int8_t*)&receiver_rfstream, (int8_t*)&txrxPair, (bool*)&local_audio, (bool*)&local_mic);
 } // end activateRadio
 
 
@@ -977,14 +972,15 @@ SpectrumConnection::SpectrumConnection()
     state = READ_HEADER;
     bytes = 0;
 
-    QObject::connect(this, SIGNAL(send_spectrum_command(QByteArray)), this, SLOT(sendCommand(QByteArray)));
+    QObject::connect(this, &SpectrumConnection::send_spectrum_command, this, &SpectrumConnection::sendCommand);
 }
 
 
-void SpectrumConnection::connect(QString h, int p)
+void SpectrumConnection::connect(RFSTREAM *rfs, QString h, int p)
 {
     server = h;
     port = p;
+  //  rfstream = *rfs;
 
     // cleanup previous object, if any
     if (tcpSocket)
@@ -994,17 +990,17 @@ void SpectrumConnection::connect(QString h, int p)
 
     tcpSocket = new QTcpSocket(this);
 
-    QObject::connect(tcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
-                     this, SLOT(socketError(QAbstractSocket::SocketError)));
+    QObject::connect(tcpSocket, &QTcpSocket::errorOccurred,
+                     this, &SpectrumConnection::socketError);
 
-    QObject::connect(tcpSocket, SIGNAL(connected()),
-                     this, SLOT(connected()));
+    QObject::connect(tcpSocket, &QTcpSocket::connected,
+                     this, &SpectrumConnection::connected);
 
-    QObject::connect(tcpSocket, SIGNAL(disconnected()),
-                     this, SLOT(disconnected()));
+    QObject::connect(tcpSocket, &QTcpSocket::disconnected,
+                     this, qOverload<>(&SpectrumConnection::disconnected));
 
-    QObject::connect(tcpSocket, SIGNAL(readyRead()),
-                     this, SLOT(spectrumSocketData()));
+    QObject::connect(tcpSocket, &QTcpSocket::readyRead,
+                     this, &SpectrumConnection::spectrumSocketData);
 
     // set the initial state
     state = READ_HEADER;
@@ -1022,17 +1018,17 @@ void SpectrumConnection::disconnected()
 
     if (tcpSocket != NULL)
     {
-        QObject::disconnect(tcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
-                            this, SLOT(socketError(QAbstractSocket::SocketError)));
+        QObject::disconnect(tcpSocket, &QTcpSocket::errorOccurred,
+                            this, &SpectrumConnection::socketError);
 
-        QObject::disconnect(tcpSocket, SIGNAL(connected()),
-                            this, SLOT(connected()));
+        QObject::disconnect(tcpSocket, &QTcpSocket::connected,
+                            this, &SpectrumConnection::connected);
 
-        QObject::disconnect(tcpSocket, SIGNAL(disconnected()),
-                            this, SLOT(disconnected()));
+        QObject::disconnect(tcpSocket, &QTcpSocket::disconnected,
+                            this, qOverload<>(&SpectrumConnection::disconnected));
 
-        QObject::disconnect(tcpSocket, SIGNAL(readyRead()),
-                            this, SLOT(spectrumSocketData()));
+        QObject::disconnect(tcpSocket, &QTcpSocket::readyRead,
+                            this, &SpectrumConnection::spectrumSocketData);
     }
 } // end disconnected
 
@@ -1091,8 +1087,8 @@ void SpectrumConnection::spectrumSocketData()
     int     toRead;
     int     bytesRead = 0;
     int     thisRead = 0;
-    static  CHANNEL channel;
-    int     header_size = sizeof(CHANNEL);
+    static  RFSTREAM rfstream;
+    int     header_size = sizeof(RFSTREAM);
 
     if (bytes < 0)
     {
@@ -1115,7 +1111,7 @@ void SpectrumConnection::spectrumSocketData()
         {
         case READ_HEADER:
             //fprintf (stderr, "READ_HEADER: hdr size: %d bytes: %d\n", header_size, bytes);
-            thisRead = tcpSocket->read((char*)&channel+bytes, header_size - bytes);
+            thisRead = tcpSocket->read((char*)&rfstream+bytes, header_size - bytes);
             if (thisRead < 0)
             {
                 fprintf(stderr, "QtRadio: FATAL: READ_HEADER: error in read: %d\n", thisRead);
@@ -1125,7 +1121,7 @@ void SpectrumConnection::spectrumSocketData()
             bytes += thisRead;
             if (bytes == header_size)
             {
-                length = channel.spectrum.length;
+                length = rfstream.spectrum.length;
                 //     if ((length < 0) || (length > 4096))
                 if (length != 2000)
                 {
@@ -1135,7 +1131,7 @@ void SpectrumConnection::spectrumSocketData()
                 }
                 else
                 {
-                    channel.spectrum.samples = (char*)malloc(length);
+                    rfstream.spectrum.samples = (char*)malloc(length);
                     bytes = 0;
                     state = READ_SPECTRUM;
                 }
@@ -1143,13 +1139,13 @@ void SpectrumConnection::spectrumSocketData()
             break;
 
         case READ_SPECTRUM:
-            thisRead = tcpSocket->read(&channel.spectrum.samples[bytes], length - bytes);
+            thisRead = tcpSocket->read(&rfstream.spectrum.samples[bytes], length - bytes);
             bytes += thisRead;
             if (bytes == length)
             {
                 bytes = 0;
                 state = READ_HEADER;
-                emit spectrumBuffer(channel);
+                emit spectrumBuffer(rfstream);
             }
             break;
         default:
@@ -1173,7 +1169,7 @@ void SpectrumConnection::sendCommand(QByteArray command)
 
     if (tcpSocket != NULL && tcpSocket->isValid() && tcpSocket->isWritable())
     {
-        qDebug("Spec: ch: %d  Comm: %d\n", (char)command[0], (char)command[1]);
+        qDebug("Spectrum: rf stream: %d  Comm: %d\n", (char)command[0], (char)command[1]);
         memcpy(buffer, command.constData(), SEND_BUFFER_SIZE);
         bytesWritten = tcpSocket->write(buffer, SEND_BUFFER_SIZE);
         if (bytesWritten != SEND_BUFFER_SIZE)
@@ -1216,17 +1212,17 @@ void WidebandConnection::connect(QString h, int p)
 
     tcpSocket = new QTcpSocket(this);
 
-    QObject::connect(tcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
-                     this, SLOT(socketError(QAbstractSocket::SocketError)));
+    QObject::connect(tcpSocket, &QTcpSocket::errorOccurred,
+                     this, &WidebandConnection::socketError);
 
-    QObject::connect(tcpSocket, SIGNAL(connected()),
-                     this, SLOT(connected()));
+    QObject::connect(tcpSocket, &QTcpSocket::connected,
+                     this, &WidebandConnection::connected);
 
-    QObject::connect(tcpSocket, SIGNAL(disconnected()),
-                     this, SLOT(disconnected()));
+    QObject::connect(tcpSocket, &QTcpSocket::disconnected,
+                     this, qOverload<>(&WidebandConnection::disconnected));
 
-    QObject::connect(tcpSocket, SIGNAL(readyRead()),
-                     this, SLOT(widebandSocketData()));
+    QObject::connect(tcpSocket, &QTcpSocket::readyRead,
+                     this, &WidebandConnection::widebandSocketData);
 
     // set the initial state
     state = READ_HEADER;
@@ -1244,17 +1240,17 @@ void WidebandConnection::disconnected()
 
     if (tcpSocket != NULL)
     {
-        QObject::disconnect(tcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
-                            this, SLOT(socketError(QAbstractSocket::SocketError)));
+        QObject::disconnect(tcpSocket, &QTcpSocket::errorOccurred,
+                            this, &WidebandConnection::socketError);
 
-        QObject::disconnect(tcpSocket, SIGNAL(connected()),
-                            this, SLOT(connected()));
+        QObject::disconnect(tcpSocket, &QTcpSocket::connected,
+                            this, &WidebandConnection::connected);
 
-        QObject::disconnect(tcpSocket, SIGNAL(disconnected()),
-                            this, SLOT(disconnected()));
+        QObject::disconnect(tcpSocket, &QTcpSocket::disconnected,
+                            this, qOverload<>(&WidebandConnection::disconnected));
 
-        QObject::disconnect(tcpSocket, SIGNAL(readyRead()),
-                            this, SLOT(widebandSocketData()));
+        QObject::disconnect(tcpSocket, &QTcpSocket::readyRead,
+                            this, &WidebandConnection::widebandSocketData);
     }
 } // end disconnected
 
@@ -1316,8 +1312,8 @@ void WidebandConnection::widebandSocketData()
     int     toRead;
     int     bytesRead=0;
     int     thisRead=0;
-    static  CHANNEL channel;
-    int     header_size=sizeof(CHANNEL);
+    static  RFSTREAM rfstream;
+    int     header_size=sizeof(RFSTREAM);
 
     if (bytes < 0)
     {
@@ -1338,7 +1334,7 @@ void WidebandConnection::widebandSocketData()
         {
         case READ_HEADER:
             //     fprintf(stderr, "READ_HEADER: hdr size: %d bytes: %d\n", header_size, bytes);
-            thisRead = tcpSocket->read((char*)&channel+bytes, header_size - bytes);
+            thisRead = tcpSocket->read((char*)&rfstream+bytes, header_size - bytes);
             if (thisRead < 0)
             {
                 fprintf(stderr, "QtRadio: FATAL: READ_HEADER: error in read: %d\n", thisRead);
@@ -1348,7 +1344,7 @@ void WidebandConnection::widebandSocketData()
             bytes += thisRead;
             if (bytes == header_size)
             {
-                length = channel.spectrum.length;
+                length = rfstream.spectrum.length;
                 if ((length < 512) || (length > 1920))
                     //         if (length != 512)
                 {
@@ -1358,7 +1354,7 @@ void WidebandConnection::widebandSocketData()
                 }
                 else
                 {
-                    channel.spectrum.samples = (char*)malloc(length);
+                    rfstream.spectrum.samples = (char*)malloc(length);
                     bytes = 0;
                     state = READ_WIDEBAND;
                 }
@@ -1366,13 +1362,13 @@ void WidebandConnection::widebandSocketData()
             break;
 
         case READ_WIDEBAND:
-            thisRead = tcpSocket->read(&channel.spectrum.samples[bytes], length - bytes);
+            thisRead = tcpSocket->read(&rfstream.spectrum.samples[bytes], length - bytes);
             bytes += thisRead;
             if (bytes == length)
             {
                 bytes = 0;
                 state = READ_HEADER;
-                emit bandscopeBuffer(channel.spectrum);
+                emit bandscopeBuffer(rfstream.spectrum);
             }
             break;
 
@@ -1424,7 +1420,7 @@ AudioConnection::AudioConnection()
     tcpSocket = NULL;
     state = READ_HEADER;
     bytes = 0;
-    hdr = (char*)malloc(HEADER_SIZE_2_1);  // HEADER_SIZE is larger than AUTIO_HEADER_SIZE so it is OK for both
+    hdr = (char*)malloc(HEADER_SIZE_2_1);  // HEADER_SIZE is larger than AUDIO_HEADER_SIZE so it is OK for both
 }
 
 
@@ -1441,17 +1437,17 @@ void AudioConnection::connect(QString h, int p)
 
     tcpSocket = new QTcpSocket(this);
 
-    QObject::connect(tcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
-                     this, SLOT(socketError(QAbstractSocket::SocketError)));
+    QObject::connect(tcpSocket, &QTcpSocket::errorOccurred,
+                     this, &AudioConnection::socketError);
 
-    QObject::connect(tcpSocket, SIGNAL(connected()),
-                     this, SLOT(connected()));
+    QObject::connect(tcpSocket, &QTcpSocket::connected,
+                     this, &AudioConnection::connected);
 
-    QObject::connect(tcpSocket, SIGNAL(disconnected()),
-                     this, SLOT(disconnected()));
+    QObject::connect(tcpSocket, &QTcpSocket::disconnected,
+                     this, qOverload<>(&AudioConnection::disconnected));
 
-    QObject::connect(tcpSocket, SIGNAL(readyRead()),
-                     this, SLOT(socketData()));
+    QObject::connect(tcpSocket, &QTcpSocket::readyRead,
+                     this, &AudioConnection::socketData);
 
     // set the initial state
     state = READ_HEADER;
@@ -1469,17 +1465,17 @@ void AudioConnection::disconnected()
 
     if (tcpSocket != NULL)
     {
-        QObject::disconnect(tcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
-                            this, SLOT(socketError(QAbstractSocket::SocketError)));
+        QObject::disconnect(tcpSocket, &QTcpSocket::errorOccurred,
+                            this, &AudioConnection::socketError);
 
-        QObject::disconnect(tcpSocket, SIGNAL(connected()),
-                            this, SLOT(connected()));
+        QObject::disconnect(tcpSocket, &QTcpSocket::connected,
+                            this, &AudioConnection::connected);
 
-        QObject::disconnect(tcpSocket, SIGNAL(disconnected()),
-                            this, SLOT(disconnected()));
+        QObject::disconnect(tcpSocket, &QTcpSocket::disconnected,
+                            this, qOverload<>(&AudioConnection::disconnected));
 
-        QObject::disconnect(tcpSocket, SIGNAL(readyRead()),
-                            this, SLOT(socketData()));
+        QObject::disconnect(tcpSocket, &QTcpSocket::readyRead,
+                            this, &AudioConnection::socketData);
     }
 } // end disconnected
 
@@ -1604,12 +1600,6 @@ void AudioConnection::socketData()
 } // end socketData
 
 
-void AudioConnection::freeBuffers(char* header, char* buffer)
-{
-    if (buffer != NULL) free(buffer);
-} // end freeBuffers
-
-
 /*************************************************************************************************************
  * ****************************************************************************************************
  * ***********************************************************************************************************/
@@ -1635,17 +1625,17 @@ void MicAudioConnection::connect(QString h, int p)
 
     tcpSocket = new QTcpSocket(this);
 
-    QObject::connect(tcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
-                     this, SLOT(socketError(QAbstractSocket::SocketError)));
+    QObject::connect(tcpSocket, &QTcpSocket::errorOccurred,
+                     this, &MicAudioConnection::socketError);
 
-    QObject::connect(tcpSocket, SIGNAL(connected()),
-                     this, SLOT(connected()));
+    QObject::connect(tcpSocket, &QTcpSocket::connected,
+                     this, &MicAudioConnection::connected);
 
-    QObject::connect(tcpSocket, SIGNAL(disconnected()),
-                     this, SLOT(disconnected()));
+    QObject::connect(tcpSocket, &QTcpSocket::disconnected,
+                     this, qOverload<>(&MicAudioConnection::disconnected));
 
-    QObject::connect(tcpSocket, SIGNAL(readyRead()),
-                     this, SLOT(socketData()));
+    QObject::connect(tcpSocket, &QTcpSocket::readyRead,
+                     this, &MicAudioConnection::socketData);
 
     // set the initial state
     state = READ_HEADER;
@@ -1663,17 +1653,17 @@ void MicAudioConnection::disconnected()
 
     if (tcpSocket != NULL)
     {
-        QObject::disconnect(tcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
-                            this, SLOT(socketError(QAbstractSocket::SocketError)));
+        QObject::disconnect(tcpSocket, &QTcpSocket::errorOccurred,
+                            this, &MicAudioConnection::socketError);
 
-        QObject::disconnect(tcpSocket, SIGNAL(connected()),
-                            this, SLOT(connected()));
+        QObject::disconnect(tcpSocket, &QTcpSocket::connected,
+                            this, &MicAudioConnection::connected);
 
-        QObject::disconnect(tcpSocket, SIGNAL(disconnected()),
-                            this, SLOT(disconnected()));
+        QObject::disconnect(tcpSocket, &QTcpSocket::disconnected,
+                            this, qOverload<>(&MicAudioConnection::disconnected));
 
-        QObject::disconnect(tcpSocket, SIGNAL(readyRead()),
-                            this, SLOT(socketData()));
+        QObject::disconnect(tcpSocket, &QTcpSocket::readyRead,
+                            this, &MicAudioConnection::socketData);
     }
 } // end disconnected
 
@@ -1733,7 +1723,7 @@ void MicAudioConnection::socketData()
 }
 
 
-void MicAudioConnection::sendAudio(int8_t channel, int length, unsigned char* data)
+void MicAudioConnection::sendAudio(int8_t stream, int length, unsigned char* data)
 {
     char buffer[MICS_BUFFER_SIZE];
     //    int  i;
@@ -1743,12 +1733,36 @@ void MicAudioConnection::sendAudio(int8_t channel, int length, unsigned char* da
     //      buffer[i] = 0;
     if (tcpSocket!=NULL && tcpSocket->isValid() && tcpSocket->isWritable())
     {
-        buffer[0] = channel;
+        buffer[0] = stream;
         buffer[1] = ISMIC;
         memcpy(&buffer[6], data, length);
         mutex.lock();
         bytesWritten = tcpSocket->write(buffer, MICS_BUFFER_SIZE);
         if (bytesWritten != MICS_BUFFER_SIZE)
+            qDebug() << "mic audio: write error";
+        //        qDebug("send mic....");
+        //tcpSocket->flush();
+        mutex.unlock();
+    }
+} // end sendAudio
+
+
+void MicAudioConnection::sendAudio(int8_t stream, int length, int16_t* data)
+{
+    int8_t buffer[MICS_BUFFER_SIZE + 512];
+    //    int  i;
+    int  bytesWritten;
+
+    //    for (i=0; i < SEND_BUFFER_SIZE; i++)
+    //      buffer[i] = 0;
+    if (tcpSocket!=NULL && tcpSocket->isValid() && tcpSocket->isWritable())
+    {
+        buffer[0] = stream;
+        buffer[1] = ISMIC_PCM;
+        memcpy(&buffer[6], (int8_t*)data, length * 2);
+        mutex.lock();
+        bytesWritten = tcpSocket->write((const char*)buffer, MICS_BUFFER_SIZE + 512);
+        if (bytesWritten != MICS_BUFFER_SIZE + 512)
             qDebug() << "mic audio: write error";
         //        qDebug("send mic....");
         //tcpSocket->flush();

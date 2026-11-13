@@ -12,8 +12,8 @@ Sdr1000Frame::Sdr1000Frame(Radio *pUI, QWidget *parent) : QFrame(parent), ui(new
     pui = pUI;
 
     radio_id = -1;
-    currentRxChannel = -1;
-    currentTxChannel = -1;
+    currentRxRfstream = -1;
+    currentTxRfstream = -1;
 
     // Load hardware settings
     settings = new QSettings("FreeSDR", "QtRadioII");
@@ -48,14 +48,14 @@ Sdr1000Frame::Sdr1000Frame(Radio *pUI, QWidget *parent) : QFrame(parent), ui(new
     };
     settings->endGroup();
 
-    connect(ui->hhRxAtt0Radio, SIGNAL(toggled(bool)), this, SLOT(setAttenuation(bool)));
-    connect(ui->hhRxAtt10Radio, SIGNAL(toggled(bool)), this, SLOT(setAttenuation(bool)));
-    connect(ui->hhRxAtt20Radio, SIGNAL(toggled(bool)), this, SLOT(setAttenuation(bool)));
-    connect(ui->hhRxAtt30Radio, SIGNAL(toggled(bool)), this, SLOT(setAttenuation(bool)));
+    connect(ui->hhRxAtt0Radio, &QRadioButton::toggled, this, &Sdr1000Frame::setAttenuation);
+    connect(ui->hhRxAtt10Radio, &QRadioButton::toggled, this, &Sdr1000Frame::setAttenuation);
+    connect(ui->hhRxAtt20Radio, &QRadioButton::toggled, this, &Sdr1000Frame::setAttenuation);
+    connect(ui->hhRxAtt30Radio, &QRadioButton::toggled, this, &Sdr1000Frame::setAttenuation);
 
     itimer = new QTimer(this);
     itimer->setSingleShot(true);
-    connect(itimer, SIGNAL(timeout()), this, SLOT(initialize()));
+    connect(itimer, &QTimer::timeout, this, &Sdr1000Frame::initialize);
 } // end constructor
 
 
@@ -87,19 +87,6 @@ void Sdr1000Frame::initialize(void)
 } // end initialize
 
 
-void Sdr1000Frame::shutDown(void)
-{
-    QByteArray command;
-
-    command.clear();
-    command.append((char)0);
-    command.append((char)STARCOMMAND);
-//    command.append((char)STOPRADIO);
-    command.append((char)radio_id);
-//    emit hhcommand(command);
-} // end shutDown
-
-
 void Sdr1000Frame::tuningEnabled(bool enabled)
 {
     tuning = enabled;
@@ -127,10 +114,10 @@ void Sdr1000Frame::setAttenuation(bool button)
         atn = -ui->hhRxAttSlider->value();
 
     command.clear();
-    command.append((char)currentRxChannel);
+    command.append((char)currentRxRfstream);
     command.append((char)STARCOMMAND);
     command.append((char)SETATTENUATOR);
-    command.append(QString("%1").arg(atn));
+    command.append(QString("%1").arg(atn).toUtf8());
     emit hhcommand(command);
     settings->beginGroup("Sdr1000");
     settings->setValue("attenuation", atn / 10);

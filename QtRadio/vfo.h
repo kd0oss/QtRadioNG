@@ -4,11 +4,7 @@
 
 #include <QtCore>
 
-#if QT_VERSION >= 0x050000
-#include <QtWidgets/QFrame>
-#else
 #include <QFrame>
-#endif
 
 #include <QWheelEvent>
 #include <QBasicTimer>
@@ -32,10 +28,7 @@ public:
     void setFrequency(int freq); //Displays "freq" on current vfo according to ptt state
     void checkBandBtn(int band);
     void setBandFrequency(long long f) {bandFrequency = f;}
-    QString rigctlGetvfo();
-    long long getTxFrequency();
     void pttChange(bool pttState);
-    bool getPtt();
 
 public slots:
     void on_pBtnvfoA_clicked();  // moved from private for rigctl

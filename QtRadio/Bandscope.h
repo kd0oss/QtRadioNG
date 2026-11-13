@@ -5,11 +5,7 @@
 
 #include <QtCore>
 
-#if QT_VERSION >= 0x050000
-#include <QtWidgets/QFrame>
-#else
 #include <QFrame>
-#endif
 
 #include <QPainter>
 #include <QPoint>
@@ -36,8 +32,10 @@ public:
     void resizeEvent(QResizeEvent *event);
     void connect();
     void disconnect();
+    void setSpan(double startHz, double spanHz);
+    void setMarker(double hz);
 
-    int8_t channel;
+    int8_t rfstream;
     int8_t radio_id;
 
 public slots:
@@ -64,6 +62,9 @@ private:
     QString host;
     int     port;
     QVector <QPoint> plot;
+    double  spanStart;      // frequency at the left edge, Hz
+    double  spanWidth;      // frequency span of the window, Hz
+    double  markerHz;       // receiver frequency, < 0 for none
 };
 
 #endif // BANDSCOPE_H

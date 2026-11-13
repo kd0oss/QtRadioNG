@@ -30,27 +30,27 @@ void Xvtr::loadSettings(QSettings* settings) {
     if(settings->contains("count")) {
         count=settings->value("count").toInt();
         for(int i=0;i<count;i++) {
-            s.sprintf("title.%d",i);
+            s = QString("title.%1").arg(i);
             title=settings->value(s).toString();
-            s.sprintf("minFrequency.%d",i);
+            s = QString("minFrequency.%1").arg(i);
             minFrequency=settings->value(s).toLongLong();
-            s.sprintf("maxFrequency.%d",i);
+            s = QString("maxFrequency.%1").arg(i);
             maxFrequency=settings->value(s).toLongLong();
-            s.sprintf("ifFrequency.%d",i);
+            s = QString("ifFrequency.%1").arg(i);
             ifFrequency=settings->value(s).toLongLong();
-            s.sprintf("frequency.%d",i);
+            s = QString("frequency.%1").arg(i);
             if(settings->contains(s)) {
                 frequency=settings->value(s).toLongLong();
             } else {
                 frequency=minFrequency;
             }
-            s.sprintf("mode.%d",i);
+            s = QString("mode.%1").arg(i);
             if(settings->contains(s)) {
                 mode=settings->value(s).toLongLong();
             } else {
                 mode=MODE_USB;
             }
-            s.sprintf("filter.%d",i);
+            s = QString("filter.%1").arg(i);
             if(settings->contains(s)) {
                 filter=settings->value(s).toLongLong();
             } else {
@@ -73,13 +73,13 @@ void Xvtr::saveSettings(QSettings* settings) {
     settings->setValue("count",xvtrs.count());
     for(int i=0;i<xvtrs.count();i++) {
         entry=xvtrs.at(i);
-        s.sprintf("title.%d",i);
+        s = QString("title.%1").arg(i);
         settings->setValue(s,entry->getTitle());
-        s.sprintf("minFrequency.%d",i);
+        s = QString("minFrequency.%1").arg(i);
         settings->setValue(s,entry->getMinFrequency());
-        s.sprintf("maxFrequency.%d",i);
+        s = QString("maxFrequency.%1").arg(i);
         settings->setValue(s,entry->getMaxFrequency());
-        s.sprintf("ifFrequency.%d",i);
+        s = QString("ifFrequency.%1").arg(i);
         settings->setValue(s,entry->getIFFrequency());
     }
     settings->endGroup();
@@ -95,7 +95,7 @@ void Xvtr::buildMenu(QMenu* menu) {
         menu->addAction(action);
 
         //need an event for the new action
-        connect(action,SIGNAL(triggered()),this,SLOT(triggered()));
+        connect(action,&QAction::triggered,this,&Xvtr::triggered);
     }
 }
 
@@ -129,23 +129,6 @@ void Xvtr::select(QAction* action) {
 
 }
 
-QString Xvtr::getTitle() {
-    return currentXvtr->getTitle();
-}
-
-long long Xvtr::getMinFrequency() {
-    return currentXvtr->getMinFrequency();
-}
-
-long long Xvtr::getMaxFrequency() {
-    return currentXvtr->getMaxFrequency();
-}
-
-long long Xvtr::getIFFrequency() {
-    return currentXvtr->getMaxFrequency();
-}
-
-
 int Xvtr::count() {
     return xvtrs.count();
 }
@@ -154,26 +137,3 @@ XvtrEntry* Xvtr::getXvtrAt(int index) {
     return xvtrs.at(index);
 }
 
-long long Xvtr::getFrequency() {
-    return currentXvtr->getFrequency();
-}
-
-int Xvtr::getMode() {
-    return currentXvtr->getMode();
-}
-
-int Xvtr::getFilter() {
-    return currentXvtr->getFilter();
-}
-
-void Xvtr::setFrequency(long long f) {
-    currentXvtr->setFrequency(f);
-}
-
-void Xvtr::setMode(int m) {
-    currentXvtr->setMode(m);
-}
-
-void Xvtr::setFilter(int f) {
-    currentXvtr->setFilter(f);
-}

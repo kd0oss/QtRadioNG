@@ -185,7 +185,18 @@ QImage Meter::getImage(float meter0, float meter1, float meter2)
         calculateNeedle((int)(meter1), 0, 75);
         painter.drawLine(dxmin, dymin, dxmax, dymax);
         painter.setPen(Qt::black);
-        strDbm.sprintf("%2.1f SWR  %4.1f W", (meter1 + meter2)/(meter1 - meter2), meter1);
+        // meter1 = forward, meter2 = reverse power (watts). SWR comes from the
+        // reflection coefficient rho = sqrt(Pr/Pf): SWR = (1 + rho) / (1 - rho).
+        // With no RF show 0.0; reverse >= forward (rho >= 1) is shown as 99.9.
+        float swr = 0.0f;
+        if (meter1 > 0.0f)
+        {
+            float rho = (meter2 > 0.0f) ? sqrtf(meter2 / meter1) : 0.0f;
+            swr = (rho < 1.0f) ? (1.0f + rho) / (1.0f - rho) : 99.9f;
+            if (swr > 99.9f)
+                swr = 99.9f;
+        }
+        strDbm = QString("%1 SWR  %2 W").arg(swr, 0, 'f', 1).arg(meter1, 2, 'f', 1);
         QRectF r1(image->width()-133, image->height()-15, 105, 20);
         painter.drawText(r1, Qt::AlignRight, strDbm);
     }
@@ -195,7 +206,7 @@ QImage Meter::getImage(float meter0, float meter1, float meter2)
         painter.drawLine(dxmin, dymin, dxmax, dymax);
         painter.setPen(Qt::black);
         painter.setBackground(QBrush(QColor(Qt::white)));
-        strDbm.sprintf("%d dBm", (int)meter0);
+        strDbm = QString("%1 dBm").arg((int)meter0);
         QRectF r1(image->width()-150, image->height()-15, 105, 20);
         painter.drawText(r1, Qt::AlignRight, strDbm);
     }

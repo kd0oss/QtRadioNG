@@ -1,0 +1,422 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>hackrfOneframe</class>
+ <widget class="QDialog" name="hackrfOneframe">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>350</width>
+    <height>539</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>350</width>
+    <height>539</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>HackRF One</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QLabel" name="label">
+     <property name="font">
+      <font>
+       <pointsize>20</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="text">
+      <string>HackRF One</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTabWidget" name="tabWidget">
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <widget class="QWidget" name="rx_tab">
+      <attribute name="title">
+       <string>RX</string>
+      </attribute>
+      <layout class="QGridLayout" name="rxGrid">
+      <item row="0" column="0">
+       <widget class="QGroupBox" name="hwRateGroup">
+        <property name="title">
+         <string>Hardware Rate</string>
+        </property>
+        <layout class="QVBoxLayout" name="hwRateLayout">
+         <property name="spacing">
+          <number>0</number>
+         </property>
+        <item>
+         <widget class="QRadioButton" name="radio8000000Chk">
+          <property name="text">
+           <string>8 MHz</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QRadioButton" name="radio10000000Chk">
+          <property name="text">
+           <string>10 MHz</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QRadioButton" name="radio12500000Chk">
+          <property name="text">
+           <string>12.5 MHz</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QRadioButton" name="radio16000000Chk">
+          <property name="text">
+           <string>16 MHz</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QRadioButton" name="radio20000000Chk">
+          <property name="text">
+           <string>20 MHz</string>
+          </property>
+         </widget>
+        </item>
+        </layout>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QGroupBox" name="rxRateGroup">
+        <property name="title">
+         <string>Receiver Rate</string>
+        </property>
+        <layout class="QVBoxLayout" name="rxRateLayout">
+         <property name="spacing">
+          <number>0</number>
+         </property>
+        <item>
+         <widget class="QRadioButton" name="radio48000Chk">
+          <property name="text">
+           <string>48 kHz</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QRadioButton" name="radio96000Chk">
+          <property name="text">
+           <string>96 kHz</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QRadioButton" name="radio192000Chk">
+          <property name="text">
+           <string>192 kHz</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QRadioButton" name="radio384000Chk">
+          <property name="text">
+           <string>384 kHz</string>
+          </property>
+         </widget>
+        </item>
+        </layout>
+       </widget>
+      </item>
+      <item row="1" column="0" colspan="2">
+       <widget class="QGroupBox" name="gainGroup">
+        <property name="title">
+         <string>Gain</string>
+        </property>
+        <layout class="QVBoxLayout" name="gainLayout">
+         <property name="spacing">
+          <number>0</number>
+         </property>
+        <item>
+         <layout class="QHBoxLayout" name="lnaGainLayout">
+          <item>
+           <widget class="QSlider" name="lnaGainSlider">
+            <property name="toolTip">
+             <string>IF (LNA) gain, 0 - 40 dB in 8 dB steps</string>
+            </property>
+            <property name="maximum">
+             <number>5</number>
+            </property>
+            <property name="pageStep">
+             <number>1</number>
+            </property>
+            <property name="value">
+             <number>2</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="tickPosition">
+             <enum>QSlider::TicksBelow</enum>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lnaGainLabel">
+            <property name="minimumSize">
+             <size>
+              <width>90</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>LNA 16 dB</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="vgaGainLayout">
+          <item>
+           <widget class="QSlider" name="vgaGainSlider">
+            <property name="toolTip">
+             <string>Baseband (VGA) gain, 0 - 62 dB in 2 dB steps</string>
+            </property>
+            <property name="maximum">
+             <number>31</number>
+            </property>
+            <property name="pageStep">
+             <number>1</number>
+            </property>
+            <property name="value">
+             <number>10</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="tickPosition">
+             <enum>QSlider::TicksBelow</enum>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="vgaGainLabel">
+            <property name="minimumSize">
+             <size>
+              <width>90</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>VGA 20 dB</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QCheckBox" name="rfAmpChk">
+          <property name="toolTip">
+           <string>Front end RF amplifier</string>
+          </property>
+          <property name="text">
+           <string>RF amp (+11 dB)</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QCheckBox" name="antPowerChk">
+          <property name="toolTip">
+           <string>3.3 V bias on the antenna port for an active antenna or preamp</string>
+          </property>
+          <property name="text">
+           <string>Antenna port power</string>
+          </property>
+         </widget>
+        </item>
+        </layout>
+       </widget>
+      </item>
+      <item row="2" column="0" colspan="2">
+       <widget class="QGroupBox" name="ppmGroup">
+        <property name="title">
+         <string>Frequency Correction</string>
+        </property>
+        <layout class="QVBoxLayout" name="ppmLayout">
+         <property name="spacing">
+          <number>0</number>
+         </property>
+        <item>
+         <widget class="QDoubleSpinBox" name="ppmSpin">
+          <property name="toolTip">
+           <string>Reference oscillator correction</string>
+          </property>
+          <property name="suffix">
+           <string> ppm</string>
+          </property>
+          <property name="decimals">
+           <number>1</number>
+          </property>
+          <property name="minimum">
+           <double>-100.000000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>100.000000000000000</double>
+          </property>
+          <property name="singleStep">
+           <double>0.100000000000000</double>
+          </property>
+         </widget>
+        </item>
+        </layout>
+       </widget>
+      </item>
+       <item row="3" column="0" colspan="2">
+        <spacer name="rxSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tx_tab">
+      <attribute name="title">
+       <string>TX</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="txLayout">
+       <item>
+        <widget class="QGroupBox" name="txGainGroup">
+         <property name="title">
+          <string>Transmit Gain</string>
+         </property>
+         <layout class="QVBoxLayout" name="txGainLayout">
+          <item>
+           <layout class="QHBoxLayout" name="txGainRow">
+            <item>
+             <widget class="QSlider" name="txGainSlider">
+              <property name="toolTip">
+               <string>Transmit IF (VGA) gain, 0 - 47 dB in 1 dB steps</string>
+              </property>
+              <property name="maximum">
+               <number>47</number>
+              </property>
+              <property name="pageStep">
+               <number>3</number>
+              </property>
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="tickPosition">
+               <enum>QSlider::TicksBelow</enum>
+              </property>
+              <property name="tickInterval">
+               <number>5</number>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="txGainLabel">
+              <property name="minimumSize">
+               <size>
+                <width>90</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="text">
+               <string>TX 0 dB</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="micGainRow">
+            <item>
+             <widget class="QSlider" name="micGainSlider">
+              <property name="toolTip">
+               <string>Mic gain in dspserver (WDSP), -10 to +20 dB.  QtRadio already levels the mic, so start at 0 dB.</string>
+              </property>
+              <property name="minimum">
+               <number>-10</number>
+              </property>
+              <property name="maximum">
+               <number>20</number>
+              </property>
+              <property name="pageStep">
+               <number>3</number>
+              </property>
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="tickPosition">
+               <enum>QSlider::TicksBelow</enum>
+              </property>
+              <property name="tickInterval">
+               <number>5</number>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="micGainLabel">
+              <property name="minimumSize">
+               <size>
+                <width>90</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="text">
+               <string>Mic 0 dB</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="txAmpChk">
+            <property name="toolTip">
+             <string>Front end RF amplifier while transmitting</string>
+            </property>
+            <property name="text">
+             <string>TX RF amp (+11 dB)</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="txNote">
+         <property name="text">
+          <string>The HackRF has no output filter: its harmonics are strong. Use a band pass or low pass filter before an antenna or amplifier. Receive stops while transmitting.</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="txSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

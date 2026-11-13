@@ -68,7 +68,6 @@ extern struct utsname unameData;
 #define modeSAM 10
 #define modeDRM 11
 #define MODES 12
-extern char *mode_string[MODES];
 
 enum {
   band136=0,
@@ -103,7 +102,6 @@ enum {
 
 extern DISCOVERED *radio;
 
-extern int region;
 
 // specify how many receivers: for PURESIGNAL need two extra
 #define RECEIVERS 7
@@ -133,13 +131,11 @@ extern TRANSMITTER *transmitter;
 #define MAX_BUFFER_SIZE 2048
 
 extern DISCOVERED *radio;
-extern unsigned int radio_id;
 
 extern int have_rx_gain;   // TRUE on HermesLite/RadioBerry
 extern int rx_gain_calibration;  // position of the RX gain slider that
                  // corresponds to zero amplification/attenuation
 extern int disablePA;
-extern int band;
 extern int filter_board;
 extern int pa_enabled;
 extern int pa_power;
@@ -149,31 +145,21 @@ extern int n_adc;
 extern int eer_pwm_min;
 extern int eer_pwm_max;
 
-extern int atlas_penelope;
 extern int atlas_clock_source_10mhz;
 extern int atlas_clock_source_128mhz;
-extern int atlas_config;
 extern int atlas_mic_source;
-extern int atlas_janus;
 
-extern int lt2208Dither;
-extern int lt2208Random;
-extern int attenuation;
 extern unsigned long alex_rx_antenna;
 extern unsigned long alex_tx_antenna;
 extern unsigned long alex_attenuation;
 extern double div_cos, div_sin;
-extern double div_gain, div_phase;
 
 extern int new_pa_board;
 extern int ozy_software_version;
 extern int mercury_software_version;
 extern int penelope_software_version;
-extern int ptt;
 extern int mox;
 extern int tune;
-extern int memory_tune;
-extern int full_tune;
 extern int adc_overload;
 extern int pll_locked;
 extern unsigned int exciter_power;
@@ -220,7 +206,6 @@ extern int cw_keyer_ptt_delay;
 extern int cw_keyer_hang_time;
 extern int cw_keyer_sidetone_frequency;
 extern int cw_breakin;
-extern int cw_is_on_vfo_freq;
 extern unsigned char OCtune;
 extern int OCfull_tune_time;
 extern int OCmemory_tune_time;
@@ -229,7 +214,6 @@ extern long long tune_timeout;
 extern int cw_keyer_internal;
 
 extern ADC adc[2];
-extern DAC dac[2];
 extern int adc_attenuation[2];
 extern int sequence_errors;
 extern double drive_max;
@@ -241,7 +225,6 @@ extern int main_start(char *);
 extern int main_delete(int);
 extern bool start_radio(int);
 extern int isTransmitting();
-extern int band_get_current();
 extern void calcDriveLevel(double pa_calibration);
 extern void start_receivers(int);
 extern void start_transmitter(int, int);
@@ -254,7 +237,12 @@ extern void dither_cb(int8_t, bool);
 extern void random_cb(int8_t, bool);
 extern void preamp_cb(int8_t, bool);
 extern void mic_boost_cb(bool);
-extern void set_tx_power(int8_t pow);
-extern void linein_gain_cb(int gain);
+extern void set_tx_power(uint8_t pow);
 extern void add_wideband_sample(WIDEBAND *w, int16_t sample);
+
+// Bandscope (wideband) is on demand: the radio streams wideband data only
+// while a client has the bandscope open (HSTARTBANDSCOPE .. HSTOPBANDSCOPE).
+extern bool wideband_requested;
+extern bool radio_supports_wideband(DISCOVERED *d);
+extern void set_wideband_requested(bool enable);
 #endif // RADIO_H

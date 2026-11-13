@@ -42,11 +42,7 @@
 */
 
 #include <QSettings>
-#if QT_VERSION >= 0x050000
-#include <QtWidgets/QComboBox>
-#else
 #include <QComboBox>
-#endif
 
 #include "Xvtr.h"
 #include "Configure.h"
@@ -57,6 +53,7 @@ Configure::Configure() {
 
     //Populate the combo boxes with defaults. The loadSettings may overwrite or add values.
     widget.MicEncodingComboBox->addItem("aLaw");
+    widget.MicEncodingComboBox->addItem("16 bit pcm");
 
     widget.hostComboBox->addItem("127.0.0.1");
 //    widget.hostComboBox->addItem("g0orx.homelinux.net");
@@ -88,71 +85,73 @@ Configure::Configure() {
     widget.windowComboBox->setCurrentIndex(1);  //KD0OSS
     widget.pttKeyEdit->setText("None");  // KD0OSS
 
-    connect(widget.spectrumHighSpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotSpectrumHighChanged(int)));
-    connect(widget.spectrumLowSpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotSpectrumLowChanged(int)));
-    connect(widget.fpsSpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotFpsChanged(int)));
-    connect(widget.waterfallHighSpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotWaterfallHighChanged(int)));
-    connect(widget.waterfallLowSpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotWaterfallLowChanged(int)));
-    connect(widget.waterfallAutomatic,SIGNAL(toggled(bool)),this,SLOT(slotWaterfallAutomaticChanged(bool)));
+    connect(widget.spectrumHighSpinBox,&QSpinBox::valueChanged,this,&Configure::slotSpectrumHighChanged);
+    connect(widget.spectrumLowSpinBox,&QSpinBox::valueChanged,this,&Configure::slotSpectrumLowChanged);
+    connect(widget.fpsSpinBox,&QSpinBox::valueChanged,this,&Configure::slotFpsChanged);
+    connect(widget.waterfallHighSpinBox,&QSpinBox::valueChanged,this,&Configure::slotWaterfallHighChanged);
+    connect(widget.waterfallLowSpinBox,&QSpinBox::valueChanged,this,&Configure::slotWaterfallLowChanged);
+    connect(widget.waterfallAutomatic,&QCheckBox::toggled,this,&Configure::slotWaterfallAutomaticChanged);
 
-    connect(widget.audioDeviceComboBox,SIGNAL(currentIndexChanged(int)),this,SLOT(slotAudioDeviceChanged(int)));
+    connect(widget.audioDeviceComboBox,&QComboBox::currentIndexChanged,this,&Configure::slotAudioDeviceChanged);
+    connect(widget.encodingComboBox, &QComboBox::currentIndexChanged, this, &Configure::on_encodingComboBox_currentIndexChanged);
 
-    connect(widget.MicComboBox,SIGNAL(currentIndexChanged(int)),this,SLOT(slotMicDeviceChanged(int)));
+    connect(widget.MicComboBox,&QComboBox::currentIndexChanged,this,&Configure::slotMicDeviceChanged);
+    connect(widget.MicEncodingComboBox, &QComboBox::currentIndexChanged, this, &Configure::on_MicEncodingComboBox_currentIndexChanged);
 
-    connect(widget.hostComboBox,SIGNAL(currentIndexChanged(int)),this,SLOT(slotHostChanged(int)));
-    connect(widget.rxSpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotReceiverChanged(int)));
+    connect(widget.hostComboBox,&QComboBox::currentIndexChanged,this,&Configure::slotHostChanged);
+    connect(widget.rxSpinBox,&QSpinBox::valueChanged,this,&Configure::slotReceiverChanged);
 
-    connect(widget.rxAgcSlopeSpinBox,SIGNAL(valueChanged(int)),this,SLOT(onRxAgcSlopeChanged(int))); //KD0OSS
-    connect(widget.rxAgcMaxGainSpinBox,SIGNAL(valueChanged(double)),this,SLOT(onRxAgcMaxGainChanged(double))); //KD0OSS
-    connect(widget.rxAgcAttackSpinBox,SIGNAL(valueChanged(int)),this,SLOT(onRxAgcAttackChanged(int))); //KD0OSS
-    connect(widget.rxAgcDecaySpinBox,SIGNAL(valueChanged(int)),this,SLOT(onRxAgcDecayChanged(int))); //KD0OSS
-    connect(widget.rxAgcHangSpinBox,SIGNAL(valueChanged(int)),this,SLOT(onRxAgcHangChanged(int))); //KD0OSS
-    connect(widget.rxAgcFixedGainSpinBox,SIGNAL(valueChanged(int)),this,SLOT(onRxAgcFixedGainChanged(int))); //KD0OSS
-    connect(widget.rxAgcHangThreshSpinBox,SIGNAL(valueChanged(int)),this,SLOT(onRxAgcHangThreshChanged(int))); //KD0OSS
-    connect(widget.preAGCButton, SIGNAL(toggled(bool)), this, SLOT(slotPreAGCChanged(bool)));
+    connect(widget.rxAgcSlopeSpinBox,&QSpinBox::valueChanged,this,&Configure::onRxAgcSlopeChanged); //KD0OSS
+    connect(widget.rxAgcMaxGainSpinBox,&QDoubleSpinBox::valueChanged,this,&Configure::onRxAgcMaxGainChanged); //KD0OSS
+    connect(widget.rxAgcAttackSpinBox,&QSpinBox::valueChanged,this,&Configure::onRxAgcAttackChanged); //KD0OSS
+    connect(widget.rxAgcDecaySpinBox,&QSpinBox::valueChanged,this,&Configure::onRxAgcDecayChanged); //KD0OSS
+    connect(widget.rxAgcHangSpinBox,&QSpinBox::valueChanged,this,&Configure::onRxAgcHangChanged); //KD0OSS
+    connect(widget.rxAgcFixedGainSpinBox,&QSpinBox::valueChanged,this,&Configure::onRxAgcFixedGainChanged); //KD0OSS
+    connect(widget.rxAgcHangThreshSpinBox,&QSpinBox::valueChanged,this,&Configure::onRxAgcHangThreshChanged); //KD0OSS
+    connect(widget.preAGCButton, &QRadioButton::toggled, this, &Configure::slotPreAGCChanged);
 
-    connect(widget.levelerEnabledCheckBox,SIGNAL(stateChanged(int)),this,SLOT(onLevelerStateChanged(int))); //KD0OSS
-    connect(widget.levelerAttackSpinBox,SIGNAL(valueChanged(int)),this,SLOT(onLevelerAttackChanged(int))); //KD0OSS
-    connect(widget.levelerDecaySpinBox,SIGNAL(valueChanged(int)),this,SLOT(onLevelerDecayChanged(int))); //KD0OSS
-    connect(widget.levelerHangSpinBox,SIGNAL(valueChanged(int)),this,SLOT(onLevelerHangChanged(int))); //KD0OSS
+    connect(widget.levelerEnabledCheckBox,&QCheckBox::toggled,this,&Configure::onLevelerStateChanged); //KD0OSS
+    connect(widget.levelerAttackSpinBox,&QSpinBox::valueChanged,this,&Configure::onLevelerAttackChanged); //KD0OSS
+    connect(widget.levelerDecaySpinBox,&QSpinBox::valueChanged,this,&Configure::onLevelerDecayChanged); //KD0OSS
+    connect(widget.levelerHangSpinBox,&QSpinBox::valueChanged,this,&Configure::onLevelerHangChanged); //KD0OSS
 
 //    connect(widget.alcEnabledCheckBox,SIGNAL(stateChanged(int)),this,SLOT(onAlcStateChanged(int))); //KD0OSS
-    connect(widget.alcAttackSpinBox,SIGNAL(valueChanged(int)),this,SLOT(onAlcAttackChanged(int))); //KD0OSS
-    connect(widget.alcDecaySpinBox,SIGNAL(valueChanged(int)),this,SLOT(onAlcDecayChanged(int))); //KD0OSS
-    connect(widget.alcMaxGainSpinBox,SIGNAL(valueChanged(double)),this,SLOT(onAlcMaxGainChanged(double))); //KD0OSS
+    connect(widget.alcAttackSpinBox,&QSpinBox::valueChanged,this,&Configure::onAlcAttackChanged); //KD0OSS
+    connect(widget.alcDecaySpinBox,&QSpinBox::valueChanged,this,&Configure::onAlcDecayChanged); //KD0OSS
+    connect(widget.alcMaxGainSpinBox,&QDoubleSpinBox::valueChanged,this,&Configure::onAlcMaxGainChanged); //KD0OSS
 
-    connect(widget.pttKeySetButton, SIGNAL(toggled(bool)), this, SLOT(setPTTKey(bool))); // KD0OSS
+    connect(widget.pttKeySetButton, &QPushButton::toggled, this, &Configure::setPTTKey); // KD0OSS
 /*
     connect(widget.nbTransitionSpinBox,SIGNAL(valueChanged(double)),this,SLOT(onNbTransitionChanged(double))); //KD0OSS
     connect(widget.nbLeadSpinBox,SIGNAL(valueChanged(double)),this,SLOT(onNbLeadChanged(double))); //KD0OSS
     connect(widget.nbLagSpinBox,SIGNAL(valueChanged(double)),this,SLOT(onNbLagChanged(double))); //KD0OSS
 */
-    connect(widget.nrTapsSpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotNrTapsChanged(int)));
-    connect(widget.nrDelaySpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotNrDelayChanged(int)));
-    connect(widget.nrGainSpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotNrGainChanged(int)));
-    connect(widget.nrLeakSpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotNrLeakChanged(int)));
-    connect(widget.nrGainGammaButton, SIGNAL(toggled(bool)), this, SLOT(slotNRgainMethodChanged(bool)));
-    connect(widget.nrGainLogButton, SIGNAL(toggled(bool)), this, SLOT(slotNRgainMethodChanged(bool)));
-    connect(widget.nrGainLinearButton, SIGNAL(toggled(bool)), this, SLOT(slotNRgainMethodChanged(bool)));
-    connect(widget.nrNPEOsmsButton, SIGNAL(toggled(bool)), this, SLOT(slotNRnpeMethodChanged(bool)));
+    connect(widget.nrTapsSpinBox,&QSpinBox::valueChanged,this,&Configure::slotNrTapsChanged);
+    connect(widget.nrDelaySpinBox,&QSpinBox::valueChanged,this,&Configure::slotNrDelayChanged);
+    connect(widget.nrGainSpinBox,&QSpinBox::valueChanged,this,&Configure::slotNrGainChanged);
+    connect(widget.nrLeakSpinBox,&QSpinBox::valueChanged,this,&Configure::slotNrLeakChanged);
+    connect(widget.nrGainGammaButton, &QRadioButton::toggled, this, &Configure::slotNRgainMethodChanged);
+    connect(widget.nrGainLogButton, &QRadioButton::toggled, this, &Configure::slotNRgainMethodChanged);
+    connect(widget.nrGainLinearButton, &QRadioButton::toggled, this, &Configure::slotNRgainMethodChanged);
+    connect(widget.nrNPEOsmsButton, &QRadioButton::toggled, this, &Configure::slotNRnpeMethodChanged);
 //    connect(widget.nrNPEMmseButton, SIGNAL(toggled(bool)), this, SLOT(slotNRnpeMethodChanged(bool)));
 
-    connect(widget.anfTapsSpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotAnfTapsChanged(int)));
-    connect(widget.anfDelaySpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotAnfDelayChanged(int)));
-    connect(widget.anfGainSpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotAnfGainChanged(int)));
-    connect(widget.anfLeakSpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotAnfLeakChanged(int)));
+    connect(widget.anfTapsSpinBox,&QSpinBox::valueChanged,this,&Configure::slotAnfTapsChanged);
+    connect(widget.anfDelaySpinBox,&QSpinBox::valueChanged,this,&Configure::slotAnfDelayChanged);
+    connect(widget.anfGainSpinBox,&QSpinBox::valueChanged,this,&Configure::slotAnfGainChanged);
+    connect(widget.anfLeakSpinBox,&QSpinBox::valueChanged,this,&Configure::slotAnfLeakChanged);
 
-    connect(widget.cessbOvershootCB,SIGNAL(toggled(bool)), this, SLOT(slotCESSBOvershoot(bool)));
-    connect(widget.aeFilterCB, SIGNAL(toggled(bool)), this, SLOT(slotAEFilterChanged(bool)));
-    connect(widget.nb2ModeCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotNB2ModeChanged(int)));
+    connect(widget.cessbOvershootCB,&QCheckBox::toggled, this, &Configure::slotCESSBOvershoot);
+    connect(widget.aeFilterCB, &QCheckBox::toggled, this, &Configure::slotAEFilterChanged);
+    connect(widget.nb2ModeCombo, &QComboBox::currentIndexChanged, this, &Configure::slotNB2ModeChanged);
 
-    connect(widget.windowComboBox,SIGNAL(currentIndexChanged(int)),this,SLOT(slotWindowType(int)));
+    connect(widget.windowComboBox,&QComboBox::currentIndexChanged,this,&Configure::slotWindowType);
 
 //    connect(widget.nbThresholdSpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotNbThresholdChanged(int)));
 //    connect(widget.sdromThresholdSpinBox,SIGNAL(valueChanged(int)),this,SLOT(slotSdromThresholdChanged(int)));
 
-    connect(widget.addPushButton,SIGNAL(clicked()),this,SLOT(slotXVTRAdd()));
-    connect(widget.deletePushButton,SIGNAL(clicked()),this,SLOT(slotXVTRDelete()));
+    connect(widget.addPushButton,&QPushButton::clicked,this,&Configure::slotXVTRAdd);
+    connect(widget.deletePushButton,&QPushButton::clicked,this,&Configure::slotXVTRDelete);
 }
 
 Configure::~Configure() {
@@ -160,7 +159,7 @@ Configure::~Configure() {
 
 void Configure::initAudioDevices(Audio* audio) {
     qDebug() << "Configure: initAudioDevices";
-    audio->get_audio_devices(widget.audioDeviceComboBox); // TODO: how to change this to signal/slot
+    audio->updateAudioDevices(widget.audioDeviceComboBox); // TODO: how to change this to signal/slot
 }
 
 void Configure::initMicDevices(AudioInput* mic) {
@@ -188,15 +187,15 @@ void Configure::updateXvtrList(Xvtr* xvtr) {
         QTableWidgetItem *titleItem=new QTableWidgetItem(entry->getTitle());
         titleItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
         widget.XVTRTableWidget->setItem(i, 0, titleItem);
-        minFrequency.sprintf("%lld",entry->getMinFrequency());
+        minFrequency = QString("%1").arg(entry->getMinFrequency());
         QTableWidgetItem *minFrequencyItem=new QTableWidgetItem(minFrequency);
         minFrequencyItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
         widget.XVTRTableWidget->setItem(i, 1, minFrequencyItem);
-        maxFrequency.sprintf("%lld",entry->getMaxFrequency());
+        maxFrequency = QString("%1").arg(entry->getMaxFrequency());
         QTableWidgetItem *maxFrequencyItem=new QTableWidgetItem(maxFrequency);
         maxFrequencyItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
         widget.XVTRTableWidget->setItem(i, 2, maxFrequencyItem);
-        ifFrequency.sprintf("%lld",entry->getIFFrequency());
+        ifFrequency = QString("%1").arg(entry->getIFFrequency());
         QTableWidgetItem *ifFrequencyItem=new QTableWidgetItem(ifFrequency);
         ifFrequencyItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
         widget.XVTRTableWidget->setItem(i, 3, ifFrequencyItem);
@@ -536,19 +535,13 @@ void Configure::slotWaterfallAutomaticChanged(bool state) {
 }
 
 void Configure::slotAudioDeviceChanged(int selection) {
-    emit audioDeviceChanged(widget.audioDeviceComboBox->itemData(selection).value<QAudioDeviceInfo >(),
-                            8000,
-                            1,
-                            QAudioFormat::LittleEndian);
+    emit audioDeviceChanged(widget.audioDeviceComboBox->itemData(selection).value<QAudioDevice>(), 48000, 1);
 }
 
 
 void Configure::slotMicDeviceChanged(int selection) {
     qDebug() << "Mic selected is device number: " << selection;
-    emit micDeviceChanged(widget.MicComboBox->itemData(selection).value<QAudioDeviceInfo >(),
-                          48000,
-                          1,
-                          QAudioFormat::LittleEndian);
+    emit micDeviceChanged(widget.MicComboBox->itemData(selection).value<QAudioDevice >(), 48000, 1);
 }
 
 void Configure::slotRxFilterWindowChanged(int type)
@@ -649,14 +642,6 @@ QString Configure::getHost() {
 }
 
 
-int Configure::getRxAGCSlopeValue() {  //KD0OSS
-    return widget.rxAgcSlopeSpinBox->value();
-}
-
-int Configure::getRxAGCMaxGainValue() {  //KD0OSS
-    return widget.rxAgcMaxGainSpinBox->value();
-}
-
 int Configure::getRxAGCAttackValue() {  //KD0OSS
     return widget.rxAgcAttackSpinBox->value();
 }
@@ -677,24 +662,12 @@ int Configure::getRxAGCHangThreshValue() {  //KD0OSS
     return widget.rxAgcHangThreshSpinBox->value();
 }
 
-bool Configure::getLevelerEnabledValue() {  //KD0OSS
-    return widget.levelerEnabledCheckBox->isChecked();
-}
-
 int Configure::getLevelerAttackValue() {  //KD0OSS
     return widget.levelerAttackSpinBox->value();
 }
 
 int Configure::getLevelerDecayValue() {  //KD0OSS
     return widget.levelerDecaySpinBox->value();
-}
-
-int Configure::getLevelerHangValue() {  //KD0OSS
-    return widget.levelerHangSpinBox->value();
-}
-
-bool Configure::getALCEnabledValue() {  //KD0OSS
- //   return widget.alcEnabledCheckBox->isChecked();
 }
 
 int Configure::getALCAttackValue() {  //KD0OSS
@@ -713,44 +686,8 @@ int Configure::getReceiver() {
     return widget.rxSpinBox->value();
 }
 
-int Configure::getSpectrumHigh() {
-    return widget.spectrumHighSpinBox->value();
-}
-
-int Configure::getSpectrumLow() {
-    return widget.spectrumLowSpinBox->value();
-}
-
-int Configure::getFps() {
-    return widget.fpsSpinBox->value();
-}
-
 int Configure::getAvg(){
     return widget.avgSpinBox->value();
-}
-
-int Configure::getWaterfallHigh() {
-    return widget.waterfallHighSpinBox->value();
-}
-
-int Configure::getWaterfallLow() {
-    return widget.waterfallLowSpinBox->value();
-}
-
-void Configure::setSpectrumLow(int low) {
-    widget.spectrumLowSpinBox->setValue(low);
-}
-
-void Configure::setSpectrumHigh(int high) {
-    widget.spectrumHighSpinBox->setValue(high);
-}
-
-void Configure::setWaterfallLow(int low) {
-    widget.waterfallLowSpinBox->setValue(low);
-}
-
-void Configure::setWaterfallHigh(int high) {
-    widget.waterfallHighSpinBox->setValue(high);
 }
 
 int Configure::getNrTaps() {
@@ -787,6 +724,7 @@ double Configure::getAnfLeak() {
 
 double Configure::getNbThreshold() {
  //   return (double)widget.nbThresholdSpinBox->value()*0.165;
+    return 0.0f;
 }
 
 
@@ -888,11 +826,6 @@ bool Configure::getTxAllowed()
     return widget.allowTx->checkState();
 }
 
-void Configure::setTxAllowed(bool newstate)
-{
-    widget.allowTx->setChecked(newstate);
-}
-
 int Configure::getWindowType()
 {
     return widget.windowComboBox->currentIndex();
@@ -931,12 +864,6 @@ bool  Configure::setPasswd(QString ServerName){
     }
     return false;
 }
-
-int Configure::getCwPitch()
-{
-    return widget.spinBox_cwPitch->value();
-}
-
 
 void Configure::on_spinBox_cwPitch_valueChanged(int arg1)
 {
@@ -1001,9 +928,10 @@ void Configure::onRxAgcHangThreshChanged(int arg1) // KD0OSS
     emit agcHangThreshChanged(arg1);
 }
 
-void Configure::onLevelerStateChanged(int arg1) // KD0OSS
+void Configure::onLevelerStateChanged(bool checked) // KD0OSS
 {
-    emit levelerStateChanged(arg1);
+    // dspserver expects the Qt::CheckState value (0 or 2), as QCheckBox::stateChanged used to send.
+    emit levelerStateChanged(checked ? Qt::Checked : Qt::Unchecked);
 }
 
 void Configure::onLevelerAttackChanged(int arg1) // KD0OSS
@@ -1044,6 +972,16 @@ void Configure::onAlcMaxGainChanged(double arg1) // KD0OSS
 void Configure::setPTTKey(bool enabled) // KD0OSS
 {
     capturePTTKey = enabled;
+}
+
+void Configure::on_encodingComboBox_currentIndexChanged(int index)
+{
+    emit encodingChanged(index);
+}
+
+void Configure::on_MicEncodingComboBox_currentIndexChanged(int index)
+{
+    emit micEncodingChanged(index);
 }
 
 void Configure::keyReleaseEvent(QKeyEvent *event) // KD0OSS

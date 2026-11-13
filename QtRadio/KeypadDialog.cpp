@@ -31,19 +31,19 @@ KeypadDialog::KeypadDialog(QWidget *parent) :
     ui->frequency->setStyleSheet("QLabel { background-color : black; color : green; }");
 
 
-    connect(ui->pushButton_0,SIGNAL(clicked()),this,SLOT(key_0()));
-    connect(ui->pushButton_1,SIGNAL(clicked()),this,SLOT(key_1()));
-    connect(ui->pushButton_2,SIGNAL(clicked()),this,SLOT(key_2()));
-    connect(ui->pushButton_3,SIGNAL(clicked()),this,SLOT(key_3()));
-    connect(ui->pushButton_4,SIGNAL(clicked()),this,SLOT(key_4()));
-    connect(ui->pushButton_5,SIGNAL(clicked()),this,SLOT(key_5()));
-    connect(ui->pushButton_6,SIGNAL(clicked()),this,SLOT(key_6()));
-    connect(ui->pushButton_7,SIGNAL(clicked()),this,SLOT(key_7()));
-    connect(ui->pushButton_8,SIGNAL(clicked()),this,SLOT(key_8()));
-    connect(ui->pushButton_9,SIGNAL(clicked()),this,SLOT(key_9()));
-    connect(ui->pushButton_period,SIGNAL(clicked()),this,SLOT(key_period()));
+    connect(ui->pushButton_0,&QPushButton::clicked,this,&KeypadDialog::key_0);
+    connect(ui->pushButton_1,&QPushButton::clicked,this,&KeypadDialog::key_1);
+    connect(ui->pushButton_2,&QPushButton::clicked,this,&KeypadDialog::key_2);
+    connect(ui->pushButton_3,&QPushButton::clicked,this,&KeypadDialog::key_3);
+    connect(ui->pushButton_4,&QPushButton::clicked,this,&KeypadDialog::key_4);
+    connect(ui->pushButton_5,&QPushButton::clicked,this,&KeypadDialog::key_5);
+    connect(ui->pushButton_6,&QPushButton::clicked,this,&KeypadDialog::key_6);
+    connect(ui->pushButton_7,&QPushButton::clicked,this,&KeypadDialog::key_7);
+    connect(ui->pushButton_8,&QPushButton::clicked,this,&KeypadDialog::key_8);
+    connect(ui->pushButton_9,&QPushButton::clicked,this,&KeypadDialog::key_9);
+    connect(ui->pushButton_period,&QPushButton::clicked,this,&KeypadDialog::key_period);
 
-    connect(ui->buttonBox,SIGNAL(clicked(QAbstractButton*)),this,SLOT(clicked(QAbstractButton*)));
+    connect(ui->buttonBox,&QDialogButtonBox::clicked,this,&KeypadDialog::clicked);
 
     ui->buttonBox->button(QDialogButtonBox::Ok)->setFocus();
 
@@ -54,10 +54,6 @@ KeypadDialog::KeypadDialog(QWidget *parent) :
 KeypadDialog::~KeypadDialog()
 {
     delete ui;
-}
-
-long long KeypadDialog::getFrequency() {
-    return (long long)(frequency.toDouble()*1000000.0);
 }
 
 void KeypadDialog::clear() {
@@ -72,9 +68,11 @@ void KeypadDialog::commitFrequency() {
 
 void KeypadDialog::clicked(QAbstractButton* button) {
     qDebug()<<"KeypadDialog::clicked "<<button->text();
-    if(button->text()=="&OK") {
+    // by role, not by text: the text is "&OK" or "OK" depending on Qt version and style
+    QDialogButtonBox::StandardButton which = ui->buttonBox->standardButton(button);
+    if(which == QDialogButtonBox::Ok) {
         commitFrequency();
-    } else if(button->text()=="Reset") {
+    } else if(which == QDialogButtonBox::Reset) {
         frequency="";
         showFrequency();
     } else {

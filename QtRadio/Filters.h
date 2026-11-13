@@ -28,7 +28,7 @@
 
 #include <QObject>
 #include <QDebug>
-#include <Filters.h>
+//#include <Filters.h>
 
 #define MAX_FILTERS 11
 
@@ -39,9 +39,6 @@ public:
     Filter(QString t,int l,int h);
     virtual ~Filter();
     void init(QString t,int l,int h);
-    void setText(QString t);
-    void setLow(int l);
-    void setHigh(int h);
     QString getText();
     int getLow();
     int getHigh();
@@ -148,6 +145,14 @@ class FMNFilters : public FiltersBase {
 public:
     FMNFilters();
     virtual ~FMNFilters();
+private:
+
+};
+
+class FMWFilters : public FiltersBase {
+public:
+    FMWFilters();
+    virtual ~FMWFilters();
 private:
 
 };

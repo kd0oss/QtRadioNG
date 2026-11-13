@@ -35,7 +35,6 @@ public:
     G711A();
     virtual ~G711A();
     unsigned char encode(short sample);
-    short decode(unsigned char sample);
 
 private:
     short decodetable[256];

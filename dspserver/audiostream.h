@@ -48,17 +48,18 @@ enum as_encoding {
 };
 
 enum as_mic_encoding {
-    MIC_ENCODING_ALAW		= 0
+    MIC_ENCODING_ALAW		= 0,
+    MIC_ENCODING_PCM        = 1
 };
 
-#define AUDIO_BUFFER_SIZE 2000
+#define AUDIO_BUFFER_SIZE 800
 
 struct audio_entry {
     struct sockaddr_in client;
     struct bufferevent * bev;
     unsigned char *buf;
     int length;
-    int8_t channel;
+    int8_t stream;
     TAILQ_ENTRY(audio_entry) entries;
 };
 
@@ -90,7 +91,6 @@ extern sem_t audiostream_sem;
 void audio_stream_reset();
 void audio_stream_put_samples(int8_t, short left_sample,short right_sample);
 void audio_stream_init(int port);
-void allocate_audio_buffer(void);
 void init_alaw_tables(void);
 void audio_stream_queue_add(unsigned char *buffer, int length);
 //struct audio_entry  *audio_stream_queue_remove(void);

@@ -33,7 +33,6 @@
 #include "G711A.h"
 
 static short decodetable[256];
-static unsigned char encodetable[65536];
 
 void G711A_init() {
     int i;
@@ -50,31 +49,6 @@ fprintf(stderr,"G711A_init\n");
         if ((input & 128) == 0) value = -value;
         decodetable[i]=(short)value;
     }
-
-    #pragma omp parallel for schedule(static) private(i)
-    for(i=0;i<65536;i++) {
-        short sample=(short)i;
-
-        int sign=(sample&0x8000) >> 8;
-        if(sign != 0){
-            sample=(short)-sample;
-            sign=0x80;
-        }
-
-        if(sample > 32635) sample = 32635;
-
-        int exp=7;
-        int expMask;
-        for(expMask=0x4000;(sample&expMask)==0 && exp>0; exp--, expMask >>= 1) {
-        }
-        int mantis = (sample >> ((exp == 0) ? 4 : (exp + 3))) & 0x0f;
-        unsigned char alaw = (unsigned char)(sign | exp << 4 | mantis);
-        encodetable[i]=(unsigned char)(alaw^0xD5);
-    }
-}
-
-unsigned char G711A_encode(short sample) {
-    return encodetable[sample&0xFFFF];
 }
 
 short G711A_decode(unsigned char sample) {

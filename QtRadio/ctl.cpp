@@ -31,12 +31,17 @@ Ctl::Ctl(QWidget *parent):QFrame(parent), ui(new Ui::Ctl)
   //  micBar = ui->MicProgressBar;
 
     moxPwr = 80;
-    audioGain = 100;
+    audioGain = 90;
+    spkGain = 50;
+    ptt = false;
     ui->audioSlider->setValue(audioGain);
+    ui->SpkrAudioSlider->setValue(spkGain);
+    ui->audioLevelBar->setValue(0);
 
     HideTX(false); // Hide buttons because we have not connected to anything yet
-    connect(this, SIGNAL(audioGainInitalized(int)), this, SLOT(setAudioSlider(int)));
-    connect(this, SIGNAL(setAudioMuted(bool)), this, SLOT(setAudioMute(bool)));
+    connect(this, &Ctl::audioGainInitalized, this, &Ctl::setAudioSlider);
+    connect(this, &Ctl::spkGainInitalized, this, &Ctl::setSpkSlider);
+    connect(this, &Ctl::setAudioMuted, this, &Ctl::setAudioMute);
 }
 
 Ctl::~Ctl()
@@ -47,8 +52,6 @@ Ctl::~Ctl()
 
 void Ctl::on_btnMox_clicked(bool checked)
 {
-    bool ptt;
-
     if (checked)
     { //We are going from Rx to Tx
         ui->btnMox->setChecked(true);
@@ -58,7 +61,7 @@ void Ctl::on_btnMox_clicked(bool checked)
     {
         ui->btnMox->setChecked(false);
         ptt = false;
-//        ui->MicProgressBar->setValue(0);
+        ui->audioLevelBar->setValue(0);
     }
     emit pttChange(0, ptt);
 } // end on_btnMox_clicked
@@ -66,7 +69,8 @@ void Ctl::on_btnMox_clicked(bool checked)
 
 void Ctl::update_mic_level(qreal level)
 {
-//    ui->MicProgressBar->setValue(100*level);
+  //  if (ptt)
+        ui->audioLevelBar->setValue(100*level);
 } // end update_mic_level
 
 
@@ -124,6 +128,7 @@ void Ctl::on_btnMaster_clicked()
 void Ctl::on_btnMute_clicked(bool checked)
 {
     ui->audioSlider->setEnabled(!checked);
+    ui->SpkrAudioSlider->setEnabled(!checked);
     emit audioMuted(checked);
 } // end on_btnMute_clicked
 
@@ -135,14 +140,28 @@ void Ctl::on_audioSlider_valueChanged(int value)
 } // end on_audioSlider_valueChanged
 
 
+void Ctl::on_SpkrAudioSlider_valueChanged(int value)
+{
+    spkGain = value;
+    emit spkGainChanged(qreal(spkGain) / 100);
+} // end on_SpkrAudioSlider_valueChanged
+
+
 void Ctl::setAudioSlider(int gain)
 {
     ui->audioSlider->setValue(gain);
 } //end setAudioSlider
 
 
+void Ctl::setSpkSlider(int gain)
+{
+    ui->SpkrAudioSlider->setValue(gain);
+} //end setSpkSlider
+
+
 void Ctl::setAudioMute(bool muted)
 {
     ui->btnMute->setChecked(muted);
     ui->audioSlider->setEnabled(!muted);
+    ui->SpkrAudioSlider->setEnabled(!muted);
 } // end setAudioMute

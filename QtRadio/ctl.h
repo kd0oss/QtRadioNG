@@ -28,11 +28,7 @@
 #include <QtCore>
 #include <QProgressBar>
 
-#if QT_VERSION >= 0x050000
-#include <QtWidgets/QFrame>
-#else
 #include <QFrame>
-#endif
 
 namespace Ui {
     class Ctl;
@@ -48,20 +44,20 @@ public:
     void clearMoxBtn();
     void RigCtlTX(bool rigctlptt);
     int audioGain;
+    int spkGain;
     void loadSettings(QSettings* settings);
     void saveSettings(QSettings* settings);
 
     QProgressBar *micBar;
 
 signals:
-#if QT_VERSION < 0x050000 && !defined Q_MOC_RUN
-public:  // needed in Qt 4.x where signals means "protected" - IW0HDV
-#endif
     void pttChange(int caller, bool ptt);//0 = MOX, 1 = Tune, 2 = VOX, 3 = Extern H'ware
     void masterBtnClicked(void);
     void audioMuted(bool);  // KD0OSS
     void audioGainChanged(void); // KD0OSS
     void audioGainInitalized(int); // KD0OSS
+    void spkGainChanged(qreal); // KD0OSS
+    void spkGainInitalized(int); // KD0OSS
     void setAudioMuted(bool); // KD0OSS
 
 public slots:
@@ -73,12 +69,15 @@ private slots:
     void on_btnMaster_clicked(void);
     void on_btnMute_clicked(bool checked); // KD0OSS
     void on_audioSlider_valueChanged(int value); // KD0OSS
+    void on_SpkrAudioSlider_valueChanged(int value); // KD0OSS
     void setAudioSlider(int); // KD0OSS
+    void setSpkSlider(int); // KD0OSS
     void setAudioMute(bool); // KD0OSS
 
 private:
     Ui::Ctl *ui;
     int moxPwr;
+    bool ptt;
 };
 
 #endif // CTL_H

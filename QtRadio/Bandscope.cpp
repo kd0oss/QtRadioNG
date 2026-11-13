@@ -3,6 +3,7 @@
 #include "Connection.h"
 
 #include <QDebug>
+#include <cmath>
 
 Bandscope::Bandscope(SpectrumConnection *pConn, QWidget *parent):QFrame(parent), ui(new Ui::Bandscope)
 {
@@ -13,11 +14,16 @@ Bandscope::Bandscope(SpectrumConnection *pConn, QWidget *parent):QFrame(parent),
     isConnected = false;
     connection = new WidebandConnection();
 
-    QObject::connect(connection, SIGNAL(bandscopeBuffer(SPECTRUM)), this, SLOT(bandscopeBuffer(SPECTRUM)));
-    QObject::connect(connection, SIGNAL(bsConnected()), this, SLOT(connected()));
+    QObject::connect(connection, &WidebandConnection::bandscopeBuffer, this, &Bandscope::bandscopeBuffer);
+    QObject::connect(connection, &WidebandConnection::bsConnected, this, &Bandscope::connected);
 
     bandscopeHigh = 0;
     bandscopeLow = -140;
+
+    // Hermes: real ADC samples, 0 - 61.44 MHz.  Other radios call setSpan().
+    spanStart = 0.0;
+    spanWidth = 61440000.0;
+    markerHz = -1.0;
 
     qDebug("Spec Port: %d", DSPSERVER_BASE_PORT);
     host = pConn->server;
@@ -74,27 +80,38 @@ void Bandscope::paintEvent(QPaintEvent*)
     painter.setBrush(gradient);
     painter.drawRect(0, 0, width(), height());
 
-    // plot the vertical frequency lines
-    float hzPerPixel = (float)61440000/(float)width();
-    long long f = 0;
+    // plot the vertical frequency lines: the widest 1, 2 or 5 step giving at least 5 lines
+    double base = pow(10.0, floor(log10(spanWidth / 5.0)));
+    double step = base;
+    if (spanWidth / (base * 5.0) >= 5.0)
+        step = base * 5.0;
+    else
+        if (spanWidth / (base * 2.0) >= 5.0)
+            step = base * 2.0;
+    int decimals = (step >= 1000000.0) ? 0 : (step >= 100000.0 ? 1 : (step >= 10000.0 ? 2 : 3));
 
-    for (int i=0;i<width();i++)
+    painter.setFont(QFont("Arial", 10));
+    for (double f = ceil(spanStart / step) * step; f <= spanStart + spanWidth; f += step)
     {
-        f = (long long)(hzPerPixel*(float)i);
-        if (f > 0)
-        {
-            if ((f%10000000) < (long long)hzPerPixel)
-            {
-                painter.setOpacity(0.5);
-                painter.setPen(QPen(Qt::white, 1, Qt::DotLine));
-                painter.drawLine(i, 0, i, height());
+        int x = (int)((f - spanStart) / spanWidth * width());
+        if (f <= 0.0 || x <= 0 || x >= width())
+            continue;
+        painter.setOpacity(0.5);
+        painter.setPen(QPen(Qt::white, 1, Qt::DotLine));
+        painter.drawLine(x, 0, x, height());
 
-                painter.setOpacity(1.0);
-                painter.setPen(QPen(Qt::black, 1));
-                painter.setFont(QFont("Arial", 10));
-                painter.drawText(i, height(), QString::number(f/1000000));
-            }
-        }
+        painter.setOpacity(1.0);
+        painter.setPen(QPen(Qt::black, 1));
+        painter.drawText(x, height(), QString::number(f / 1000000.0, 'f', decimals));
+    }
+
+    // receiver frequency
+    if (markerHz >= spanStart && markerHz <= spanStart + spanWidth)
+    {
+        int x = (int)((markerHz - spanStart) / spanWidth * width());
+        painter.setOpacity(0.8);
+        painter.setPen(QPen(Qt::red, 1));
+        painter.drawLine(x, 0, x, height());
     }
 
     // plot Spectrum
@@ -108,16 +125,33 @@ void Bandscope::paintEvent(QPaintEvent*)
 }
 
 
+void Bandscope::setSpan(double startHz, double spanHz)
+{
+    if (spanHz <= 0.0)
+        return;
+    spanStart = startHz;
+    spanWidth = spanHz;
+    update();
+} // end setSpan
+
+
+void Bandscope::setMarker(double hz)
+{
+    markerHz = hz;
+    update();
+} // end setMarker
+
+
 void Bandscope::connected()
 {
     QByteArray command;
 
     qDebug("Connected:  BS width: %d  Radio Id: %d", width(), (char)radio_id);
     command.clear();
-    command.append((char)channel);
+    command.append((char)rfstream);
     command.append((char)STARTBANDSCOPE);
     command.append((char)radio_id);
-    command.append(QString("%1").arg(width()));
+    command.append(QString("%1").arg(width()).toUtf8());
     isConnected = true;
     connection->sendCommand(command);
 }
@@ -128,7 +162,7 @@ void Bandscope::disconnected()
     QByteArray command;
 
     command.clear();
-    command.append((char)channel);
+    command.append((char)rfstream);
     command.append((char)STOPBANDSCOPE);
     command.append((char)radio_id);
     connection->sendCommand(command);
@@ -144,10 +178,10 @@ void Bandscope::updateBandscope()
     if (!isConnected) return;
     qDebug("Resize:  BS width: %d", width());
     command.clear();
-    command.append((char)channel);
+    command.append((char)rfstream);
     command.append((char)UPDATEBANDSCOPE);
     command.append((char)radio_id);
-    command.append(QString("%1").arg(width()));
+    command.append(QString("%1").arg(width()).toUtf8());
     connection->sendCommand(command);
 }
 

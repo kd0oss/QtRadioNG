@@ -610,57 +610,6 @@ void Band::loadSettings(QSettings* settings) {
     settings->endGroup();
 }
 
-void Band::saveSettings(QSettings* settings) {
-    int i,j;
-    QString s;
-    BandLimit limitItem;
-
-    settings->beginGroup("Band");
-    settings->setValue("currentBand",currentBand);
-//    settings->setValue("currentStack",currentStack); //TODO this will go as current stack will always be after last memory
-    for(i=0;i<BAND_LAST;i++) {
-//        s.sprintf("stack.%d",i);    //TODO remove this and replace with bandstack getInfo data
-//        settings->setValue(s,stack[i]);
-        for(j=0;j<bandstack[i][0].getInfo()+2;j++) { //Number of memories +1 = current working stack
-            s.sprintf("frequency.%d.%d",i,j);
-            settings->setValue(s,bandstack[i][j].getFrequency());
-            s.sprintf("filter.%d.%d",i,j);
-            settings->setValue(s,bandstack[i][j].getFilter());
-            s.sprintf("mode.%d.%d",i,j);
-            settings->setValue(s,bandstack[i][j].getMode());
-            s.sprintf("spectrumHigh.%d.%d",i,j);
-            settings->setValue(s,bandstack[i][j].getSpectrumHigh());
-            s.sprintf("spectrumLow.%d.%d",i,j);
-            settings->setValue(s,bandstack[i][j].getSpectrumLow());
-            s.sprintf("waterfallHigh.%d.%d",i,j);
-            settings->setValue(s,bandstack[i][j].getWaterfallHigh());
-            s.sprintf("waterfallLow.%d.%d",i,j);
-            settings->setValue(s,bandstack[i][j].getWaterfallLow());
-            s.sprintf("info.%d.%d",i,j);
-            settings->setValue(s,bandstack[i][j].getInfo());
-        }
-    }
-    settings->endGroup();
-
-    settings->beginGroup("bandLimits");
-    i = 0;
-    limitItem = limits.at(i);
-    while (limitItem.min()!=0LL) {
-        s.sprintf("limits.%d.min",i);
-        settings->setValue(s,limitItem.min());
-        s.sprintf("limits.%d.max",i);
-        settings->setValue(s,limitItem.max());
-        i++;
-        limitItem = limits.at(i);
-    }
-    //Terminate group with min = 0
-    s.sprintf("limits.%d.min",i);
-    settings->setValue(s,0);
-    s.sprintf("limits.%d.max",i);
-    settings->setValue(s,0);
-    settings->endGroup();
-}
-
 void Band::initBand(int8_t idx, int8_t ch, int b) {
     index = idx;
     channel = ch;
@@ -763,10 +712,6 @@ int Band::getMode() {
 
 int Band::getFilter() {
     return bandstack[currentBand][workingStack].getFilter();
-}
-
-int Band::getInfo() {
-    return bandstack[currentBand][workingStack].getInfo();
 }
 
 int Band::getSpectrumHigh() {

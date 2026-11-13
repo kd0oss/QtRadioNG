@@ -24,11 +24,7 @@
 */
 
 #include <QtCore>
-#if QT_VERSION >= 0x050000
-#include <QtWidgets/QApplication>
-#else
 #include <QApplication>
-#endif
 
 #include "UI.h"
 
@@ -38,7 +34,6 @@
 
 int fOutputDisabled = 0;
 
-#if QT_VERSION >= 0x050000
 void myMessageOutput(QtMsgType type, const QMessageLogContext &context, const QString &message)
 {
    if (fOutputDisabled) return;
@@ -60,35 +55,18 @@ void myMessageOutput(QtMsgType type, const QMessageLogContext &context, const QS
          abort();
     }
 }
-#else
-void myMessageOutput(QtMsgType type, const char *msg)
-{
-    if (fOutputDisabled) return;
-    switch (type) {
-    case QtDebugMsg:
-         fprintf(stderr, "Debug: %s\n", msg);
-         break;
-    case QtWarningMsg:
-         fprintf(stderr, "Warning: %s\n", msg);
-         break;
-    case QtCriticalMsg:
-         fprintf(stderr, "Critical: %s\n", msg);
-         break;
-    case QtFatalMsg:
-         fprintf(stderr, "Fatal: %s\n", msg);
-         abort();
-    }
-}
-#endif
 
 int main(int argc, char *argv[])
 {
+    // Qt 6.10+ defaults to a native PipeWire audio backend that fails to enumerate
+    // devices on some systems (empty device lists, no default output). Use the
+    // PulseAudio backend instead (PipeWire's pulse layer serves it on modern
+    // distributions) unless the user has chosen a backend explicitly.
+    if (qEnvironmentVariableIsEmpty("QT_AUDIO_BACKEND"))
+        qputenv("QT_AUDIO_BACKEND", "pulseaudio");
+
     if (getenv("QT_RADIO_NO_DEBUG")) fOutputDisabled = 1;
-#if QT_VERSION >= 0x050000
     qInstallMessageHandler(myMessageOutput);
-#else
-    qInstallMsgHandler(myMessageOutput);
-#endif
 
     // initialize resources, if needed
     // Q_INIT_RESOURCE(resfile);

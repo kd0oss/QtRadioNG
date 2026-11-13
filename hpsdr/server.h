@@ -80,6 +80,12 @@ void* client_thread(void* arg);
 #define MIC_AUDIO_PORT   10130
 #define BANDSCOPE_PORT   10140
 
+// dspserver gives each radio program connection a block of UDP ports: the
+// ports above plus block * PORT_BLOCK.  The block comes with the manifest
+// request ([index][HQHARDWARE][block]); 0 for older dspservers.
+#define PORT_BLOCK       200
+extern int port_offset;
+
 typedef struct _client {
     int                socket;
     unsigned int       iq_length;
@@ -124,6 +130,7 @@ typedef struct _bufferwb {
 typedef struct _mic_buffer
 {
     int8_t    radio_id;
+    char      ipaddr[INET_ADDRSTRLEN];
     int8_t    tx;
     short int length;
     float     fwd_pwr;

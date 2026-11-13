@@ -80,7 +80,3 @@ unsigned char G711A::encode(short sample)
 }
 
 
-short G711A::decode(unsigned char sample)
-{
-    return decodetable[sample&0xFF];
-}

@@ -82,16 +82,18 @@ void discovery()
     FILE *fp = fopen("ip.addr", "r");
     if (fp)
     {
-        char *c = fgets(ipaddr_tcp, IPADDR_LEN, fp);
-        fclose(fp);
-        ipaddr_tcp[IPADDR_LEN-1]=0;
-        // remove possible trailing newline char in ipaddr_tcp
-        int len=strnlen(ipaddr_tcp, IPADDR_LEN);
-        while (--len >= 0)
+        if (fgets(ipaddr_tcp, IPADDR_LEN, fp) != NULL)
         {
-            if (ipaddr_tcp[len] != '\n') break;
-            ipaddr_tcp[len]=0;
+            ipaddr_tcp[IPADDR_LEN-1]=0;
+            // remove possible trailing newline char in ipaddr_tcp
+            int len=strnlen(ipaddr_tcp, IPADDR_LEN);
+            while (--len >= 0)
+            {
+                if (ipaddr_tcp[len] != '\n') break;
+                ipaddr_tcp[len]=0;
+            }
         }
+        fclose(fp);
     }
 #ifdef USBOZY
     //

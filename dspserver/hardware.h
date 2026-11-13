@@ -33,9 +33,9 @@
 extern "C" {
 #endif
 #include <stdbool.h>
-#include "server.h"
+//#include "server.h"
 
-#define WIDEBAND_CHANNEL MAX_CHANNELS-1
+#define WIDEBAND_CHANNEL MAX_RFSTREAMS-1
 
 // Response buffers passed to hw_send must be this size
 #define HW_RESPONSE_SIZE          64
@@ -46,7 +46,7 @@ extern "C" {
 // HW command and control
 #define MOX_DISABLED              0x00
 #define MOX_ENABLED               0x01
-
+/*
 #define MIC_SOURCE_JANUS          0x00
 #define MIC_SOURCE_PENELOPE       0x80
 #define CONFIG_NONE               0x00
@@ -72,13 +72,28 @@ extern "C" {
 #define LT2208_DITHER_ON          0x08
 #define LT2208_RANDOM_OFF         0x00
 #define LT2208_RANDOM_ON          0x10
+*/
+/* Radio programs (hpsdr, hackrf_one, flexradio ...) connect to COMMAND_PORT.
+ * Each connection gets a slot; its UDP ports are the usual ones plus
+ * slot * PORT_BLOCK, so radios do not share ports.  The slot is sent to the
+ * radio program with the manifest request.  One connection may serve several
+ * radios (hpsdr with more than one board). */
+// star commands for a whole radio: [STARTRADIO or STOPRADIO][radio id]
+// (the same values in hpsdr's hermes.h, hackrf.h and flex.h)
+#define HW_STARTRADIO         13
+#define HW_STOPRADIO          14
+
+#define MAX_RADIO_CONNECTIONS 5
+#define MAX_RADIOS            5
+#define PORT_BLOCK            200
 
 typedef struct _radio {
     int socket;
     unsigned int iq_length;
     struct sockaddr_in iq_addr;
     pthread_t thread_id;
-    bool connected;
+    bool in_use;                 // slot taken by a radio program
+    bool connected;              // manifest received, streams set up
 } RADIO;
 
 typedef struct _buffer {
@@ -105,20 +120,26 @@ typedef struct _bufferwb {
     int16_t        data[16384];
 } BUFFERWB;
 
-extern CHANNEL channels[MAX_CHANNELS];
+extern RFSTREAM rfstream[MAX_RFSTREAMS];
 //extern int iq_socket;
-extern short int connected_radios;
 extern int sampleRate;
 extern int mox;
 extern int receiver;
 extern double LO_offset;
 extern int rxOnly;
-extern char *manifest_xml[5];
+extern RADIO radio[MAX_RADIO_CONNECTIONS];
+// the radio's number inside its radio program, by stream (kept out of
+// RFSTREAM: that goes to the clients byte for byte)
+extern int8_t rfstream_local_id[MAX_RFSTREAMS];
+int hw_port_offset(int stream);                    // the stream's connection's UDP port block
+int hw_radio_count(void);                          // radios known to dspserver
+char *hw_clients_manifest(void);                   // all radios, for clients (free it)
+int hw_radio_stream(int8_t radio_id);              // a receive stream of the radio, or -1
 
 // values saved from last change to send to slaves
-long long lastFreq;
-int lastMode;
-bool audio_enabled[MAX_CHANNELS];
+extern long long lastFreq;
+extern int lastMode;
+extern bool audio_enabled[MAX_RFSTREAMS];
 
 
 /* --------------------------------------------------------------------------*/
@@ -129,22 +150,6 @@ bool audio_enabled[MAX_CHANNELS];
 */
 extern int hw_init(void);
 
-
-/* --------------------------------------------------------------------------*/
-/** 
-* @brief Close the HW interface
-* 
-* @return 
-*/
-extern void hwClose();
-
-/* --------------------------------------------------------------------------*/
-/** 
-* @brief Disconnect the hw interface
-* 
-* @return 
-*/
-extern void hwDisconnect(int8_t);
 
 /* --------------------------------------------------------------------------*/
 /** 
@@ -209,11 +214,9 @@ void hwRestoreState();
 * @return
 */
 int make_connection(short int);
-void setSpeed(int channel, int s);
+void setSpeed(int stream, int s);
 
 extern int hwSetSampleRate(int, long);
-
-int hwSetRecord(int8_t, char* state);
 
 void hw_set_canTx(char);
 
@@ -226,21 +229,20 @@ int set_frequency();
 
 void setStopIQIssued(int val);
 int  getStopIQIssued(void);
-void hw_set_local_audio(int state);
-void hw_set_port_audio(int state);
-void hw_set_debug(int state);
 int  hwSetTxMode(int mode);
 int  hwSetMox(int8_t ch, int state);
 void hw_send(unsigned char* data, int length, int rd);
 int  hwSendStarCommand(int8_t, unsigned char *command, int);
 void hw_set_src_ratio(void);
 void hw_startIQ(int);
-void hw_stopIQ(void);
+void hw_set_bandscope(int8_t radio_id, bool enable);
+void hw_set_wfm(int8_t stream, bool enable);
+void hw_set_wfm_gain(int8_t stream, double gain);
+bool hw_wfm_enabled(int8_t stream);
 
 extern int audio_socket;
 extern int radioMic;
-extern struct sockaddr_in audio_addr, server_audio_addr;
-extern socklen_t audio_length, server_audio_length;
+extern int local_audio;
 
 #endif	/* _HARDWARE_H */
 

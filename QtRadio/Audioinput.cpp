@@ -20,23 +20,21 @@
 
 AudioInput::AudioInput()
 {
-    m_audioInput=NULL;
-    m_sampleRate=48000;
+    m_audioInput = NULL;
+    m_audioInfo = NULL;
+    m_sampleRate = 48000;
     m_audio_encoding = 0;
-    m_byte_order=QAudioFormat::LittleEndian;
+    m_channels = 1;
 
-    m_format.setSampleType(QAudioFormat::SignedInt);
-#if QT_VERSION >= 0x050000
+//    m_byte_order=QAudioFormat::LittleEndian;
+
+    m_format.setSampleFormat(QAudioFormat::Int16);
     m_format.setSampleRate(m_sampleRate);
     m_format.setChannelCount(1);
-#else
-    m_format.setFrequency(m_sampleRate);
-    m_format.setChannels(1);
-#endif
 
-    m_format.setSampleSize(16);
-    m_format.setCodec("audio/pcm");
-    m_format.setByteOrder(m_byte_order);
+//    m_format.setSampleSize(16);
+//    m_format.setCodec("audio/pcm");
+//    m_format.setByteOrder(m_byte_order);
 
 }
 
@@ -46,199 +44,162 @@ AudioInput::~AudioInput()
 }
 
 
+QAudioDevice AudioInput::defaultInputDevice()
+{
+    QAudioDevice device = QMediaDevices::defaultAudioInput();
+
+    if (device.isNull())
+    {
+        // No system default set: fall back to the first available input.
+        const QList<QAudioDevice> devices = QMediaDevices::audioInputs();
+        if (!devices.isEmpty())
+            device = devices.first();
+    }
+    return device;
+} // end defaultInputDevice
+
+
 void AudioInput::get_audioinput_devices(QComboBox* comboBox)
 {
-    QList<QAudioDeviceInfo> devices=QAudioDeviceInfo::availableDevices(QAudio::AudioInput);
-    QAudioDeviceInfo device_info;
+//    QList<QAudioDevice> devices=QAudioDevice:: availableDevices(QAudio::AudioInput);
+    const QList<QAudioDevice> devices = QMediaDevices::audioInputs();
 
-    qDebug() << "Audio::get_audioinput_devices";
-    for (int i=0;i<devices.length();i++)
+    qDebug() << "Audio::get_audioinput_devices ================";
+    if (comboBox != NULL)
     {
-        device_info=devices.at(i);
-
-        qDebug() << "Audio::get_audioinput_devices: " << device_info.deviceName();
-
-        qDebug() << "    Codecs:";
-        QStringList codecs=device_info.supportedCodecs();
-        for (int j=0;j<codecs.size();j++)
+        comboBox->clear();
+        // "Default" carries a null device; select_audio() maps it to the system default.
+        comboBox->addItem(tr("Default"), QVariant::fromValue(QAudioDevice()));
+        for (const QAudioDevice &device : devices)
         {
-            qDebug() << "        " << codecs.at(j).toLocal8Bit().constData();
+            qDebug() << "Audio::get_audioinput_devices: " << device.description();
+            comboBox->addItem(device.description(), QVariant::fromValue(device));
         }
-
-        qDebug() << "    Byte Orders";
-        QList<QAudioFormat::Endian> byteOrders=device_info.supportedByteOrders();
-        for (int j=0;j<byteOrders.size();j++)
-        {
-            qDebug() << "        " << (byteOrders.at(j)==QAudioFormat::BigEndian?"BigEndian":"LittleEndian");
-        }
-
-        qDebug() << "    Sample Type";
-        QList<QAudioFormat::SampleType> sampleTypes=device_info.supportedSampleTypes();
-        for (int j=0;j<sampleTypes.size();j++)
-        {
-            if (sampleTypes.at(j)==QAudioFormat::Unknown)
-            {
-                qDebug() << "        Unknown";
-            } else if (sampleTypes.at(j)==QAudioFormat::SignedInt)
-            {
-                qDebug() << "        SignedInt";
-            } else if (sampleTypes.at(j)==QAudioFormat::UnSignedInt)
-            {
-                qDebug() << "        UnSignedInt";
-            } else if (sampleTypes.at(j)==QAudioFormat::Float)
-            {
-                qDebug() << "        Float";
-            }
-        }
-
-        qDebug() << "    Sample Rates";
-#if QT_VERSION >= 0x050000
-        QList<int> sampleRates=device_info.supportedSampleRates();
-#else
-        QList<int> sampleRates=device_info.supportedFrequencies();
-#endif
-        for (int j=0;j<sampleRates.size();j++)
-        {
-            qDebug() << "        " << sampleRates.at(j);
-        }
-
-        qDebug() << "    Sample Sizes";
-        QList<int> sampleSizes=device_info.supportedSampleSizes();
-        for (int j=0;j<sampleSizes.size();j++)
-        {
-            qDebug() << "        " << sampleSizes.at(j);
-        }
-
-        qDebug() << "    Channels";
-#if QT_VERSION >= 0x050000
-        QList<int> channels=device_info.supportedChannelCounts();
-#else
-        QList<int> channels=device_info.supportedChannels();
-#endif
-        for (int j=0;j<channels.size();j++)
-        {
-            qDebug() << "        " << channels.at(j);
-        }
-//***************
-        if (comboBox != NULL) comboBox->addItem(device_info.deviceName(),qVariantFromValue(device_info));
-        if (i==0)
-        {
-            m_device=device_info;
-        }
-        i++;
     }
 
-    qDebug() << "Audioinput::get_audio_devices: default is " << m_device.deviceName();
+    m_device = defaultInputDevice();
+    qDebug() << "Audioinput::get_audio_devices: default is " << m_device.description();
 
-    m_audioInput = new QAudioInput(m_device, m_format, this);
-    connect(m_audioInput,SIGNAL(stateChanged(QAudio::State)),SLOT(stateChanged(QAudio::State)));
+    m_format.setSampleRate(m_sampleRate);
+    m_format.setChannelCount(m_channels);
+    m_format.setSampleFormat(QAudioFormat::Int16);
+    if (!m_device.isFormatSupported(m_format))
+    {
+        qDebug()<<"**************** Audio format not supported by Mic input device.";
+    }
+
+    m_audioInput = new QAudioSource(m_device, m_format, this);
+    qDebug() << "Mic volume:" << QString("%1").arg(m_audioInput->volume(), 0, 'f', 3);
+    m_audioInput->setVolume(0.5);
+    m_format = m_audioInput->format();
+    connect(m_audioInput, &QAudioSource::stateChanged, this, &AudioInput::stateChanged);
 
     qDebug() << "QAudioInput: error=" << m_audioInput->error() << " state=" << m_audioInput->state();
 
-    m_audioInfo  = new AudioInfo(m_format, this);
-    connect(m_audioInfo,SIGNAL(update(QQueue<qint16>*)),this,SLOT(slotMicUpdated(QQueue<qint16>*)));
+    m_audioInfo = new AudioInfo(m_format, this);
+    connect(m_audioInfo, &AudioInfo::update, this, &AudioInput::slotMicUpdated);
     m_audioInfo->start();
     m_audioInput->start(m_audioInfo);
 
-    if (m_audioInput->error()!=0)
+    if (m_audioInput->error() != 0)
     {
-        qDebug() << "QAudioInput: after start error=" << m_audioInput->error() << " state=" << m_audioInput->state();
-
+        qDebug() << "QAudioInput: after start error =" << m_audioInput->error() << " state =" << m_audioInput->state();
+     //   m_format = m_device.preferredFormat();
         qDebug() << "Format:";
-#if QT_VERSION >= 0x050000
         qDebug() << "    sample rate: " << m_format.sampleRate();
-#else
-        qDebug() << "    sample rate: " << m_format.frequency();
-#endif
-        qDebug() << "    codec: " << m_format.codec();
-        qDebug() << "    byte order: " << m_format.byteOrder();
-        qDebug() << "    sample size: " << m_format.sampleSize();
-        qDebug() << "    sample type: " << m_format.sampleType();
-#if QT_VERSION >= 0x050000
+        if (m_format.sampleFormat() == QAudioFormat::UInt8)
+            qDebug() << "    sample type: Uint8";
+        if (m_format.sampleFormat() == QAudioFormat::Int16)
+            qDebug() << "    sample type: Int16";
+        if (m_format.sampleFormat() == QAudioFormat::Int32)
+            qDebug() << "    sample type: Int32";
+        if (m_format.sampleFormat() == QAudioFormat::Float)
+            qDebug() << "    sample format: Float";
+
+//        qDebug() << "    codec: " << m_format.codec();
+//        qDebug() << "    byte order: " << m_format.byteOrder();
+//        qDebug() << "    sample size: " << m_format.sampleSize();
+//        qDebug() << "    sample type: " << m_format.sampleType();
         qDebug() << "    channels: " << m_format.channelCount();
-#else
-        qDebug() << "    channels: " << m_format.channels();
-#endif
-        m_input = NULL;
+//        m_input = NULL;
         delete m_audioInput;
+        m_audioInput = NULL;
 
         if (m_audioInfo != NULL)
         {
             m_audioInfo->stop();
             delete m_audioInfo;
+            m_audioInfo = NULL;
         }
     }
 }
 
 
-void AudioInput::select_audio(QAudioDeviceInfo info, int rate, int channels, QAudioFormat::Endian byteOrder)
+void AudioInput::select_audio(QAudioDevice info, int rate, int channels)
 {
-    m_device = info;
+    m_device = info.isNull() ? defaultInputDevice() : info;
     m_sampleRate = rate;
     m_channels = channels;
-    m_byte_order = byteOrder;
+//    m_byte_order = byteOrder;
+    qDebug() << "New mic source selected.";
 
-    if (m_audioInput!=NULL)
+    if (m_audioInput != NULL)
     {
         m_audioInput->stop();
         m_audioInput->disconnect(this);
         delete m_audioInput;
     }
 
-    if (m_audioInfo!= NULL)
+    if (m_audioInfo != NULL)
     {
         m_audioInfo->stop();
+        m_audioInfo->disconnect(this);
         delete m_audioInfo;
     }
 
-#if QT_VERSION >= 0x050000
     m_format.setSampleRate(m_sampleRate);
     m_format.setChannelCount(m_channels);
-#else
-    m_format.setFrequency(m_sampleRate);
-    m_format.setChannels(m_channels);
-#endif
-    m_format.setByteOrder(m_byte_order);
+    m_format.setSampleFormat(QAudioFormat::Int16);
+//    m_format.setByteOrder(m_byte_order);
 
     if (!m_device.isFormatSupported(m_format))
     {
         qDebug()<<"Audio format not supported by Mic input device.";
     }
 
-    m_audioInput = new QAudioInput(m_device, m_format, this);
-    connect(m_audioInput,SIGNAL(stateChanged(QAudio::State)),SLOT(stateChanged(QAudio::State)));
+    m_audioInput = new QAudioSource(m_device, m_format, this);
+    qDebug() << "Mic volume:" << QString("%1").arg(m_audioInput->volume(), 0, 'f', 3);
+    m_audioInput->setVolume(0.5);
+    m_format = m_audioInput->format();
+
+    connect(m_audioInput,&QAudioSource::stateChanged,this, &AudioInput::stateChanged);
 
 
     m_audioInfo  = new AudioInfo(m_format, this);
-    connect(m_audioInfo,SIGNAL(update(QQueue<qint16>*)),this,SLOT(slotMicUpdated(QQueue<qint16>*)));
+    connect(m_audioInfo,&AudioInfo::update,this,&AudioInput::slotMicUpdated);
     m_audioInfo->start();
     m_audioInput->start(m_audioInfo);
 
     if (m_audioInput->error()!=0)
     {
-        qDebug() << "QAudioInput: after start error=" << m_audioInput->error() << " state=" << m_audioInput->state();
+        qDebug() << "QAudioInput: after start errorn =" << m_audioInput->error() << " state=" << m_audioInput->state();
 
         qDebug() << "Format:";
-#if QT_VERSION >= 0x050000
         qDebug() << "    sample rate: " << m_format.sampleRate();
-#else
-        qDebug() << "    sample rate: " << m_format.frequency();
-#endif
-        qDebug() << "    codec: " << m_format.codec();
-        qDebug() << "    byte order: " << m_format.byteOrder();
-        qDebug() << "    sample size: " << m_format.sampleSize();
-        qDebug() << "    sample type: " << m_format.sampleType();
-#if QT_VERSION >= 0x050000
+//        qDebug() << "    codec: " << m_format.codec();
+//        qDebug() << "    byte order: " << m_format.byteOrder();
+//        qDebug() << "    sample size: " << m_format.sampleSize();
+//        qDebug() << "    sample type: " << m_format.sampleType();
         qDebug() << "    channels: " << m_format.channelCount();
-#else
-        qDebug() << "    channels: " << m_format.channels();
-#endif
-        m_input = NULL;
+//        m_input = NULL;
         delete m_audioInput;
+        m_audioInput = NULL;
+
         if (m_audioInfo != NULL)
         {
             m_audioInfo->stop();
             delete m_audioInfo;
+            m_audioInfo = NULL;
         }
     }
 }
@@ -286,32 +247,36 @@ void AudioInput::setMicEncoding(int encoding)
 
 AudioInfo::AudioInfo(const QAudioFormat &format, QObject *parent) : QIODevice(parent), m_format(format), m_maxAmplitude(0), m_level(0.0)
 {
-    switch (m_format.sampleSize())
+    m_aout_max_buf_idx = 0;
+    memset(m_aout_max_buf, 0, sizeof(m_aout_max_buf));
+    m_aout_gain = 100;
+    m_volume = 0.5f;
+    m_maxAmplitude = 65535;
+
+    switch (m_format.bytesPerSample())
     {
-    case 8:
-        switch (m_format.sampleType())
+    case 1:
+        switch (m_format.sampleFormat())
         {
-        case QAudioFormat::UnSignedInt:
-            m_maxAmplitude = 255;
-            break;
-        case QAudioFormat::SignedInt:
-            m_maxAmplitude = 127;
+        case QAudioFormat::UInt8:
+            m_maxAmplitude = 256;
             break;
         default: ;
         }
         break;
-    case 16:
-        switch (m_format.sampleType())
+    case 2:
+        switch (m_format.sampleFormat())
         {
-        case QAudioFormat::UnSignedInt:
+        case QAudioFormat::Int16:
             m_maxAmplitude = 65535;
             break;
-        case QAudioFormat::SignedInt:
-            m_maxAmplitude = 32767;
-            break;
         default: ;
         }
         break;
+    default:
+    {
+        m_maxAmplitude = 1;
+    }
     }
 }
 
@@ -341,71 +306,208 @@ qint64 AudioInfo::readData(char *data, qint64 maxlen)
     return 0;
 }
 
-
+#ifdef ONE
 qint64 AudioInfo::writeData(const char *data, qint64 len)
 {
-    qint16 v;
-    if (m_maxAmplitude)
+    const int channelBytes = m_format.bytesPerSample();
+    const int sampleBytes = m_format.channelCount() * channelBytes;
+    qint64 length = m_format.bytesForDuration(1000000);
+    Q_ASSERT((length % sampleBytes) == 0);
+    Q_UNUSED(sampleBytes); // suppress warning in release builds
+
+    int sampleIndex = 0;
+    qint16 v = 0;
+
+    while (length)
     {
-        Q_ASSERT(m_format.sampleSize() % 8 == 0);
-        const int channelBytes = m_format.sampleSize() / 8;
-#if QT_VERSION >= 0x050000
-        const int sampleBytes = m_format.channelCount() * channelBytes;
-#else
-        const int sampleBytes = m_format.channels() * channelBytes;
-#endif
-        Q_ASSERT(len % sampleBytes == 0);
-        const int numSamples = len / sampleBytes;
-
-        quint16 maxValue = 0;
-        const unsigned char *ptr = reinterpret_cast<const unsigned char *>(data);
-
-        for (int i = 0; i < numSamples; ++i)
+        // Produces value (-1..1)
+        const qreal x = qSin(2 * M_PI * 600 * qreal(sampleIndex++ % m_format.sampleRate()) / m_format.sampleRate());
+        for (int i = 0; i < m_format.channelCount(); ++i)
         {
-#if QT_VERSION >= 0x050000
-            for (int j = 0; j < m_format.channelCount(); ++j)
+            switch (m_format.sampleFormat())
             {
-#else
-            for (int j = 0; j < m_format.channels(); ++j)
-            {
-#endif
-                quint16 value = 0;
-
-                v = 0;
-                if (m_format.sampleSize() == 8 && m_format.sampleType() == QAudioFormat::UnSignedInt)
-                {
-                    value = *reinterpret_cast<const quint8*>(ptr);
-                } else if (m_format.sampleSize() == 8 && m_format.sampleType() == QAudioFormat::SignedInt)
-                {
-                    value = qAbs(*reinterpret_cast<const qint8*>(ptr));
-                } else if (m_format.sampleSize() == 16 && m_format.sampleType() == QAudioFormat::UnSignedInt)
-                {
-                    if (m_format.byteOrder() == QAudioFormat::LittleEndian)
-                        value = qFromLittleEndian<quint16>(ptr);
-                    else
-                        value = qFromBigEndian<quint16>(ptr);
-                } else if (m_format.sampleSize() == 16 && m_format.sampleType() == QAudioFormat::SignedInt)
-                {
-                    if (m_format.byteOrder() == QAudioFormat::LittleEndian)
-                    {
-                        v = qFromLittleEndian<qint16>(ptr);
-                        value = qAbs(v);
-                    }
-                    else
-                    {
-                        v = qFromBigEndian<qint16>(ptr);
-                        value = qAbs(v);
-                    }
-                }
-                if (j == 0) m_queue.enqueue(v);            // use only 1st channel
-                maxValue = qMax(value, maxValue);
-                ptr += channelBytes;
+            case QAudioFormat::UInt8:
+                v = ((1.0 + x) / 2 * 255);
+                break;
+            case QAudioFormat::Int16:
+                v = (x * 32767);
+                break;
+            case QAudioFormat::Int32:
+                v = (x * std::numeric_limits<qint32>::max());
+                break;
+            case QAudioFormat::Float:
+                v = x * 32762;
+                break;
+            default:
+                break;
             }
-        }
 
-        maxValue = qMin(maxValue, m_maxAmplitude);
-        m_level = qreal(maxValue) / m_maxAmplitude;
+            if (i == 0)
+            {
+                //      printf("NS: %3d  v: %5d\n", numSamples, v);
+                m_queue.enqueue(v);            // use only 1st channel
+            }
+        //    ptr += channelBytes;
+            length -= channelBytes;
+        }
     }
     emit update(&m_queue);
     return len;
 }
+#endif
+
+qint64 AudioInfo::writeData(const char *data, qint64 len)
+{
+    qint16 v;
+    quint64 maxValue = 0;
+
+    if (m_maxAmplitude)
+    {
+    //    Q_ASSERT(m_format.sampleFormat() % 8 == 0);
+        const int channelBytes = m_format.bytesPerSample();
+        const int sampleBytes = m_format.channelCount() * channelBytes;
+        Q_ASSERT((len % sampleBytes) == 0);
+        const int numSamples = len / sampleBytes;
+
+        const unsigned char *ptr = reinterpret_cast<const unsigned char *>(data);
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            for (int j = 0; j < m_format.channelCount(); ++j)
+            {
+                quint16 value = 0;
+
+                v = 0;
+                if (m_format.sampleFormat() == QAudioFormat::UInt8)
+                {
+                    v = *reinterpret_cast<const quint8*>(ptr);
+                    value = qAbs(v * 128);
+                } else if (m_format.sampleFormat() == QAudioFormat::Int16)
+                {
+                    v = qFromLittleEndian<quint16>(ptr);
+                    value = qAbs(v * 32767);
+                } else if (m_format.sampleFormat() == QAudioFormat::Float)
+                {
+                    float f = qBound(-1.0f, qFromLittleEndian<float>(ptr), 1.0f);
+                    v = (qint16)(f * 32767.0f);
+                    value = qAbs(v);
+                }
+                if (j == 0)
+                {
+                    m_queue.enqueue(v);            // use only 1st channel
+                    maxValue += value; //qMax(value, maxValue);
+                }
+                ptr += channelBytes;
+            }
+        }
+
+        maxValue = maxValue / (numSamples / m_format.channelCount());
+        maxValue = qMin(maxValue, m_maxAmplitude);
+        m_level = qreal(maxValue) / m_maxAmplitude;
+    }
+    process_audio(&m_queue);
+    emit update(&m_queue);
+ //   printf("Level %f\n", m_level);
+ //   fflush(stdout);
+    return len;
+}
+
+
+// process_audio() based on code from DSD https://github.com/szechyjs/dsd
+void AudioInfo::process_audio(QQueue<qint16>* queue)
+{
+    float aout_abs, max, gainfactor, gaindelta, maxbuf;
+    size_t s = (size_t)queue->size();
+
+    if (s == 0)
+        return;
+    m_audio_out_temp_buf = (float*)malloc(s * sizeof(float));
+    m_audio_out_temp_buf_p = m_audio_out_temp_buf;
+
+    for(qsizetype i = 0; i < queue->size(); ++i){
+        m_audio_out_temp_buf[i] = static_cast<float>(queue->at(i));
+    }
+
+    // detect max level
+    max = 0;
+  //  m_audio_out_temp_buf_p = m_audio_out_temp_buf;
+
+    for (size_t i = 0; i < s; i++){
+        aout_abs = fabsf(*m_audio_out_temp_buf_p);
+
+        if (aout_abs > max){
+            max = aout_abs;
+        }
+
+        m_audio_out_temp_buf_p++;
+    }
+
+    // store this block's peak in the 25-entry history ring
+    m_aout_max_buf[m_aout_max_buf_idx] = max;
+    m_aout_max_buf_idx++;
+
+    if (m_aout_max_buf_idx > 24){
+        m_aout_max_buf_idx = 0;
+    }
+
+    // lookup max history
+    for (size_t i = 0; i < 25; i++){
+        maxbuf = m_aout_max_buf[i];
+
+        if (maxbuf > max){
+            max = maxbuf;
+        }
+    }
+
+    // determine optimal gain level
+    if (max > static_cast<float>(0)){
+        gainfactor = (static_cast<float>(30000) / max);
+    }
+    else{
+        gainfactor = static_cast<float>(50);
+    }
+
+    if (gainfactor < m_aout_gain){
+        m_aout_gain = gainfactor;
+        gaindelta = static_cast<float>(0);
+    }
+    else{
+        if (gainfactor > static_cast<float>(50)){
+            gainfactor = static_cast<float>(50);
+        }
+
+        gaindelta = gainfactor - m_aout_gain;
+
+        if (gaindelta > (static_cast<float>(0.05) * m_aout_gain)){
+            gaindelta = (static_cast<float>(0.05) * m_aout_gain);
+        }
+    }
+
+    gaindelta /= static_cast<float>(s); //160
+
+    // adjust output gain
+    m_audio_out_temp_buf_p = m_audio_out_temp_buf;
+
+    for (size_t i = 0; i < s; i++){
+        *m_audio_out_temp_buf_p = (m_aout_gain + (static_cast<float>(i) * gaindelta)) * (*m_audio_out_temp_buf_p);
+        m_audio_out_temp_buf_p++;
+    }
+
+    m_aout_gain += (static_cast<float>(s) * gaindelta);
+    m_audio_out_temp_buf_p = m_audio_out_temp_buf;
+
+    queue->clear();
+    for (size_t i = 0; i < s; i++){
+        *m_audio_out_temp_buf_p *= m_volume;
+        if (*m_audio_out_temp_buf_p > static_cast<float>(32760)){
+            *m_audio_out_temp_buf_p = static_cast<float>(32760);
+        }
+        else if (*m_audio_out_temp_buf_p < static_cast<float>(-32760)){
+            *m_audio_out_temp_buf_p = static_cast<float>(-32760);
+        }
+        queue->enqueue( static_cast<int16_t>(*m_audio_out_temp_buf_p));
+        m_audio_out_temp_buf_p++;
+    }
+    free(m_audio_out_temp_buf);
+}
+

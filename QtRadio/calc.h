@@ -36,12 +36,7 @@ public:
     Calc();
     virtual ~Calc();
 
-    double SWR(int adc_fwd, int adc_rev);
-    double ScaledVoltage(int adc);
-    double ADCtodBm(int adc_data);
-    double PAPower(int adc);
     double WattsTodBm(double watts);
-    double dBmToWatts(double dBm);
 
 private:
 

@@ -1,13 +1,8 @@
 #include <QDebug>
 
 #include <QtCore>
-#if QT_VERSION >= 0x050000
-#include <QtWidgets/QAction>
-#include <QtWidgets/QMenu>
-#else
 #include <QAction>
 #include <QMenu>
-#endif
 
 #include "Bookmarks.h"
 
@@ -35,7 +30,7 @@ void Bookmarks::buildMenu(QMenu* menu) {
         menu->addAction(action);
 
         //need an event for the new action
-        connect(action,SIGNAL(triggered()),this,SLOT(triggered()));
+        connect(action,&QAction::triggered,this,&Bookmarks::triggered);
 
         qDebug()<<"  added "<<action->text();
     }
@@ -49,15 +44,15 @@ void Bookmarks::saveSettings(QSettings* settings) {
     settings->setValue("entries",bookmarks.count());
     for(int i=0;i<bookmarks.count();i++) {
         bookmark=bookmarks.at(i);
-        s.sprintf("title.%d",i);
+        s = QString("title.%1").arg(i);
         settings->setValue(s,bookmark->getTitle());
-        s.sprintf("band.%d",i);
+        s = QString("band.%1").arg(i);
         settings->setValue(s,bookmark->getBand());
-        s.sprintf("frequency.%d",i);
+        s = QString("frequency.%1").arg(i);
         settings->setValue(s,bookmark->getFrequency());
-        s.sprintf("mode.%d",i);
+        s = QString("mode.%1").arg(i);
         settings->setValue(s,bookmark->getMode());
-        s.sprintf("filter.%d",i);
+        s = QString("filter.%1").arg(i);
         settings->setValue(s,bookmark->getFilter());
     }
     settings->endGroup();
@@ -73,17 +68,17 @@ void Bookmarks::loadSettings(QSettings* settings) {
         int entries=settings->value("entries").toInt();
         qDebug()<<" entries="<<entries;
         for(int i=0;i<entries;i++) {
-            s.sprintf("title.%d",i);
+            s = QString("title.%1").arg(i);
             if(settings->contains(s)) {
                 bookmark=new Bookmark();
                 bookmark->setTitle(settings->value(s).toString());
-                s.sprintf("band.%d",i);
+                s = QString("band.%1").arg(i);
                 bookmark->setBand(settings->value(s).toLongLong());
-                s.sprintf("frequency.%d",i);
+                s = QString("frequency.%1").arg(i);
                 bookmark->setFrequency(settings->value(s).toLongLong());
-                s.sprintf("mode.%d",i);
+                s = QString("mode.%1").arg(i);
                 bookmark->setMode(settings->value(s).toInt());
-                s.sprintf("filter.%d",i);
+                s = QString("filter.%1").arg(i);
                 bookmark->setFilter(settings->value(s).toInt());
                 bookmarks.append(bookmark);
                 qDebug()<<"  append "<<bookmark->getTitle();
@@ -96,17 +91,6 @@ void Bookmarks::loadSettings(QSettings* settings) {
         qDebug()<<"  no entries";
     }
     settings->endGroup();
-}
-
-void Bookmarks::add(QString title,int band,long long frequency,int mode,int filter) {
-    qDebug() << "Bookmarks::add";
-    Bookmark* bookmark=new Bookmark();
-    bookmark->setTitle(title);
-    bookmark->setBand(band);
-    bookmark->setFrequency(frequency);
-    bookmark->setMode(mode);
-    bookmark->setFilter(filter);
-    bookmarks.append(bookmark);
 }
 
 void Bookmarks::add(Bookmark* bookmark) {

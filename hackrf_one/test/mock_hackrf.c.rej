@@ -1,0 +1,18 @@
+--- hackrf_one/test/mock_hackrf.c	2026-11-11 16:03:42.902044647 -0600
++++ hackrf_one/test/mock_hackrf.c	2026-11-12 13:59:43.600786673 -0600
+@@ -9,9 +9,13 @@
+  *   MOCK_HACKRF_DC     DC offset in LSB                default 8
+  *   MOCK_HACKRF_FM     "freq_hz:amplitude:deviation_hz:tone_hz"  one FM station,
+  *                      e.g. "98100000:50:68000:1000" (off by default)
++ *   MOCK_HACKRF_FMFILE "path:rate"  modulation of the FM station from a file of
++ *                      float32 frequency deviations in Hz at rate (looped), in
++ *                      place of the tone, e.g. a digital voice signal
+  *   MOCK_HACKRF_PPM    reference crystal error in ppm (LO and sample clock), default 0
+- *   MOCK_HACKRF_TX_CAPTURE  file to write 2^21 transmitted samples to (int8 IQ),
+- *                      taken 1 s after transmit starts
++ *   MOCK_HACKRF_TX_CAPTURE  "file[:start_s[:length_s]]" file to write transmitted
++ *                      samples to (int8 IQ): by default 2^21 samples taken 1 s
++ *                      after transmit starts
+  */
+ 
+ #include <stdio.h>

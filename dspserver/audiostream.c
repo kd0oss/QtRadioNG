@@ -57,14 +57,11 @@
 
 
 #include "audiostream.h"
-#include "server.h"
+#include "server.h"     // MAX_RFSTREAMS
 #include "buffer.h"
 #include "util.h"
 
 
-int audio_buffer_size = AUDIO_BUFFER_SIZE;
-int audio_sample_rate=8000;
-int audio_channels=1;
 
 /**
  * @brief Client audio stream configuration.
@@ -95,7 +92,7 @@ int audio_channels=1;
  * @see audiostream_sem
  * @see struct audiostream_config
  */
-struct audiostream_config audiostream_conf = { AUDIO_BUFFER_SIZE, 8000, 1, 0 };
+struct audiostream_config audiostream_conf = { AUDIO_BUFFER_SIZE, 48000, 1, 0 };
 
 /**
  * @brief Protects audiostream_conf.
@@ -110,11 +107,20 @@ sem_t audiostream_sem;
  * This instance must be accessed only by iq_thread.  The initial
  * definition must match audiostream_conf exactly!
  */
-static struct audiostream_config as_conf_cache = { AUDIO_BUFFER_SIZE, 8000, 1, 0 };
+/* Audio being put together for the clients, one buffer per receive stream:
+ * each stream's IQ thread fills its own (several run at once with several
+ * receivers or radios).  conf is the stream's copy of audiostream_conf,
+ * refreshed when a new buffer is started and the configuration changed. */
+typedef struct _stream_audio
+{
+    unsigned char             *buf;
+    int                        insert;
+    struct audiostream_config  conf;
+    unsigned long              gen;
+} STREAM_AUDIO;
 
-static unsigned char* audio_buffer = NULL;
-
-static int audio_stream_buffer_insert = 0;
+static STREAM_AUDIO   stream_audio[MAX_RFSTREAMS];
+static unsigned long  conf_gen = 1;      // changes of audiostream_conf seen so far
 
 static unsigned char encodetable[65536];
 
@@ -130,39 +136,45 @@ void init_alaw_tables();
 * @return
 */
 
-void allocate_audio_buffer()
+static void allocate_audio_buffer(int8_t index)
 {
+    STREAM_AUDIO *sa = &stream_audio[index];
     int samplesize;
 
-    sdr_thread_assert_id(&audiostream_tid);
     sem_wait(&audiostream_sem);
     if (audiostream_conf.age > 0)
     {
-        /* The stream configuration has changed, and we need to update
-         * our copy to reflect that. */
-        memcpy(&as_conf_cache, &audiostream_conf, sizeof(as_conf_cache));
+        /* The stream configuration has changed: every stream takes the new
+         * one with its next buffer. */
+        conf_gen++;
         audiostream_conf.age = 0;
+    }
+    if (sa->gen != conf_gen)
+    {
+        memcpy(&sa->conf, &audiostream_conf, sizeof(sa->conf));
+        sa->gen = conf_gen;
     }
     sem_post(&audiostream_sem);
 
     /* From this point until the buffer allocated here is handed to the
-     * client or discarded, all iq_thread operations are on
-     * as_conf_cache, NOT audiostream_conf. */
-    switch (as_conf_cache.encoding)
+     * client or discarded, this stream works on sa->conf, NOT
+     * audiostream_conf. */
+    switch (sa->conf.encoding)
     {
     case ENCODING_ALAW:
         /* 8 bits per sample */
-        samplesize = as_conf_cache.bufsize * as_conf_cache.channels;
+        samplesize = sa->conf.bufsize * sa->conf.channels;
         break;
     case ENCODING_PCM:
         /* 16 bit per sample */
-        samplesize = as_conf_cache.bufsize * as_conf_cache.channels * 2;
+        samplesize = sa->conf.bufsize * sa->conf.channels * 2;
         break;
     default:
         /* No ENCODING_ALAW2! */
         samplesize = 0;
     }
-    audio_buffer = malloc(samplesize + AUDIO_BUFFER_HEADER_SIZE);
+    sa->buf = malloc(samplesize + AUDIO_BUFFER_HEADER_SIZE);
+    sa->insert = 0;
 } // end allocate_audio_buffer
 
 
@@ -175,54 +187,58 @@ void audio_stream_reset()
 
 
 /**
- * @brief Process a single stereo audio sample.
+ * @brief Process a single stereo audio sample of a receive stream.
  *
- * Operates only on as_conf_cache, and requires no synchronization as
- * long as the calling thread is always iq_thread.
+ * Called only by that stream's IQ thread: each stream has its own buffer.
  */
 void audio_stream_put_samples(int8_t index, short left_sample, short right_sample)
 {
+    STREAM_AUDIO *sa;
+    unsigned char *audio_buffer;
     int audio_buffer_length;
 
-    sdr_thread_assert_id(&audiostream_tid);
-
-    /* FIXME: This really only applies once, at startup */
-    if (!audio_buffer)
+    if (index < 0 || index >= MAX_RFSTREAMS)
+        return;
+    sa = &stream_audio[index];
+    if (sa->buf == NULL)
     {
-        allocate_audio_buffer();
+        allocate_audio_buffer(index);
+        if (sa->buf == NULL)
+            return;
     }
+    audio_buffer = sa->buf;
 
     // samples are delivered at 48K or 8K depending on audiostream_conf.samplerate
 
     int offset;
     // use this sample and convert to a-law or PCM
-    if (as_conf_cache.channels == 1)
+    if (sa->conf.channels == 1)
     {
-        switch (as_conf_cache.encoding)
+        switch (sa->conf.encoding)
         {
         default: /* ALAW */
         case ENCODING_ALAW:
-            offset = audio_stream_buffer_insert + AUDIO_BUFFER_HEADER_SIZE;
+            offset = sa->insert + AUDIO_BUFFER_HEADER_SIZE;
             audio_buffer[offset] = alaw((left_sample + right_sample) / 2);
             break;
         case ENCODING_PCM:
-            offset = audio_stream_buffer_insert * 2 + AUDIO_BUFFER_HEADER_SIZE;
+            offset = sa->insert * 2 + AUDIO_BUFFER_HEADER_SIZE;
             /* PCM on the wire is always LE? */
             audio_buffer[offset] = (left_sample/2 + right_sample/2) & 0xff;
             audio_buffer[offset + 1] = (left_sample/2 + right_sample/2) >> 8;
             break;
         }
     } else {
-        switch (as_conf_cache.encoding)
+        switch (sa->conf.encoding)
         {
         default: /* ALAW */
         case ENCODING_ALAW:
-            offset = audio_stream_buffer_insert * 2 + AUDIO_BUFFER_HEADER_SIZE;
+            offset = sa->insert * 2 + AUDIO_BUFFER_HEADER_SIZE;
             audio_buffer[offset] = alaw(left_sample);
             audio_buffer[offset + 1] = alaw(right_sample);
             break;
         case ENCODING_PCM:
-            offset = audio_stream_buffer_insert * 4 + AUDIO_BUFFER_HEADER_SIZE;
+            offset = sa->insert * 4 + AUDIO_BUFFER_HEADER_SIZE;
             audio_buffer[offset] = left_sample & 0x00ff;
             audio_buffer[offset + 1] = left_sample >> 8;
             audio_buffer[offset + 2] = right_sample & 0x00ff;
@@ -231,22 +247,24 @@ void audio_stream_put_samples(int8_t index, short left_sample, short right_sampl
         }
     }
 
-    audio_stream_buffer_insert++;
+    sa->insert++;
 
-    if (audio_stream_buffer_insert == as_conf_cache.bufsize)
+    if (sa->insert == sa->conf.bufsize)
     {
         audio_buffer[0] = AUDIO_BUFFER;
-        audio_buffer_length = as_conf_cache.bufsize * as_conf_cache.channels;
-        if (as_conf_cache.encoding == ENCODING_PCM)
+        audio_buffer_length = sa->conf.bufsize * sa->conf.channels;
+        if (sa->conf.encoding == ENCODING_PCM)
             audio_buffer_length *= 2;
         audio_buffer[1] = HEADER_VERSION;
         audio_buffer[2] = index;
         /* FIXME: htons */
+   //     fprintf(stderr, "Audio len: %d\n", audio_buffer_length);
         audio_buffer[3] = (audio_buffer_length >> 8) & 0xFF;
         audio_buffer[4] = audio_buffer_length & 0xFF;
         audio_stream_queue_add(audio_buffer, audio_buffer_length + AUDIO_BUFFER_HEADER_SIZE);
-        audio_buffer = NULL;	// audio_buffer pointer has already been queued.
-        audio_stream_buffer_insert = 0;
+        free(audio_buffer);    // audio_stream_queue_add copies it
+        sa->buf = NULL;
+        sa->insert = 0;
     }
 } // end audio_stream_put_samples
 

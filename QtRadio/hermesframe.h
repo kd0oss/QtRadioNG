@@ -1,13 +1,8 @@
 #ifndef HERMESFRAME_H
 #define HERMESFRAME_H
 
-//#include <QtCore>
-//#if QT_VERSION >= 0x050000
-//#include <QtWidgets/QFrame>
-//#else
 #include <QFrame>
 #include <QSettings>
-//#endif
 #include "UI.h"
 #include "../hpsdr/hermes.h"
 
@@ -27,8 +22,9 @@ public:
     void shutDown(void);
 
     int8_t radio_id;
-    int8_t currentRxChannel;
-    int8_t currentTxChannel;
+    int8_t currentRxRfstream;
+    int8_t currentTxRfstream;
+    long   sample_rate[1];
 
 private:
     Ui::HermesFrame *ui;
@@ -37,7 +33,6 @@ private:
     QSettings *settings;
     QTimer *itimer;
 
-    void getSerial(void);
 
 private slots:
     void adjustPower(int);
@@ -55,9 +50,11 @@ private slots:
     void attSliderChanged(void);
     void tuneClicked(void);
     void initialize(void);
+    void sampleRateChanged(void);
 
 signals:
     void hhcommand(QByteArray);
+    void sampleRateUpdated(long);
     void pttTuneChange(int caller, bool ptt);//0 = MOX, 1 = Tune, 2 = VOX, 3 = Extern H'ware};
 };
 #endif // HERMESFRAME_H

@@ -21,21 +21,20 @@
 * along with this program; if not, write to the Free Software
 * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 *
+* Updated to Qt6 libraries. Rick Schnickr KD0OSS 2024
 */
 
 #ifndef AUDIO_H
 #define	AUDIO_H
 
 #include <QtCore>
-#include <QAudioFormat>
-#include <QAudioOutput>
-#include <QAudioDeviceInfo>
+#include <QScopedPointer>
+#include <QAudioDevice>
+#include <QAudioSink>
+#include <QAudioSource>
+#include <QMediaDevices>
 
-#if QT_VERSION >= 0x050000
-#include <QtWidgets/QComboBox>
-#else
 #include <QComboBox>
-#endif
 
 #include <QMutex>
 #include <samplerate.h>
@@ -64,18 +63,20 @@ class Audio_playback : public QIODevice
 public:
     Audio_playback();
     ~Audio_playback();
+
     void start();
     void stop();
-    qint64 readData(char *data, qint64 maxlen);
-    qint64 writeData(const char *data, qint64 len);
+    qint64 readData(char *data, qint64 maxlen) override;
+    qint64 writeData(const char *data, qint64 len) override;
+    // Qt 6's QAudioSink only pulls data in pull mode when these report some available.
+    bool isSequential() const override;
+    qint64 bytesAvailable() const override;
 public slots:
     void set_decoded_buffer(QHQueue<qint16>* pBuffer);
-    void set_audio_byte_order(QAudioFormat::Endian byte_order);
     void set_audio_encoding(int encoding);
 private:
     quint32 recv_ts;
     QHQueue <qint16> * pdecoded_buffer;
-    QAudioFormat::Endian audio_byte_order;
     int audio_encoding;
     G711A g711a;
     QHQueue<qint16> queue;
@@ -95,7 +96,6 @@ public slots:
 private:
     void aLawDecode(char* buffer,int length);
     void pcmDecode(char * buffer,int length);
-    void resample(int no_of_samples);
     void init_decodetable();
     float buffer_in[RESAMPLING_BUFFER_SIZE];
     float buffer_out[RESAMPLING_BUFFER_SIZE];
@@ -105,7 +105,6 @@ private:
     SRC_DATA sr_data;
     QHQueue<qint16> queue;
     QHQueue<qint16> *pdecoded_buffer;
-    struct CODEC2 * codec2;
     int audio_channels;
     int audio_encoding;
 };
@@ -115,32 +114,37 @@ class Audio : public QObject {
     Q_OBJECT
 public:
     Audio();
-    virtual ~Audio();
+    ~Audio();
     int get_audio_encoding();
     QHQueue <qint16> decoded_buffer;
-    QAudioFormat::Endian audio_byte_order;
     int audio_encoding;
+    QMediaDevices *m_devices = nullptr;
 signals:
     void audio_processing_process_audio(char* header,char* buffer,int length);
 public slots:
-    void stateChanged(QAudio::State);
-    void select_audio(QAudioDeviceInfo info,int rate,int channels,QAudioFormat::Endian byteOrder);
+    void updateAudioDevices(QComboBox *comboBox);
+    void deviceChanged(int index);
+    void select_audio(QAudioDevice info,int rate,int channels);
     void process_audio(char* header,char* buffer,int length);
-    void get_audio_devices(QComboBox* comboBox);
     void clear_decoded_buffer(void);
-    void get_audio_device(QAudioDeviceInfo * device);
+    void get_audio_device(QAudioDevice * device);
     void set_audio_encoding(int enc);
+    void set_volume(qreal);
 private:
+    void             initializeAudio(const QAudioDevice &deviceInfo);
+    QScopedPointer<Audio_playback> m_audioPlayback;
     QAudioFormat     audio_format;
-    QAudioOutput*    audio_output;
+    QScopedPointer<QAudioSink>     m_audioOutput;
+    QAudioSink     *audio_output;
     bool             connected;
-    QThread* audio_output_thread;
-    QAudioDeviceInfo audio_device;
-    Audio_playback*  audio_out;
-    int sampleRate;
-    int audio_channels;
-    Audio_processing* audio_processing;
-    QThread* audio_processing_thread;
+    QThread*         audio_output_thread;
+    QAudioDevice     audio_device;
+    Audio_playback   *audio_out;
+    int              sampleRate;
+    int              audio_channels;
+    Audio_processing *audio_processing;
+    QThread          *audio_processing_thread;
+    QComboBox        *devList;
 };
 
 

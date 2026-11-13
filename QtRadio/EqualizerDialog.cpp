@@ -7,41 +7,41 @@ EqualizerDialog::EqualizerDialog(ServerConnection *pConn, QWidget *parent) : QDi
     ui->setupUi(this);
 
     connection = pConn;
-    currentRxChannel = -1;
-    currentTxChannel = -1;
+    currentRxRfstream = -1;
+    currentTxRfstream = -1;
 
-    connect(ui->rxEqPreampSlider, SIGNAL(valueChanged(int)), this, SLOT(rxSliderChanged()));
-    connect(ui->rxEq32Slider, SIGNAL(valueChanged(int)), this, SLOT(rxSliderChanged()));
-    connect(ui->rxEq63Slider, SIGNAL(valueChanged(int)), this, SLOT(rxSliderChanged()));
-    connect(ui->rxEq125Slider, SIGNAL(valueChanged(int)), this, SLOT(rxSliderChanged()));
-    connect(ui->rxEq250Slider, SIGNAL(valueChanged(int)), this, SLOT(rxSliderChanged()));
-    connect(ui->rxEq500Slider, SIGNAL(valueChanged(int)), this, SLOT(rxSliderChanged()));
-    connect(ui->rxEq1KSlider, SIGNAL(valueChanged(int)), this, SLOT(rxSliderChanged()));
-    connect(ui->rxEq2KSlider, SIGNAL(valueChanged(int)), this, SLOT(rxSliderChanged()));
-    connect(ui->rxEq4KSlider, SIGNAL(valueChanged(int)), this, SLOT(rxSliderChanged()));
-    connect(ui->rxEq8KSlider, SIGNAL(valueChanged(int)), this, SLOT(rxSliderChanged()));
-    connect(ui->rxEq16KSlider, SIGNAL(valueChanged(int)), this, SLOT(rxSliderChanged()));
+    connect(ui->rxEqPreampSlider, &QSlider::valueChanged, this, &EqualizerDialog::rxSliderChanged);
+    connect(ui->rxEq32Slider, &QSlider::valueChanged, this, &EqualizerDialog::rxSliderChanged);
+    connect(ui->rxEq63Slider, &QSlider::valueChanged, this, &EqualizerDialog::rxSliderChanged);
+    connect(ui->rxEq125Slider, &QSlider::valueChanged, this, &EqualizerDialog::rxSliderChanged);
+    connect(ui->rxEq250Slider, &QSlider::valueChanged, this, &EqualizerDialog::rxSliderChanged);
+    connect(ui->rxEq500Slider, &QSlider::valueChanged, this, &EqualizerDialog::rxSliderChanged);
+    connect(ui->rxEq1KSlider, &QSlider::valueChanged, this, &EqualizerDialog::rxSliderChanged);
+    connect(ui->rxEq2KSlider, &QSlider::valueChanged, this, &EqualizerDialog::rxSliderChanged);
+    connect(ui->rxEq4KSlider, &QSlider::valueChanged, this, &EqualizerDialog::rxSliderChanged);
+    connect(ui->rxEq8KSlider, &QSlider::valueChanged, this, &EqualizerDialog::rxSliderChanged);
+    connect(ui->rxEq16KSlider, &QSlider::valueChanged, this, &EqualizerDialog::rxSliderChanged);
 
 
-    connect(ui->txEqPreampSlider, SIGNAL(valueChanged(int)), this, SLOT(txSliderChanged()));
-    connect(ui->txEq32Slider, SIGNAL(valueChanged(int)), this, SLOT(txSliderChanged()));
-    connect(ui->txEq63Slider, SIGNAL(valueChanged(int)), this, SLOT(txSliderChanged()));
-    connect(ui->txEq125Slider, SIGNAL(valueChanged(int)), this, SLOT(txSliderChanged()));
-    connect(ui->txEq250Slider, SIGNAL(valueChanged(int)), this, SLOT(txSliderChanged()));
-    connect(ui->txEq500Slider, SIGNAL(valueChanged(int)), this, SLOT(txSliderChanged()));
-    connect(ui->txEq1KSlider, SIGNAL(valueChanged(int)), this, SLOT(txSliderChanged()));
-    connect(ui->txEq2KSlider, SIGNAL(valueChanged(int)), this, SLOT(txSliderChanged()));
-    connect(ui->txEq4KSlider, SIGNAL(valueChanged(int)), this, SLOT(txSliderChanged()));
-    connect(ui->txEq8KSlider, SIGNAL(valueChanged(int)), this, SLOT(txSliderChanged()));
-    connect(ui->txEq16KSlider, SIGNAL(valueChanged(int)), this, SLOT(txSliderChanged()));
+    connect(ui->txEqPreampSlider, &QSlider::valueChanged, this, &EqualizerDialog::txSliderChanged);
+    connect(ui->txEq32Slider, &QSlider::valueChanged, this, &EqualizerDialog::txSliderChanged);
+    connect(ui->txEq63Slider, &QSlider::valueChanged, this, &EqualizerDialog::txSliderChanged);
+    connect(ui->txEq125Slider, &QSlider::valueChanged, this, &EqualizerDialog::txSliderChanged);
+    connect(ui->txEq250Slider, &QSlider::valueChanged, this, &EqualizerDialog::txSliderChanged);
+    connect(ui->txEq500Slider, &QSlider::valueChanged, this, &EqualizerDialog::txSliderChanged);
+    connect(ui->txEq1KSlider, &QSlider::valueChanged, this, &EqualizerDialog::txSliderChanged);
+    connect(ui->txEq2KSlider, &QSlider::valueChanged, this, &EqualizerDialog::txSliderChanged);
+    connect(ui->txEq4KSlider, &QSlider::valueChanged, this, &EqualizerDialog::txSliderChanged);
+    connect(ui->txEq8KSlider, &QSlider::valueChanged, this, &EqualizerDialog::txSliderChanged);
+    connect(ui->txEq16KSlider, &QSlider::valueChanged, this, &EqualizerDialog::txSliderChanged);
 
-    connect(ui->rxEqResetButton, SIGNAL(clicked()), this, SLOT(resetRx()));
-    connect(ui->txEqResetButton, SIGNAL(clicked()), this, SLOT(resetTx()));
+    connect(ui->rxEqResetButton, &QPushButton::clicked, this, &EqualizerDialog::resetRx);
+    connect(ui->txEqResetButton, &QPushButton::clicked, this, &EqualizerDialog::resetTx);
 
-    connect(ui->eq3BandButton, SIGNAL(clicked()), this, SLOT(set3BandEqualizer()));
-    connect(ui->eq10BandButton, SIGNAL(clicked()), this, SLOT(set10BandEqualizer()));
+    connect(ui->eq3BandButton, &QRadioButton::clicked, this, &EqualizerDialog::set3BandEqualizer);
+    connect(ui->eq10BandButton, &QRadioButton::clicked, this, &EqualizerDialog::set10BandEqualizer);
 
-    connect(ui->eqSaveButton, SIGNAL(clicked()), this, SLOT(saveSettings()));
+    connect(ui->eqSaveButton, &QPushButton::clicked, this, &EqualizerDialog::saveSettings);
 }
 
 EqualizerDialog::~EqualizerDialog()
@@ -192,7 +192,7 @@ void EqualizerDialog::rxSliderChanged(void)
     int values[11];
     int bands = 3;
 
-    if (currentRxChannel < 0) return;
+    if (currentRxRfstream < 0) return;
 
     values[0] = ui->rxEqPreampSlider->value();
     values[1] = ui->rxEq32Slider->value();
@@ -209,18 +209,18 @@ void EqualizerDialog::rxSliderChanged(void)
         values[9] = ui->rxEq8KSlider->value();
         values[10] = ui->rxEq16KSlider->value();
         command.clear();
-        line.sprintf("%d %d %d %d %d %d %d %d %d %d %d", values[0], values[1], values[2],
-                values[3], values[4], values[5], values[6], values[7], values[8], values[9], values[10]);
+        line = QString("%1 %2 %3 %4 %5 %6 %7 %8 %9 %10 %11").arg(values[0]).arg(values[1]).arg(values[2]).
+               arg(values[3]).arg(values[4]).arg(values[5]).arg(values[6]).arg(values[7]).arg(values[8]).arg(values[9]).arg(values[10]);
     }
     else
     {
         command.clear();
-        line.sprintf("%d %d %d %d", values[0], values[1], values[2], values[3]);
+        line = QString("%1 %2 %3 %4").arg(values[0]).arg(values[1]).arg(values[2]).arg(values[3]);
     }
-    command.append((char)currentRxChannel);
+    command.append((char)currentRxRfstream);
     command.append((char)SETRXEQPRO);
     command.append((char)bands);
-    command.append(line);
+    command.append(line.toUtf8());
     connection->sendCommand(command);
     qDebug() << Q_FUNC_INFO << ":   The command sent is is " << command;
 } // end rxSliderChanged
@@ -233,7 +233,7 @@ void EqualizerDialog::txSliderChanged(void)
     int values[11];
     int bands = 3;
 
-    if (currentTxChannel < 0) return;
+    if (currentTxRfstream < 0) return;
 
     values[0] = ui->txEqPreampSlider->value();
     values[1] = ui->txEq32Slider->value();
@@ -250,18 +250,18 @@ void EqualizerDialog::txSliderChanged(void)
         values[9] = ui->txEq8KSlider->value();
         values[10] = ui->txEq16KSlider->value();
         command.clear();
-        line.sprintf("%d %d %d %d %d %d %d %d %d %d %d", values[0], values[1], values[2],
-                values[3], values[4], values[5], values[6], values[7], values[8], values[9], values[10]);
+        line = QString("%1 %2 %3 %4 %5 %6 %7 %8 %9 %10 %11").arg(values[0]).arg(values[1]).arg(values[2]).
+               arg(values[3]).arg(values[4]).arg(values[5]).arg(values[6]).arg(values[7]).arg(values[8]).arg(values[9]).arg(values[10]);
     }
     else
     {
         command.clear();
-        line.sprintf("%d %d %d %d", values[0], values[1], values[2], values[3]);
+        line = QString("%1 %2 %3 %4").arg(values[0]).arg(values[1]).arg(values[2]).arg(values[3]);
     }
-    command.append((char)currentTxChannel);
+    command.append((char)currentTxRfstream);
     command.append((char)SETTXEQPRO);
     command.append((char)bands);
-    command.append(line);
+    command.append(line.toUtf8());
     connection->sendCommand(command);
     qDebug() << Q_FUNC_INFO << ":   The command sent is is " << command;
 } // end txSliderChanged

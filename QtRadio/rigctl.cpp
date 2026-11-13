@@ -46,12 +46,15 @@ void RigCtlSocket::disconnected()
 
 void RigCtlSocket::readyRead()
 {
-    if (!conn->canReadLine())
-    {
-        return;
-    }
+    // every complete line: hamlib often sends several commands at once,
+    // and a line left in the buffer would wait for the next one to arrive
+    while (conn->canReadLine())
+        handleCommand(conn->readLine());
+}
 
-    QByteArray command(conn->readLine());
+
+void RigCtlSocket::handleCommand(QByteArray command)
+{
     // removed command.chop(1); because it is unable to cope with
     // with more than one character line terminations
     // i.e. telnet client uses a CR/LF sequence
@@ -62,7 +65,7 @@ void RigCtlSocket::readyRead()
     }
 
     QString cmdstr = command.constData();
-    QStringList cmdlist = cmdstr.split(QRegExp("\\s+"));
+    QStringList cmdlist = cmdstr.split(QRegularExpression("\\s+"));
     int cmdlistcnt = cmdlist.count();
     bool output = false;
     int retcode = 0; //RIG_OK
@@ -89,33 +92,25 @@ void RigCtlSocket::readyRead()
     else
         if (cmdlist[0].compare("F") == 0 && cmdlistcnt == 2)
         { // set_freq
-            QString newf = cmdlist[1];
-#if QT_VERSION >= 0x050000
-            main->rigctlSetFreq(atol(newf.toUtf8()));
-#else
-            main->rigctlSetFreq(atol(newf.toAscii()));
-#endif
+            // hamlib sends Hz with decimals ("144390000.000000")
+            bool ok = false;
+            double newf = cmdlist[1].toDouble(&ok);
+            if (ok && newf > 0.0)
+                main->rigctlSetFreq(qRound64(newf));
+            else
+                retcode = -1;   // RIG_EINVAL
         }
         else
             if (command[0] == 'm')
             { // get_mode
-#if QT_VERSION >= 0x050000
                 out << main->rigctlGetMode().toUtf8() << "\n";
                 out << main->rigctlGetFilter().toUtf8() << "\n";
-#else
-                out << main->rigctlGetMode().toAscii() << "\n";
-                out << main->rigctlGetFilter().toAscii() << "\n";
-#endif
                 output = true;
             }
             else
                 if (command[0] == 'v')
                 { // get_vfo
-#if QT_VERSION >= 0x050000
                     out << main->rigctlGetVFO().toUtf8() << "\n";
-#else
-                    out << main->rigctlGetVFO().toAscii() << "\n";
-#endif
                     output = true;
                 }
                 else
@@ -145,8 +140,8 @@ void RigCtlSocket::readyRead()
                             }
                             else
                             if (command[0] == 's')
-                            { // get_split_vfo
-                                out << "0" << "\n";
+                            { // get_split_vfo: split off, TX on VFOA (two lines)
+                                out << "0" << "\n" << "VFOA" << "\n";
                                 //out << main->rigctlGetVFO().toAscii() << "\n";
                                 output = true;
                             }
@@ -325,6 +320,13 @@ void RigCtlSocket::readyRead()
                                                         main->rigctlSetFilter(9);
                                                     }
 
+                                                } else if (cmdlist[1].compare("PKTFM") == 0) {
+                                                    // what get_mode reports for a plugin mode (M17 ...):
+                                                    // keep that mode, otherwise plain FM
+                                                    if (!main->rigctlInPluginMode())
+                                                        main->rigctlSetMode(MODE_FM);
+                                                } else if (cmdlist[1].compare("WFM") == 0) {
+                                                    main->rigctlSetMode(MODE_FMW);
                                                 } else if (cmdlist[1].compare("SAM") == 0) {
                                                     main->rigctlSetMode(MODE_SAM);
                                                     // compare sam filters
@@ -434,9 +436,9 @@ void RigCtlSocket::readyRead()
                                             out << "2" << "\n"; //RIG_MODEL_NETRIGCTL
                                             out << "2" << "\n"; //RIG_ITU_REGION2
                                             // Not sure exactly what to send here but this seems to work
-                                            out << "150000.000000 30000000.000000  0x900af -1 -1 0x10000003 0x3\n"; //("%"FREQFMT" %"FREQFMT" 0x%x %d %d 0x%x 0x%x\n",start,end,modes,low_power,high_power,vfo,ant)
+                                            out << "1000.000000 6000000000.000000  0x900af -1 -1 0x10000003 0x3\n"; //("%"FREQFMT" %"FREQFMT" 0x%x %d %d 0x%x 0x%x\n",start,end,modes,low_power,high_power,vfo,ant)
                                             out << "0 0 0 0 0 0 0\n";
-                                            out << "150000.000000 30000000.000000  0x900af -1 -1 0x10000003 0x3\n"; //TX
+                                            out << "1000.000000 6000000000.000000  0x900af -1 -1 0x10000003 0x3\n"; //TX
                                             out << "0 0 0 0 0 0 0\n";
                                             out << "0 0\n";
                                             out << "0 0\n";
@@ -472,14 +474,14 @@ RigCtlServer::RigCtlServer(QObject *parent, Radio *main, int port)
         return;
     }
     fprintf(stderr, "rigctl: Listening\n");
-    connect(server, SIGNAL(newConnection()), this, SLOT(newConnection()));
+    connect(server, &QTcpServer::newConnection, this, &RigCtlServer::newConnection);
 }
 
 void RigCtlServer::newConnection() {
     QTcpSocket *conn = server->nextPendingConnection();
     RigCtlSocket *sock = new RigCtlSocket(this, main, conn);
-    connect(conn, SIGNAL(disconnected()), conn, SLOT(deleteLater()));
-    connect(conn, SIGNAL(disconnected()), sock, SLOT(disconnected()));
-    connect(conn, SIGNAL(readyRead()), sock, SLOT(readyRead()));
+    connect(conn, &QTcpSocket::disconnected, conn, &QTcpSocket::deleteLater);
+    connect(conn, &QTcpSocket::disconnected, sock, &RigCtlSocket::disconnected);
+    connect(conn, &QTcpSocket::readyRead, sock, &RigCtlSocket::readyRead);
 }
 

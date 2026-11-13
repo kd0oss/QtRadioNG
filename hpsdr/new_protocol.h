@@ -77,12 +77,10 @@ extern int send_general;
 extern void schedule_high_priority();
 extern void schedule_general();
 extern void schedule_receive_specific();
-extern void schedule_transmit_specific();
 
 extern void new_protocol_init();
 extern void new_protocol_stop();
 
-extern void filter_board_changed();
 extern void pa_changed();
 extern void tuner_changed();
 
@@ -94,7 +92,5 @@ extern int getTune();
 extern void new_protocol_audio_samples(short left_audio_sample,short right_audio_sample);
 extern void new_protocol_iq_samples(int isample,int qsample);
 extern void new_protocol_flush_iq_samples();
-extern void new_protocol_cw_audio_samples(short l, short r);
 
-extern void new_protocol_restart();
 #endif

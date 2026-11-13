@@ -165,6 +165,9 @@ enum COMMAND_SET {
     GETPSMAXTX,
     GETPSHWPEAK,
     ENABLEAUDIO,
+    ISMIC_PCM,
+    QPLUGINS,               // QUESTION: plugin list, and status pushes from now on
+    SETPLUGIN,              // [plugin id] "key=value" to a protocol plugin
 
     QHARDWARE = 239,
     STARGETSERIAL = 240,

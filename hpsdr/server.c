@@ -30,8 +30,8 @@
 #include "hermes.h"
 
 
-RECEIVER *receiver[MAX_RECEIVERS];
-TRANSMITTER *transmitter; // FIXME: change to allow multiple attached transmitters
+extern RECEIVER *receiver[MAX_RECEIVERS];
+extern TRANSMITTER *transmitter; // FIXME: change to allow multiple attached transmitters
 
 static RFUNIT rfunit[35]; // max channels defined in dspserver
 
@@ -67,7 +67,6 @@ void* txiq_send(void* arg);
 void* rx_audio_thread(void* arg);
 void* rxaudio_send(void* arg);
 void  init_transmitter(int8_t);
-void* keepalive_thread(void* arg);
 
 static char dsp_server_address[17] = "127.0.0.1";
 
@@ -132,7 +131,10 @@ char* detach_receiver(int8_t idx)
 
     if (attached_rcvrs[rfunit[idx].radio_id] > 0) attached_rcvrs[rfunit[idx].radio_id]--;
     if (attached_rcvrs[rfunit[idx].radio_id] == 0)
+    {
         receiver[idx]->client = (CLIENT*)NULL;
+        set_wideband_requested(false);   // no receivers left: no bandscope either
+    }
 
     close(rfunit[idx].client.socket);
     rfunit[idx].client.socket = -1;
@@ -159,7 +161,7 @@ char* detach_transmitter(int8_t idx)
 
         struct _txiq_entry *item;
         sem_wait(&txiq_semaphore[idx]);
-        for (item = TAILQ_FIRST(&txiq_buffer); item != NULL; item = TAILQ_NEXT(item, entries))
+        while ((item = TAILQ_FIRST(&txiq_buffer)) != NULL)
         {
             TAILQ_REMOVE(&txiq_buffer, item, entries);
             free(item->buffer);
@@ -189,6 +191,9 @@ char* attach_transmitter(int8_t idx)
     fprintf(stderr, "Transmitter attached: radio id = %u  index = %u  Attached XMTRS = %d\n", rfunit[idx].radio_id, idx, attached_xmits[rfunit[idx].radio_id]);
     return resp;
 } // end attach_transmitter
+
+
+int port_offset = 0;    // block * PORT_BLOCK, from the manifest request
 
 
 char* parse_command(CLIENT* client, char* command)
@@ -263,7 +268,8 @@ char* parse_command(CLIENT* client, char* command)
     case HQHARDWARE:
     {
      //   strcpy(command, "OK Hermes");
-        fprintf(stderr, "Sending manifest.\n");
+        port_offset = (uint8_t)command[2] * PORT_BLOCK;
+        fprintf(stderr, "Sending manifest.  dspserver port block %u (ports +%d)\n", (uint8_t)command[2], port_offset);
         send_manifest = true;
         bDone = true;
         return 0;
@@ -294,7 +300,7 @@ char* parse_command(CLIENT* client, char* command)
 
     case SETPOWEROUT:
     {
-        set_tx_power((int8_t)command[2]);
+        set_tx_power((uint8_t)command[2]);
         bDone = true;
     }
         break;
@@ -494,16 +500,14 @@ char* parse_command(CLIENT* client, char* command)
     case HSTARTBANDSCOPE:
     {
         bDone = true;
-//        client->bs_port = atoi(command+1);
-        /////       attach_bandscope(client);
+        set_wideband_requested(true);
     }
         break;
 
     case HSTOPBANDSCOPE:
     {
         bDone = true;
-//        client->bs_port = -1;
-        //////     detach_bandscope(client);
+        set_wideband_requested(false);
     }
         break;
 
@@ -655,6 +659,8 @@ void* client_thread(void* arg)
         if (!packet_started) continue;
 
         packet_started = false;
+        if (len >= 0 && len < (int)sizeof(command))
+            command[len] = 0;    // a short command leaves no stale bytes behind it
 
         response = parse_command(client, command);
         if (send_manifest)
@@ -698,7 +704,6 @@ void* client_thread(void* arg)
 void init_receiver(int8_t idx)
 {
     int on = 1;
-    int rc = 0;
     struct sockaddr_in cli_addr;
 
     rfunit[idx].client.socket = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -718,9 +723,9 @@ void init_receiver(int8_t idx)
     memset(&rfunit[idx].client.iq_addr, 0, rfunit[idx].client.iq_length);
     rfunit[idx].client.iq_addr.sin_family = AF_INET;
     rfunit[idx].client.iq_addr.sin_addr.s_addr = inet_addr(dsp_server_address);
-    rfunit[idx].client.iq_addr.sin_port = htons(RX_IQ_PORT_0 + idx);
-    rfunit[idx].port = RX_IQ_PORT_0 + idx;
-    fprintf(stderr, "Setup Rx%d IQ port: %d  Bandscope port: %d\n", idx, rfunit[idx].port, BANDSCOPE_PORT + rfunit[idx].radio_id);
+    rfunit[idx].client.iq_addr.sin_port = htons(RX_IQ_PORT_0 + idx + port_offset);
+    rfunit[idx].port = RX_IQ_PORT_0 + idx + port_offset;
+    fprintf(stderr, "Setup Rx%d IQ port: %d  Bandscope port: %d\n", idx, rfunit[idx].port, BANDSCOPE_PORT + rfunit[idx].radio_id + port_offset);
 } // end init_receivers
 
 
@@ -743,6 +748,7 @@ void send_IQ_buffer(int idx)
         cli_addr.sin_addr.s_addr = rfunit[idx].client.iq_addr.sin_addr.s_addr;
         cli_addr.sin_port = htons(rfunit[idx].port);
 
+        buffer.chunk = 0;
         buffer.radio_id = rfunit[idx].radio_id;
         buffer.receiver = idx;
         buffer.length = (receiver[idx]->buffer_size * 2) - offset; // FIXME: offset may not be needed
@@ -777,8 +783,9 @@ void send_WB_IQ_buffer(int idx)
         memset((char*)&cli_addr, 0, cli_length);
         cli_addr.sin_family = AF_INET;
         cli_addr.sin_addr.s_addr = rfunit[idx].client.iq_addr.sin_addr.s_addr;
-        cli_addr.sin_port = htons(BANDSCOPE_PORT + rfunit[idx].radio_id);
+        cli_addr.sin_port = htons(BANDSCOPE_PORT + rfunit[idx].radio_id + port_offset);
 
+        buffer.chunk = 0;               // real samples (dspserver also takes complex frames, see hackrf_one)
         buffer.radio_id = rfunit[idx].radio_id;
         buffer.receiver = idx;
         buffer.length = 16384;
@@ -850,9 +857,10 @@ void send_Mic_buffer(float sample)
     memset((char*)&cli_addr, 0, cli_length);
     cli_addr.sin_family = AF_INET;
     cli_addr.sin_addr.s_addr = inet_addr(dsp_server_address);
-    cli_addr.sin_port = htons(MIC_AUDIO_PORT); // + rfunit[0].radio_id);
+    cli_addr.sin_port = htons(MIC_AUDIO_PORT + port_offset);
 
     buffer.radio_id = rfunit[0].radio_id;
+    inet_ntop(AF_INET, &(discovered[rfunit[0].radio_id].info.network.address.sin_addr), buffer.ipaddr, INET_ADDRSTRLEN);
     buffer.tx = 0;
     buffer.length = 512 * sizeof(float);
 
@@ -861,7 +869,7 @@ void send_Mic_buffer(float sample)
         rc = sendto(mic_socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr*)&cli_addr, cli_length);
         if (rc <= 0)
         {
-            fprintf(stderr, "sendto failed for mic data on port %u", MIC_AUDIO_PORT);
+            fprintf(stderr, "sendto failed for mic data on port %u", MIC_AUDIO_PORT + port_offset);
             exit(1);
         }
     }
@@ -977,9 +985,9 @@ void* tx_IQ_thread(void* arg)
         memset((char*)&cli_addr, 0, cli_length);
         cli_addr.sin_family = AF_INET;
         cli_addr.sin_addr.s_addr = inet_addr(dsp_server_address);
-        cli_addr.sin_port = htons(TX_IQ_PORT_0); // + attached_xmits[idx] - 1);
+        cli_addr.sin_port = htons(TX_IQ_PORT_0 + port_offset);
         
-        fprintf(stderr, "connection to TX index %u tx IQ on port %d\n", idx, TX_IQ_PORT_0);
+        fprintf(stderr, "connection to TX index %u tx IQ on port %d\n", idx, TX_IQ_PORT_0 + port_offset);
     }
     
     // this will setup UDP port from dspserver. FIXME: I don't like this method as it can hang on the dspserver side.
@@ -1041,12 +1049,12 @@ void* rxaudio_send(void* arg)
             continue;
         }
         
-        memcpy((char*)buffer, (char*)item->buffer, 512);
+        memcpy((char*)buffer, (char*)item->buffer, 512 * sizeof(short));
         for (int j=0; j<256; j++)
         {
             lsample = buffer[j*2];
             rsample = buffer[(j*2)+1];
-            
+        //    fprintf(stderr, "L: %d  R: %d\n", lsample, rsample);
             switch (protocol)
             {
                 case ORIGINAL_PROTOCOL:
@@ -1090,9 +1098,9 @@ void* rx_audio_thread(void* arg)
         memset((char*)&cli_addr, 0, cli_length);
         cli_addr.sin_family = AF_INET;
         cli_addr.sin_addr.s_addr = inet_addr(dsp_server_address);
-        cli_addr.sin_port = htons(RX_AUDIO_PORT + rfunit[idx].radio_id);
+        cli_addr.sin_port = htons(RX_AUDIO_PORT + rfunit[idx].radio_id + port_offset);
         
-        fprintf(stderr, "connection to RX index %u RX audio on port %d\n", idx, RX_AUDIO_PORT + rfunit[idx].radio_id);
+        fprintf(stderr, "connection to RX index %u RX audio on port %d\n", idx, RX_AUDIO_PORT + rfunit[idx].radio_id + port_offset);
     }
     
     // this will setup UDP port from dspserver. FIXME: I don't like this method as it can hang on the dspserver side.
@@ -1116,9 +1124,11 @@ void* rx_audio_thread(void* arg)
 //            fprintf(stderr, "RX audio bytes: %d\n", bytes_read);
             if (bytes_read > 30)
             {
+         //       fprintf(stderr, "L: %d  R: %d\n", buffer[100], buffer[101]);
                 item = malloc(sizeof(*item));
-                item->buffer = malloc(512 * sizeof(short));
+                item->buffer = (char*)malloc(512 * sizeof(short));
                 memcpy(item->buffer, (char*)&buffer, 512 * sizeof(short));
+           //     fprintf(stderr, "L: %d  R: %d\n", (short)item->buffer[100], (short)item->buffer[101]);
                 sem_wait(&rxaudio_semaphore[idx]);
                 TAILQ_INSERT_TAIL(&rxaudio_buffer, item, entries);
                 sem_post(&rxaudio_semaphore[idx]);
@@ -1130,44 +1140,3 @@ void* rx_audio_thread(void* arg)
 } // end rx_audio_thread
 
 
-void* keepalive_thread(void* arg)
-{
-    int socket = (intptr_t)arg;
-    int bytes_read = 0;
-    char command[13], response[64];
-
-    sleep(10);
-    sprintf(command, "keepalive 0");
-    while (1)
-    {
-        sem_wait(&client_semaphore);
-        if (send(socket, response, strlen(response), 0) < 0)
-        {
-            sem_post(&client_semaphore);
-            fprintf(stderr, "keepalive failed, client vanished\n");
-            exit(1);
-        }
-
-        bytes_read = recv(socket, command, 13, 0);
-        if (bytes_read < 0)
-        {  // recv error, exit program.
-            if (errno != EWOULDBLOCK)
-            {
-                sem_post(&client_semaphore);
-                fprintf(stderr, "command channel error: %s  (%d)\n", strerror(errno), errno);
-                exit(1);
-            }
-        }
-        sem_post(&client_semaphore);
-
-        if (bytes_read > 0)
-        {
-            if (strcmp(command, "OK") != 0)
-            {
-                fprintf(stderr, "command channel error\n");
-                exit(1);
-            }
-        }
-        sleep(5);
-    }
-} // end keepalive_thread

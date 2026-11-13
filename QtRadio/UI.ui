@@ -16,6 +16,12 @@
     <height>242</height>
    </size>
   </property>
+  <property name="maximumSize">
+   <size>
+    <width>1920</width>
+    <height>16777215</height>
+   </size>
+  </property>
   <property name="windowTitle">
    <string>QtRadio II - not connected</string>
   </property>
@@ -60,7 +66,7 @@
        <item>
         <spacer name="horizontalSpacer_4">
          <property name="orientation">
-          <enum>Qt::Horizontal</enum>
+          <enum>Qt::Orientation::Horizontal</enum>
          </property>
          <property name="sizeHint" stdset="0">
           <size>
@@ -91,10 +97,10 @@
           </size>
          </property>
          <property name="frameShape">
-          <enum>QFrame::Box</enum>
+          <enum>QFrame::Shape::Box</enum>
          </property>
          <property name="frameShadow">
-          <enum>QFrame::Raised</enum>
+          <enum>QFrame::Shadow::Raised</enum>
          </property>
          <property name="lineWidth">
           <number>2</number>
@@ -115,10 +121,10 @@
           <item>
            <widget class="sMeter" name="sMeterFrame">
             <property name="frameShape">
-             <enum>QFrame::NoFrame</enum>
+             <enum>QFrame::Shape::NoFrame</enum>
             </property>
             <property name="frameShadow">
-             <enum>QFrame::Plain</enum>
+             <enum>QFrame::Shadow::Plain</enum>
             </property>
             <property name="lineWidth">
              <number>0</number>
@@ -143,10 +149,10 @@
           </size>
          </property>
          <property name="frameShape">
-          <enum>QFrame::Box</enum>
+          <enum>QFrame::Shape::Box</enum>
          </property>
          <property name="frameShadow">
-          <enum>QFrame::Raised</enum>
+          <enum>QFrame::Shadow::Raised</enum>
          </property>
          <property name="lineWidth">
           <number>2</number>
@@ -168,10 +174,10 @@
           </size>
          </property>
          <property name="frameShape">
-          <enum>QFrame::Box</enum>
+          <enum>QFrame::Shape::Box</enum>
          </property>
          <property name="frameShadow">
-          <enum>QFrame::Raised</enum>
+          <enum>QFrame::Shadow::Raised</enum>
          </property>
          <property name="lineWidth">
           <number>2</number>
@@ -181,7 +187,7 @@
        <item>
         <spacer name="horizontalSpacer_5">
          <property name="orientation">
-          <enum>Qt::Horizontal</enum>
+          <enum>Qt::Orientation::Horizontal</enum>
          </property>
          <property name="sizeHint" stdset="0">
           <size>
@@ -195,7 +201,7 @@
      </widget>
     </item>
     <item>
-     <layout class="QHBoxLayout" name="horizontalLayout_4" stretch="0,0,0,100">
+     <layout class="QHBoxLayout" name="horizontalLayout_4" stretch="0,100">
       <property name="spacing">
        <number>0</number>
       </property>
@@ -205,19 +211,6 @@
       <property name="topMargin">
        <number>0</number>
       </property>
-      <item>
-       <spacer name="horizontalSpacer_2">
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>40</width>
-          <height>20</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
       <item>
        <layout class="QVBoxLayout" name="spectrumLayout">
         <property name="spacing">
@@ -242,22 +235,12 @@ color: rgb(255, 248, 41);</string>
           <property name="text">
            <string>QtRadioNG</string>
           </property>
+          <property name="alignment">
+           <set>Qt::AlignmentFlag::AlignCenter</set>
+          </property>
          </widget>
         </item>
        </layout>
-      </item>
-      <item>
-       <spacer name="horizontalSpacer">
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>40</width>
-          <height>20</height>
-         </size>
-        </property>
-       </spacer>
       </item>
       <item>
        <widget class="QSlider" name="zoomSpectrumSlider">
@@ -274,10 +257,10 @@ color: rgb(255, 248, 41);</string>
          </size>
         </property>
         <property name="focusPolicy">
-         <enum>Qt::NoFocus</enum>
+         <enum>Qt::FocusPolicy::NoFocus</enum>
         </property>
         <property name="minimum">
-         <number>-40</number>
+         <number>100</number>
         </property>
         <property name="maximum">
          <number>200</number>
@@ -286,13 +269,13 @@ color: rgb(255, 248, 41);</string>
          <number>1</number>
         </property>
         <property name="value">
-         <number>0</number>
+         <number>100</number>
         </property>
         <property name="orientation">
-         <enum>Qt::Vertical</enum>
+         <enum>Qt::Orientation::Vertical</enum>
         </property>
         <property name="tickPosition">
-         <enum>QSlider::NoTicks</enum>
+         <enum>QSlider::TickPosition::NoTicks</enum>
         </property>
        </widget>
       </item>
@@ -337,7 +320,7 @@ color: rgb(255, 248, 41);</string>
           </size>
          </property>
          <property name="tabPosition">
-          <enum>QTabWidget::West</enum>
+          <enum>QTabWidget::TabPosition::West</enum>
          </property>
          <property name="currentIndex">
           <number>0</number>
@@ -372,8 +355,8 @@ color: rgb(255, 248, 41);</string>
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>461</width>
-                <height>284</height>
+                <width>466</width>
+                <height>295</height>
                </rect>
               </property>
               <layout class="QHBoxLayout" name="horizontalLayout_5">
@@ -412,10 +395,10 @@ color: rgb(255, 248, 41);</string>
           <string notr="true">background-color: rgb(222, 237, 255);</string>
          </property>
          <property name="frameShape">
-          <enum>QFrame::WinPanel</enum>
+          <enum>QFrame::Shape::WinPanel</enum>
          </property>
          <property name="frameShadow">
-          <enum>QFrame::Sunken</enum>
+          <enum>QFrame::Shadow::Sunken</enum>
          </property>
          <property name="lineWidth">
           <number>2</number>
@@ -434,6 +417,205 @@ color: rgb(255, 248, 41);</string>
             <width>110</width>
             <height>16777215</height>
            </size>
+          </property>
+          <property name="palette">
+           <palette>
+            <active>
+             <colorrole role="WindowText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>0</red>
+                <green>0</green>
+                <blue>127</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Button">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>222</red>
+                <green>237</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Mid">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>0</red>
+                <green>0</green>
+                <blue>127</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Base">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>222</red>
+                <green>237</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Window">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>222</red>
+                <green>237</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="HighlightedText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>85</red>
+                <green>85</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="ToolTipText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>0</red>
+                <green>170</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+            </active>
+            <inactive>
+             <colorrole role="WindowText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>0</red>
+                <green>0</green>
+                <blue>127</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Button">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>222</red>
+                <green>237</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Mid">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>0</red>
+                <green>0</green>
+                <blue>127</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Base">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>222</red>
+                <green>237</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Window">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>222</red>
+                <green>237</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="HighlightedText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>85</red>
+                <green>85</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="ToolTipText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>0</red>
+                <green>170</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+            </inactive>
+            <disabled>
+             <colorrole role="WindowText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="96">
+                <red>164</red>
+                <green>166</green>
+                <blue>168</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Button">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>222</red>
+                <green>237</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Mid">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>175</red>
+                <green>175</green>
+                <blue>175</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Base">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>222</red>
+                <green>237</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Window">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>222</red>
+                <green>237</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="HighlightedText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>85</red>
+                <green>85</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="ToolTipText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>218</red>
+                <green>218</green>
+                <blue>218</blue>
+               </color>
+              </brush>
+             </colorrole>
+            </disabled>
+           </palette>
           </property>
           <property name="toolTip">
            <string>Enable/Disable RX audio equalizer.</string>
@@ -463,6 +645,151 @@ color: rgb(255, 248, 41);</string>
             <height>0</height>
            </size>
           </property>
+          <property name="palette">
+           <palette>
+            <active>
+             <colorrole role="WindowText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>0</red>
+                <green>0</green>
+                <blue>127</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Button">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>222</red>
+                <green>237</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Mid">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>0</red>
+                <green>0</green>
+                <blue>127</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Base">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>222</red>
+                <green>237</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Window">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>222</red>
+                <green>237</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+            </active>
+            <inactive>
+             <colorrole role="WindowText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>0</red>
+                <green>0</green>
+                <blue>127</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Button">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>222</red>
+                <green>237</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Mid">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>0</red>
+                <green>0</green>
+                <blue>127</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Base">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>222</red>
+                <green>237</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Window">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>222</red>
+                <green>237</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+            </inactive>
+            <disabled>
+             <colorrole role="WindowText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="96">
+                <red>164</red>
+                <green>166</green>
+                <blue>168</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Button">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>222</red>
+                <green>237</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Mid">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>175</red>
+                <green>175</green>
+                <blue>175</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Base">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>222</red>
+                <green>237</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Window">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>222</red>
+                <green>237</green>
+                <blue>255</blue>
+               </color>
+              </brush>
+             </colorrole>
+            </disabled>
+           </palette>
+          </property>
           <property name="toolTip">
            <string>Enable/Disable TX audio equalizer.</string>
           </property>
@@ -490,6 +817,151 @@ color: rgb(255, 248, 41);</string>
             <width>40</width>
             <height>16777215</height>
            </size>
+          </property>
+          <property name="palette">
+           <palette>
+            <active>
+             <colorrole role="WindowText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>0</red>
+                <green>0</green>
+                <blue>127</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Button">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>217</red>
+                <green>217</green>
+                <blue>217</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="ButtonText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>0</red>
+                <green>0</green>
+                <blue>127</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Base">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>217</red>
+                <green>217</green>
+                <blue>217</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Window">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>217</red>
+                <green>217</green>
+                <blue>217</blue>
+               </color>
+              </brush>
+             </colorrole>
+            </active>
+            <inactive>
+             <colorrole role="WindowText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>0</red>
+                <green>0</green>
+                <blue>127</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Button">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>217</red>
+                <green>217</green>
+                <blue>217</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="ButtonText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>0</red>
+                <green>0</green>
+                <blue>127</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Base">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>217</red>
+                <green>217</green>
+                <blue>217</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Window">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>217</red>
+                <green>217</green>
+                <blue>217</blue>
+               </color>
+              </brush>
+             </colorrole>
+            </inactive>
+            <disabled>
+             <colorrole role="WindowText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="96">
+                <red>164</red>
+                <green>166</green>
+                <blue>168</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Button">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>217</red>
+                <green>217</green>
+                <blue>217</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="ButtonText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="96">
+                <red>164</red>
+                <green>166</green>
+                <blue>168</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Base">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>217</red>
+                <green>217</green>
+                <blue>217</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Window">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>217</red>
+                <green>217</green>
+                <blue>217</blue>
+               </color>
+              </brush>
+             </colorrole>
+            </disabled>
+           </palette>
           </property>
           <property name="toolTip">
            <string>Enable/Disable tracking notch filters.</string>
@@ -519,6 +991,124 @@ color: rgb(255, 248, 41);</string>
             <height>16777215</height>
            </size>
           </property>
+          <property name="palette">
+           <palette>
+            <active>
+             <colorrole role="Button">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>217</red>
+                <green>217</green>
+                <blue>217</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="ButtonText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>0</red>
+                <green>0</green>
+                <blue>127</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Base">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>217</red>
+                <green>217</green>
+                <blue>217</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Window">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>217</red>
+                <green>217</green>
+                <blue>217</blue>
+               </color>
+              </brush>
+             </colorrole>
+            </active>
+            <inactive>
+             <colorrole role="Button">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>217</red>
+                <green>217</green>
+                <blue>217</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="ButtonText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>0</red>
+                <green>0</green>
+                <blue>127</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Base">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>217</red>
+                <green>217</green>
+                <blue>217</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Window">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>217</red>
+                <green>217</green>
+                <blue>217</blue>
+               </color>
+              </brush>
+             </colorrole>
+            </inactive>
+            <disabled>
+             <colorrole role="Button">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>217</red>
+                <green>217</green>
+                <blue>217</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="ButtonText">
+              <brush brushstyle="SolidPattern">
+               <color alpha="96">
+                <red>164</red>
+                <green>166</green>
+                <blue>168</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Base">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>217</red>
+                <green>217</green>
+                <blue>217</blue>
+               </color>
+              </brush>
+             </colorrole>
+             <colorrole role="Window">
+              <brush brushstyle="SolidPattern">
+               <color alpha="255">
+                <red>217</red>
+                <green>217</green>
+                <blue>217</blue>
+               </color>
+              </brush>
+             </colorrole>
+            </disabled>
+           </palette>
+          </property>
           <property name="toolTip">
            <string>Add tracking notch filter to current band.</string>
           </property>
@@ -534,7 +1124,7 @@ color: rgb(255, 248, 41);</string>
        <item>
         <spacer name="horizontalSpacer_6">
          <property name="orientation">
-          <enum>Qt::Horizontal</enum>
+          <enum>Qt::Orientation::Horizontal</enum>
          </property>
          <property name="sizeHint" stdset="0">
           <size>
@@ -547,7 +1137,7 @@ color: rgb(255, 248, 41);</string>
        <item>
         <spacer name="verticalSpacer_2">
          <property name="orientation">
-          <enum>Qt::Vertical</enum>
+          <enum>Qt::Orientation::Vertical</enum>
          </property>
          <property name="sizeHint" stdset="0">
           <size>
@@ -626,7 +1216,7 @@ color: rgb(255, 248, 41);</string>
           <item>
            <spacer name="verticalSpacer">
             <property name="orientation">
-             <enum>Qt::Vertical</enum>
+             <enum>Qt::Orientation::Vertical</enum>
             </property>
             <property name="sizeHint" stdset="0">
              <size>
@@ -650,7 +1240,7 @@ color: rgb(255, 248, 41);</string>
      <x>0</x>
      <y>0</y>
      <width>1135</width>
-     <height>32</height>
+     <height>23</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuBand">
@@ -659,7 +1249,7 @@ color: rgb(255, 248, 41);</string>
     </property>
     <widget class="QMenu" name="menuXVTR">
      <property name="title">
-      <string>XVTR</string>
+      <string>&amp;XVTR</string>
      </property>
     </widget>
     <addaction name="actionKeypad"/>
@@ -694,6 +1284,7 @@ color: rgb(255, 248, 41);</string>
     <addaction name="actionAM"/>
     <addaction name="actionSAM"/>
     <addaction name="actionFMN"/>
+    <addaction name="actionFMW"/>
     <addaction name="actionDIGL"/>
     <addaction name="actionDIGU"/>
    </widget>
@@ -766,7 +1357,7 @@ color: rgb(255, 248, 41);</string>
     </property>
     <widget class="QMenu" name="menuView_Bookmarks">
      <property name="title">
-      <string>View Bookmarks</string>
+      <string>&amp;View Bookmarks</string>
      </property>
     </widget>
     <addaction name="actionBookmarkThisFrequency"/>
@@ -778,7 +1369,7 @@ color: rgb(255, 248, 41);</string>
    </widget>
    <widget class="QMenu" name="menuSquelch">
     <property name="title">
-     <string>Squelch</string>
+     <string>S&amp;quelch</string>
     </property>
     <addaction name="actionSquelchEnable"/>
     <addaction name="separator"/>
@@ -805,7 +1396,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>60</string>
+    <string>&amp;60</string>
    </property>
   </action>
   <action name="action40">
@@ -813,7 +1404,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>40</string>
+    <string>&amp;40</string>
    </property>
   </action>
   <action name="action30">
@@ -821,7 +1412,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>30</string>
+    <string>&amp;30</string>
    </property>
   </action>
   <action name="action20">
@@ -829,7 +1420,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>20</string>
+    <string>&amp;20</string>
    </property>
   </action>
   <action name="action17">
@@ -837,7 +1428,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>17</string>
+    <string>1&amp;7</string>
    </property>
   </action>
   <action name="action15">
@@ -845,7 +1436,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>15</string>
+    <string>1&amp;5</string>
    </property>
   </action>
   <action name="action12">
@@ -861,7 +1452,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>10</string>
+    <string>1&amp;0</string>
    </property>
   </action>
   <action name="action6">
@@ -877,7 +1468,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Gen</string>
+    <string>&amp;Gen</string>
    </property>
   </action>
   <action name="actionWWV">
@@ -885,7 +1476,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>WWV</string>
+    <string>&amp;WWV</string>
    </property>
   </action>
   <action name="actionLSB">
@@ -893,7 +1484,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>LSB</string>
+    <string>&amp;LSB</string>
    </property>
   </action>
   <action name="actionUSB">
@@ -901,7 +1492,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>USB</string>
+    <string>&amp;USB</string>
    </property>
   </action>
   <action name="actionDSB">
@@ -909,7 +1500,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>DSB</string>
+    <string>&amp;DSB</string>
    </property>
   </action>
   <action name="actionCWL">
@@ -917,7 +1508,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>CWL</string>
+    <string>C&amp;WL</string>
    </property>
   </action>
   <action name="actionCWU">
@@ -925,7 +1516,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>CWU</string>
+    <string>&amp;CWU</string>
    </property>
   </action>
   <action name="actionAM">
@@ -933,7 +1524,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>AM</string>
+    <string>&amp;AM</string>
    </property>
   </action>
   <action name="actionFMN">
@@ -941,7 +1532,18 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>FMN</string>
+    <string>&amp;FMN</string>
+   </property>
+  </action>
+  <action name="actionFMW">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>FMW</string>
+   </property>
+   <property name="toolTip">
+    <string>Wide band (broadcast) FM, needs a receiver rate of 192 kHz or more</string>
    </property>
   </action>
   <action name="actionFilter_0">
@@ -949,7 +1551,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Filter 0</string>
+    <string>&amp;Filter 0</string>
    </property>
   </action>
   <action name="actionFilter_1">
@@ -957,7 +1559,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Filter 1</string>
+    <string>Filter &amp;1</string>
    </property>
   </action>
   <action name="actionFilter_2">
@@ -965,7 +1567,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Filter 2</string>
+    <string>Filter &amp;2</string>
    </property>
   </action>
   <action name="actionFilter_3">
@@ -973,7 +1575,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Filter 3</string>
+    <string>Filter &amp;3</string>
    </property>
   </action>
   <action name="actionFilter_4">
@@ -981,7 +1583,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Filter 4</string>
+    <string>Filter &amp;4</string>
    </property>
   </action>
   <action name="actionFilter_5">
@@ -989,7 +1591,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Filter 5</string>
+    <string>Filter &amp;5</string>
    </property>
   </action>
   <action name="actionFilter_6">
@@ -997,7 +1599,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Filter 6</string>
+    <string>Filter &amp;6</string>
    </property>
   </action>
   <action name="actionFilter_7">
@@ -1005,7 +1607,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Filter 7</string>
+    <string>Filter &amp;7</string>
    </property>
   </action>
   <action name="actionFilter_8">
@@ -1013,7 +1615,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Filter 8</string>
+    <string>Filter &amp;8</string>
    </property>
   </action>
   <action name="actionFilter_9">
@@ -1021,7 +1623,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Filter 9</string>
+    <string>Filter &amp;9</string>
    </property>
   </action>
   <action name="actionANF">
@@ -1029,7 +1631,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>ANF</string>
+    <string>&amp;ANF</string>
    </property>
   </action>
   <action name="actionNR">
@@ -1037,7 +1639,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>NR</string>
+    <string>&amp;NR</string>
    </property>
   </action>
   <action name="actionNB">
@@ -1045,7 +1647,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>NB</string>
+    <string>N&amp;B</string>
    </property>
   </action>
   <action name="actionSlow">
@@ -1053,7 +1655,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Slow</string>
+    <string>&amp;Slow</string>
    </property>
   </action>
   <action name="actionMedium">
@@ -1061,7 +1663,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Medium</string>
+    <string>&amp;Medium</string>
    </property>
   </action>
   <action name="actionFast">
@@ -1077,7 +1679,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Long</string>
+    <string>&amp;Long</string>
    </property>
   </action>
   <action name="actionSAM">
@@ -1085,7 +1687,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>SAM</string>
+    <string>&amp;SAM</string>
    </property>
   </action>
   <action name="actionDIGL">
@@ -1093,7 +1695,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>DIGL</string>
+    <string>D&amp;IGL</string>
    </property>
   </action>
   <action name="actionDIGU">
@@ -1101,7 +1703,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>DIGU</string>
+    <string>DI&amp;GU</string>
    </property>
   </action>
   <action name="actionConfigure">
@@ -1136,7 +1738,7 @@ color: rgb(255, 248, 41);</string>
   </action>
   <action name="actionConnectToServer">
    <property name="text">
-    <string>Connect</string>
+    <string>&amp;Connect</string>
    </property>
    <property name="toolTip">
     <string>Connect to a dspserver</string>
@@ -1150,7 +1752,7 @@ color: rgb(255, 248, 41);</string>
     <bool>false</bool>
    </property>
    <property name="text">
-    <string>Disconnect</string>
+    <string>&amp;Disconnect</string>
    </property>
    <property name="shortcut">
     <string>D</string>
@@ -1169,7 +1771,7 @@ color: rgb(255, 248, 41);</string>
   </action>
   <action name="actionConfig">
    <property name="text">
-    <string>Configure</string>
+    <string>C&amp;onfigure</string>
    </property>
   </action>
   <action name="actionMuteMainRx">
@@ -1177,7 +1779,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Mute Main Rx</string>
+    <string>&amp;Mute Main Rx</string>
    </property>
   </action>
   <action name="actionMuteSubRx">
@@ -1214,12 +1816,12 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Bandscope</string>
+    <string>&amp;Bandscope</string>
    </property>
   </action>
   <action name="actionAbout">
    <property name="text">
-    <string>About</string>
+    <string>&amp;About</string>
    </property>
   </action>
   <action name="actionRecord">
@@ -1227,7 +1829,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Record</string>
+    <string>&amp;Record</string>
    </property>
   </action>
   <action name="actionBookmark">
@@ -1237,12 +1839,12 @@ color: rgb(255, 248, 41);</string>
   </action>
   <action name="actionEditBookmarks">
    <property name="text">
-    <string>Edit Bookmarks</string>
+    <string>&amp;Edit Bookmarks</string>
    </property>
   </action>
   <action name="actionBookmarkThisFrequency">
    <property name="text">
-    <string>Bookmark This Frequency</string>
+    <string>&amp;Bookmark This Frequency</string>
    </property>
   </action>
   <action name="actionXVTRConfigure">
@@ -1260,7 +1862,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>NB2</string>
+    <string>NB&amp;2</string>
    </property>
   </action>
   <action name="actionPolyphase">
@@ -1273,7 +1875,7 @@ color: rgb(255, 248, 41);</string>
   </action>
   <action name="actionKeypad">
    <property name="text">
-    <string>Keypad</string>
+    <string>&amp;Keypad</string>
    </property>
    <property name="shortcut">
     <string>K</string>
@@ -1281,7 +1883,7 @@ color: rgb(255, 248, 41);</string>
   </action>
   <action name="actionQuick_Server_List">
    <property name="text">
-    <string>Quick Server List  </string>
+    <string>&amp;Quick Server List  </string>
    </property>
    <property name="toolTip">
     <string>Quickly select a shared SDR  server from a list of online radios</string>
@@ -1295,12 +1897,12 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Enable</string>
+    <string>&amp;Enable</string>
    </property>
   </action>
   <action name="actionSquelchReset">
    <property name="text">
-    <string>Reset</string>
+    <string>&amp;Reset</string>
    </property>
   </action>
   <action name="actionPWS_Pre_Filter">
@@ -1340,12 +1942,12 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Fixed</string>
+    <string>&amp;Fixed</string>
    </property>
   </action>
   <action name="actionEqualizer">
    <property name="text">
-    <string>Equalizer</string>
+    <string>&amp;Equalizer</string>
    </property>
   </action>
   <action name="action80">
@@ -1353,7 +1955,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>80</string>
+    <string>&amp;80</string>
    </property>
   </action>
   <action name="action160">
@@ -1361,7 +1963,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>160</string>
+    <string>&amp;160</string>
    </property>
   </action>
   <action name="actionFilter_10">
@@ -1369,7 +1971,7 @@ color: rgb(255, 248, 41);</string>
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Filter 10</string>
+    <string>F&amp;ilter 10</string>
    </property>
   </action>
  </widget>

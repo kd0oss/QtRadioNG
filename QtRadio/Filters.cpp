@@ -93,21 +93,6 @@ void Filter::init(QString t,int l,int h)
     high=h;
 }
 
-void Filter::setText(QString t)
-{
-    text=t;
-}
-
-void Filter::setLow(int l)
-{
-    low=l;
-}
-
-void Filter::setHigh(int h)
-{
-    high=h;
-}
-
 QString Filter::getText()
 {
     return text;
@@ -188,22 +173,45 @@ QString Filters::getText()
 /********************************************************/
 FMNFilters::FMNFilters()
 {
-    filters[0].init("80k", -40000,40000);
-    filters[1].init("12k",  -6000, 6000);
-    filters[2].init("10k",  -5000, 5000);
-    filters[3].init("8k",   -4000, 4000);
-    filters[4].init("6.6k", -3300, 3300);
-    filters[5].init("5.2k", -2600, 2600);
-    filters[6].init("4.0k", -2000, 2000);
-    filters[7].init("3.1k", -1550, 1550);
-    filters[8].init("2.9k", -1450, 1450);
-    filters[9].init("2.4k", -1200, 1200);
-    filters[10].init("Vari",-2600, 2600);
+    filters[0].init("80k",   -40000, 40000);
+    filters[1].init("25k",   -12500, 12500);    // 25 kHz channel spacing
+    filters[2].init("12.5k",  -6250,  6250);    // 12.5 kHz channel spacing
+    filters[3].init("10k",    -5000,  5000);
+    filters[4].init("8k",     -4000,  4000);
+    filters[5].init("6.6k",   -3300,  3300);
+    filters[6].init("5.2k",   -2600,  2600);
+    filters[7].init("4.0k",   -2000,  2000);
+    filters[8].init("3.1k",   -1550,  1550);
+    filters[9].init("2.4k",   -1200,  1200);
+    filters[10].init("Vari",  -2600,  2600);
 
-    selectFilter(4);
+    selectFilter(5);    // 6.6k
 }
 
 FMNFilters::~FMNFilters()
+{
+}
+
+/* Broadcast FM.  The filter only marks the channel on the panadapter: the
+ * demodulator in dspserver uses the whole receiver bandwidth (192/384 kHz). */
+FMWFilters::FMWFilters()
+{
+    filters[0].init("200k", -100000, 100000);
+    filters[1].init("180k",  -90000,  90000);
+    filters[2].init("150k",  -75000,  75000);
+    filters[3].init("120k",  -60000,  60000);
+    filters[4].init("100k",  -50000,  50000);
+    filters[5].init("80k",   -40000,  40000);
+    filters[6].init("60k",   -30000,  30000);
+    filters[7].init("50k",   -25000,  25000);
+    filters[8].init("40k",   -20000,  20000);
+    filters[9].init("30k",   -15000,  15000);
+    filters[10].init("Vari", -90000,  90000);
+
+    selectFilter(1);
+}
+
+FMWFilters::~FMWFilters()
 {
 }
 

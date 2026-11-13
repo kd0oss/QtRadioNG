@@ -63,9 +63,6 @@
 //#include "ext.h"
 //#include "iambic.h"
 
-#define min(x,y) (x<y?x:y)
-
-#define PI 3.1415926535897932F
 
 /*
  * A new 'action table' defines what to to
@@ -128,22 +125,10 @@ static long ddc_sequence[MAX_DDC];
 
 //static int buffer_size=BUFFER_SIZE;
 //static int fft_size=4096;
-static int dspRate=48000;
-static int outputRate=48000;
-
-static int micSampleRate=48000;
-static int micDspRate=48000;
-static int micOutputRate=192000;
-static int micoutputsamples;  // 48000 in, 192000 out
-
-static double micinputbuffer[MAX_BUFFER_SIZE*2]; // 48000
-static double iqoutputbuffer[MAX_BUFFER_SIZE*4*2]; //192000
 
 static long tx_iq_sequence=0;
 static unsigned char iqbuffer[1444];
 static int iqindex;
-
-static float phase = 0.0F;
 
 static long response_sequence=0;
 static long highprio_rcvd_sequence=0;
@@ -189,8 +174,6 @@ static pthread_t iq_thread_id[MAX_DDC];
 static int outputsamples;
 #endif
 
-static int leftaudiosample;
-static int rightaudiosample;
 static long audiosequence;
 static unsigned char audiobuffer[260]; // was 1444
 static int audioindex;
@@ -237,10 +220,9 @@ static void *high_priority_thread(void *data);
 static void *mic_line_thread(void *data);
 static void *iq_thread(void *data);
 static void  process_iq_data(unsigned char *buffer, RECEIVER *rx);
-static void  process_ps_iq_data(unsigned char *buffer);
 static void  process_div_iq_data(unsigned char *buffer);
 static void  process_command_response();
-static void  process_high_priority();
+static void  process_high_priority(void);
 static void  process_mic_data(int bytes);
 static void process_wideband_data(WIDEBAND *w, unsigned char *buffer);
 
@@ -279,14 +261,6 @@ void schedule_general() {
 
 void schedule_receive_specific() {
     new_protocol_receive_specific();
-}
-
-void schedule_transmit_specific() {
-    new_protocol_transmit_specific();
-}
-
-void filter_board_changed() {
-    schedule_general();
 }
 
 /*
@@ -385,7 +359,6 @@ void update_action_table() {
 
 void new_protocol_init() {
     int i;
-    int rc;
 
     fprintf(stderr, "new_protocol_init: MIC_SAMPLES=%d\n", MIC_SAMPLES);
 
@@ -397,7 +370,6 @@ void new_protocol_init() {
 #ifdef INCLUDED
     outputsamples=buffer_size;
 #endif
-    micoutputsamples=buffer_size*4;
 
 #ifdef OLD_AUDIO
     if (local_audio) {
@@ -424,7 +396,7 @@ void new_protocol_init() {
     response_sem=sem_open("RESPONSE", O_CREAT | O_EXCL, 0700, 0);
     if (response_sem == SEM_FAILED) perror("ResponseSemaphore");
 #else
-    rc=sem_init(&response_sem, 0, 0); // check return value!
+    sem_init(&response_sem, 0, 0); // check return value!
 #endif
     //rc=sem_init(&send_high_priority_sem, 0, 1); // check return value!
     //rc=sem_init(&send_general_sem, 0, 1); // check return value!
@@ -437,8 +409,8 @@ void new_protocol_init() {
     command_response_sem_buffer=sem_open("COMMRESBUF", O_CREAT | O_EXCL, 0700, 0);
     if (command_response_sem_buffer == SEM_FAILED) perror("CommandResponseBufferSemaphore");
 #else
-    rc=sem_init(&command_response_sem_ready, 0, 0); // check return value!
-    rc=sem_init(&command_response_sem_buffer, 0, 0); // check return value!
+    sem_init(&command_response_sem_ready, 0, 0); // check return value!
+    sem_init(&command_response_sem_buffer, 0, 0); // check return value!
 #endif
     pthread_create(&(command_response_thread_id), NULL, &command_response_thread, NULL);
     if (!command_response_thread_id) {
@@ -454,8 +426,8 @@ void new_protocol_init() {
     high_priority_sem_buffer=sem_open("HIGHBUF",   O_CREAT | O_EXCL, 0700, 0);
     if (high_priority_sem_buffer == SEM_FAILED) perror("HIGHPriorityBufferSemaphore");
 #else
-    rc=sem_init(&high_priority_sem_ready, 0, 0); // check return value!
-    rc=sem_init(&high_priority_sem_buffer, 0, 0); // check return value!
+    sem_init(&high_priority_sem_ready, 0, 0); // check return value!
+    sem_init(&high_priority_sem_buffer, 0, 0); // check return value!
 #endif
     pthread_create(&(high_priority_thread_id), NULL, &high_priority_thread, NULL);
     if ( ! high_priority_thread_id ) {
@@ -471,8 +443,8 @@ void new_protocol_init() {
     mic_line_sem_buffer=sem_open("MICBUF",   O_CREAT | O_EXCL, 0700, 0);
     if (mic_line_sem_buffer == SEM_FAILED) perror("MicLineBufferSemaphore");
 #else
-    rc=sem_init(&mic_line_sem_ready, 0, 0); // check return value!
-    rc=sem_init(&mic_line_sem_buffer, 0, 0); // check return value!
+    sem_init(&mic_line_sem_ready, 0, 0); // check return value!
+    sem_init(&mic_line_sem_buffer, 0, 0); // check return value!
 #endif
     pthread_create(&(mic_line_thread_id), NULL, &mic_line_thread, NULL);
     if ( ! mic_line_thread_id ) {
@@ -505,8 +477,8 @@ void new_protocol_init() {
             perror("IQbufferSemaphore");
         }
 #else
-        rc=sem_init(&iq_sem_ready[i], 0, 0); // check return value!
-        rc=sem_init(&iq_sem_buffer[i], 0, 0); // check return value!
+        sem_init(&iq_sem_ready[i], 0, 0); // check return value!
+        sem_init(&iq_sem_buffer[i], 0, 0); // check return value!
 #endif
         ptr = (int*)malloc(sizeof(int));
         *ptr = i;
@@ -606,8 +578,8 @@ static void new_protocol_general() {
     general_buffer[3]=general_sequence;
 
     if (radio != NULL) {
-        if (radio->wideband != NULL) {
-            general_buffer[23] = 0x01; // enable for ADC-0
+        if (radio->wideband != NULL && wideband_requested) {
+            general_buffer[23] = 0x01; // enable for ADC-0 (only while a bandscope is open)
         }
     }
 
@@ -654,13 +626,10 @@ static void new_protocol_general() {
 
 static void new_protocol_high_priority() {
     int i;
-    //    BAND *band;
     long long rxFrequency;
     long long txFrequency;
     long phase;
     int ddc;
-    //int txvfo=get_tx_vfo();
-    //int txmode=get_tx_mode();
 
     if (data_socket==-1) {
         return;
@@ -679,13 +648,14 @@ static void new_protocol_high_priority() {
     //
     if (transmitter != NULL)
     {
-        if (transmitter->txmode==modeCWU || transmitter->txmode==modeCWL) {
-            if (isTransmitting() && (!cw_keyer_internal || !cw_breakin || CAT_cw_is_active)) high_priority_buffer_to_radio[4]|=0x02;
-        } else {
+//        if (transmitter->txmode==modeCWU || transmitter->txmode==modeCWL) {
+//            if (isTransmitting() && (!cw_keyer_internal || !cw_breakin || CAT_cw_is_active))
+//                high_priority_buffer_to_radio[4]|=0x02;
+//        } else {
             if (isTransmitting()) {
                 high_priority_buffer_to_radio[4]|=0x02;
             }
-        }
+//        }
     }
 
     //
@@ -697,18 +667,7 @@ static void new_protocol_high_priority() {
         // Use frequency of first receiver for both DDC0 and DDC1
         // This is overridden later if we do PURESIGNAL TX
         //
-        rxFrequency=receiver[0]->frequency-receiver[0]->lo;
-        if (receiver[0]->rit_enabled) {
-            rxFrequency+=receiver[0]->rit;
-        }
-
-        if (cw_is_on_vfo_freq) {
-            if (receiver[0]->mode==modeCWU) {
-                rxFrequency-=(long long)cw_keyer_sidetone_frequency;
-            } else if (receiver[0]->mode==modeCWL) {
-                rxFrequency+=(long long)cw_keyer_sidetone_frequency;
-            }
-        }
+        rxFrequency = receiver[0]->frequency-receiver[0]->lo;
 
         phase=(long)((4294967296.0*(double)rxFrequency)/122880000.0);
         high_priority_buffer_to_radio[ 9]=phase>>24;
@@ -730,16 +689,16 @@ static void new_protocol_high_priority() {
             if (device==NEW_DEVICE_ANGELIA || device==NEW_DEVICE_ORION || device == NEW_DEVICE_ORION2) ddc=2+i;
             int v=receiver[i]->id;
             rxFrequency=receiver[v]->frequency-receiver[v]->lo;
-            if (receiver[v]->rit_enabled) {
-                rxFrequency+=receiver[v]->rit;
-            }
-            if (cw_is_on_vfo_freq) {
-                if (receiver[v]->mode==modeCWU) {
-                    rxFrequency-=(long long)cw_keyer_sidetone_frequency;
-                } else if (receiver[v]->mode==modeCWL) {
-                    rxFrequency+=(long long)cw_keyer_sidetone_frequency;
-                }
-            }
+//            if (receiver[v]->rit_enabled) {
+//                rxFrequency+=receiver[v]->rit;
+//            }
+//            if (cw_is_on_vfo_freq) {
+//                if (receiver[v]->mode==modeCWU) {
+//                    rxFrequency-=(long long)cw_keyer_sidetone_frequency;
+//                } else if (receiver[v]->mode==modeCWL) {
+//                    rxFrequency+=(long long)cw_keyer_sidetone_frequency;
+//                }
+//            }
 //fprintf(stderr, "rxFreq: %lld\n", rxFrequency);
             phase=(long)((4294967296.0*(double)rxFrequency)/122880000.0);
             high_priority_buffer_to_radio[9+(ddc*4)]=phase>>24;
@@ -756,18 +715,18 @@ static void new_protocol_high_priority() {
     if (transmitter != NULL)
     {
         txFrequency=transmitter->frequency-transmitter->lo;
-        if (transmitter->ctun) txFrequency += transmitter->offset;
-        if (transmitter->xit_enabled) {
-            txFrequency+=transmitter->xit;
-        }
+//        if (transmitter->ctun) txFrequency += transmitter->offset;
+//        if (transmitter->xit_enabled) {
+//            txFrequency+=transmitter->xit;
+//        }
 
-        if (!cw_is_on_vfo_freq) {
-            if (transmitter->txmode==modeCWU) {
-                txFrequency+=(long long)cw_keyer_sidetone_frequency;
-            } else if (transmitter->txmode==modeCWL) {
-                txFrequency-=(long long)cw_keyer_sidetone_frequency;
-            }
-        }
+//        if (!cw_is_on_vfo_freq) {
+//            if (transmitter->txmode==modeCWU) {
+//                txFrequency+=(long long)cw_keyer_sidetone_frequency;
+//            } else if (transmitter->txmode==modeCWL) {
+//                txFrequency-=(long long)cw_keyer_sidetone_frequency;
+//            }
+//        }
 
         phase=(long)((4294967296.0*(double)txFrequency)/122880000.0);
     }
@@ -794,12 +753,12 @@ static void new_protocol_high_priority() {
 
     int power=0;
     if (isTransmitting()) {
-        if (tune && !transmitter->tune_use_drive) {
-            double fac=sqrt((double)transmitter->tune_percent * 0.01);
-            power=(int)((double)transmitter->drive_level*fac);
-        } else {
+//        if (tune && !transmitter->tune_use_drive) {
+//            double fac=sqrt((double)transmitter->tune_percent * 0.01);
+//            power=(int)((double)transmitter->drive_level*fac);
+//        } else {
             power=transmitter->drive_level;
-        }
+//        }
     }
 
     high_priority_buffer_to_radio[345]=power&0xFF;
@@ -1367,69 +1326,6 @@ void new_protocol_stop() {
     close (data_socket);
 }
 
-//
-// This is the function called by the "Restart" button
-// in the new menu if P2 is running
-//
-void new_protocol_restart() {
-    fd_set fds;
-    struct timeval tv;
-    char *buffer;
-    //
-    // halt the protocol, wait 200 msec, and re-start it
-    // the data socket is drained but kept open
-    //
-    running=0;
-    // wait until the thread that receives from the radio has terminated
-    pthread_join(new_protocol_thread_id, NULL);
-    pthread_join(new_protocol_timer_thread_id, NULL);
-    // send HP packet ==> stop radio
-    new_protocol_high_priority();
-    // let the FPGA rest a while
-    usleep(200000); // 200 ms
-    //
-    // drain all data that might still wait in the data_socket.
-    // (use select() and read until nothing is left)
-    //
-    FD_ZERO(&fds);
-    FD_SET(data_socket, &fds);
-    tv.tv_usec = 50000;
-    tv.tv_sec = 0;
-    buffer=malloc(NET_BUFFER_SIZE);
-    while (select(data_socket+1, &fds, NULL, NULL, &tv) > 0) {
-        recvfrom(data_socket,buffer,NET_BUFFER_SIZE,0,(struct sockaddr*)&addr,&length);
-    }
-    free(buffer);
-    //
-    // reset sequence numbers, action table, etc.
-    //
-    high_priority_sequence=0;
-    rx_specific_sequence=0;
-    tx_specific_sequence=0;
-    response_sequence=0;
-    highprio_rcvd_sequence=0;
-    micsamples_sequence=0;
-    audiosequence=0;
-    tx_iq_sequence=0;
-
-    memset(rxcase      , 0, MAX_DDC*sizeof(int));
-    memset(rxid        , 0, MAX_DDC*sizeof(int));
-    memset(ddc_sequence, 0, MAX_DDC*sizeof(long));
-    update_action_table();
-
-    // running is set to 1 at the top of new_protocol_thread,
-    // but this may lead to race conditions. So out of paranoia,
-    // set it to 1 here as well such that we are *absolutely* sure
-    // is is set before starting the timer thread sending the HP packet.
-    running=1;
-    pthread_create(&(new_protocol_thread_id), NULL, &new_protocol_thread, NULL);
-
-    // start the protocol
-    new_protocol_general();
-    new_protocol_start();
-    new_protocol_high_priority();
-}
-
 static void* new_protocol_thread(void *data) {
 
     int ddc;
@@ -1623,7 +1519,7 @@ static void* iq_thread(void *data)
     long sequence;
     unsigned char *buffer;
 
-    fprintf(stderr, "iq_thread: ddc=%d\n",ddc);
+    fprintf(stderr, "iq_thread: ddc=%d\n", ddc);
     while (1)
     {
 #ifdef __APPLE__
@@ -1633,16 +1529,16 @@ static void* iq_thread(void *data)
         sem_post(&iq_sem_ready[ddc]);
         sem_wait(&iq_sem_buffer[ddc]);
 #endif
-        buffer=iq_buffer[ddc];
+        buffer = iq_buffer[ddc];
         if (buffer == NULL) continue;
         //
         //  Perform sequence check HERE for all cases
         //
-        sequence=((buffer[0]&0xFF)<<24)+((buffer[1]&0xFF)<<16)+((buffer[2]&0xFF)<<8)+(buffer[3]&0xFF);
-        if (ddc_sequence[ddc] !=sequence)
+        sequence = ((buffer[0]&0xFF)<<24)+((buffer[1]&0xFF)<<16)+((buffer[2]&0xFF)<<8)+(buffer[3]&0xFF);
+        if (ddc_sequence[ddc] != sequence)
         {
-            printf("DDC %d sequence error: expected %ld got %ld\n",ddc,ddc_sequence[ddc],sequence);
-            ddc_sequence[ddc]=sequence;
+            printf("DDC %d sequence error: expected %ld got %ld\n", ddc, ddc_sequence[ddc], sequence);
+            ddc_sequence[ddc] = sequence;
             sequence_errors++;
         }
         ddc_sequence[ddc]++;
@@ -1660,8 +1556,7 @@ static void* iq_thread(void *data)
             process_iq_data(buffer, receiver[rxid[ddc]]);
             break;
         case RXACTION_PS:
-            process_ps_iq_data(buffer);
-            break;
+            break;              // PureSignal feedback is not used
         case RXACTION_DIV:
             process_div_iq_data(buffer);
             break;
@@ -1675,7 +1570,6 @@ static void* iq_thread(void *data)
 static void process_iq_data(unsigned char *buffer, RECEIVER *rx)
 {
     //long long timestamp;   // never used
-    int bitspersample;       // used in debug code
     int samplesperframe;
     int b;
     int leftsample;
@@ -1691,7 +1585,6 @@ static void process_iq_data(unsigned char *buffer, RECEIVER *rx)
     //         +((long long)(buffer[9]&0xFF)<<16)
     //         +((long long)(buffer[10]&0xFF)<<8)
     //         +((long long)(buffer[11]&0xFF)   );
-    bitspersample=((buffer[12]&0xFF)<<8)+(buffer[13]&0xFF);   // used in debug code
     samplesperframe=((buffer[14]&0xFF)<<8)+(buffer[15]&0xFF);
 
     //printf("process_iq_data: rx=%d bitspersample=%d samplesperframe=%d\n",rx->id, bitspersample,samplesperframe);
@@ -1716,7 +1609,7 @@ static void process_iq_data(unsigned char *buffer, RECEIVER *rx)
 }
 
 //
-// This is the same as process_ps_iq_data except that add_div_iq_samples is called
+// add_div_iq_samples is called with the two samples
 // at the end
 //
 static void process_div_iq_data(unsigned char*buffer) {
@@ -1778,63 +1671,6 @@ static void process_div_iq_data(unsigned char*buffer) {
     }
 }
 
-static void process_ps_iq_data(unsigned char *buffer) {
-    //long long timestamp; // never used
-    int bitspersample;     // used in debug code
-    int samplesperframe;
-    int b;
-    int leftsample0;
-    int rightsample0;
-    double leftsampledouble0;
-    double rightsampledouble0;
-    int leftsample1;
-    int rightsample1;
-    double leftsampledouble1;
-    double rightsampledouble1;
-
-    //timestamp=((long long)(buffer[ 4]&0xFF)<<56)
-    //         +((long long)(buffer[ 5]&0xFF)<<48)
-    //         +((long long)(buffer[ 6]&0xFF)<<40)
-    //         +((long long)(buffer[ 7]&0xFF)<<32)
-    //         +((long long)(buffer[ 8]&0xFF)<<24)
-    //         +((long long)(buffer[ 9]&0xFF)<<16)
-    //         +((long long)(buffer[10]&0xFF)<< 8)
-    //         +((long long)(buffer[11]&0xFF)    );
-
-    bitspersample=((buffer[12]&0xFF)<<8)+(buffer[13]&0xFF); // used in debug code
-    samplesperframe=((buffer[14]&0xFF)<<8)+(buffer[15]&0xFF);
-
-    //printf("process_ps_iq_data: bitspersample=%d samplesperframe=%d\n", bitspersample,samplesperframe);
-    b=16;
-    int i;
-    for(i=0;i<samplesperframe;i+=2) {
-        leftsample0   = (int)((signed char) buffer[b++])<<16;
-        leftsample0  |= (int)((((unsigned char)buffer[b++])<<8)&0xFF00);
-        leftsample0  |= (int)((unsigned char)buffer[b++]&0xFF);
-        rightsample0  = (int)((signed char)buffer[b++]) << 16;
-        rightsample0 |= (int)((((unsigned char)buffer[b++])<<8)&0xFF00);
-        rightsample0 |= (int)((unsigned char)buffer[b++]&0xFF);
-
-        leftsampledouble0=(double)leftsample0/8388608.0;
-        rightsampledouble0=(double)rightsample0/8388608.0;
-
-        leftsample1   = (int)((signed char) buffer[b++])<<16;
-        leftsample1  |= (int)((((unsigned char)buffer[b++])<<8)&0xFF00);
-        leftsample1  |= (int)((unsigned char)buffer[b++]&0xFF);
-        rightsample1  = (int)((signed char)buffer[b++]) << 16;
-        rightsample1 |= (int)((((unsigned char)buffer[b++])<<8)&0xFF00);
-        rightsample1 |= (int)((unsigned char)buffer[b++]&0xFF);
-
-        leftsampledouble1=(double)leftsample1/8388608.0; // for 24 bits
-        rightsampledouble1=(double)rightsample1/8388608.0; // for 24 bits
-
-        ////////////   add_ps_iq_samples(transmitter, leftsampledouble1,rightsampledouble1,leftsampledouble0,rightsampledouble0);
-
-        //printf("%06x,%06x %06x,%06x\n",leftsample0,rightsample0,leftsample1,rightsample1);
-    }
-}
-
-
 static void process_command_response() {
     long sequence;
     sequence=((command_response_buffer[0]&0xFF)<<24)+((command_response_buffer[1]&0xFF)<<16)+((command_response_buffer[2]&0xFF)<<8)+(command_response_buffer[3]&0xFF);
@@ -1852,11 +1688,12 @@ static void process_command_response() {
 #endif
 }
 
-static void process_high_priority(unsigned char *buffer) {
+static void process_high_priority(void) {
     long sequence;
-    int previous_ptt;
+#ifdef LOCALCW
     int previous_dot;
     int previous_dash;
+#endif
 
     sequence=((high_priority_buffer[0]&0xFF)<<24)+((high_priority_buffer[1]&0xFF)<<16)+((high_priority_buffer[2]&0xFF)<<8)+(high_priority_buffer[3]&0xFF);
     if (sequence != highprio_rcvd_sequence) {
@@ -1865,9 +1702,10 @@ static void process_high_priority(unsigned char *buffer) {
     }
     highprio_rcvd_sequence++;
 
-    previous_ptt=local_ptt;
+#ifdef LOCALCW
     previous_dot=dot;
     previous_dash=dash;
+#endif
 
     local_ptt=high_priority_buffer[4]&0x01;
     dot=(high_priority_buffer[4]>>1)&0x01;
@@ -1924,40 +1762,6 @@ static void process_mic_data(int bytes)
 }
 
 
-void new_protocol_cw_audio_samples(short left_audio_sample,short right_audio_sample) {
-    int rc;
-    //int txmode=get_tx_mode();
-    //
-    // Only process samples if transmitting in CW
-    if (isTransmitting() && (transmitter->txmode==modeCWU || transmitter->txmode==modeCWL)) {
-
-        // insert the samples
-        audiobuffer[audioindex++]=left_audio_sample>>8;
-        audiobuffer[audioindex++]=left_audio_sample;
-        audiobuffer[audioindex++]=right_audio_sample>>8;
-        audiobuffer[audioindex++]=right_audio_sample;
-
-        if (audioindex>=sizeof(audiobuffer)) {
-
-            // insert the sequence
-            audiobuffer[0]=audiosequence>>24;
-            audiobuffer[1]=audiosequence>>16;
-            audiobuffer[2]=audiosequence>>8;
-            audiobuffer[3]=audiosequence;
-
-            // send the buffer
-
-            rc=sendto(data_socket,audiobuffer,sizeof(audiobuffer),0,(struct sockaddr*)&audio_addr,audio_addr_length);
-            if (rc!=sizeof(audiobuffer)) {
-                printf("sendto socket failed for %ld bytes of audio: %d\n",(long)sizeof(audiobuffer),rc);
-            }
-            audioindex=4;
-            audiosequence++;
-        }
-    }
-}
-
-
 void new_protocol_audio_samples(short left_audio_sample,short right_audio_sample) {
     int rc;
     // int txmode=get_tx_mode();
@@ -1970,6 +1774,7 @@ void new_protocol_audio_samples(short left_audio_sample,short right_audio_sample
     audiobuffer[audioindex++]=left_audio_sample;
     audiobuffer[audioindex++]=right_audio_sample>>8;
     audiobuffer[audioindex++]=right_audio_sample;
+  //      fprintf(stderr, "L: %d  R: %d\n", left_audio_sample, right_audio_sample);
 
     if (audioindex>=sizeof(audiobuffer)) {
 
@@ -1987,6 +1792,7 @@ void new_protocol_audio_samples(short left_audio_sample,short right_audio_sample
         }
         audioindex=4;
         audiosequence++;
+//        fprintf(stderr, "sent audio...\n");
     }
 }
 
@@ -2084,13 +1890,10 @@ void* new_protocol_timer_thread(void* arg) {
 }
 
 static void process_wideband_data(WIDEBAND *w, unsigned char *buffer) {
-    long sequence;
     int b;
     int16_t sample;
 
-  //  fprintf(stderr, "Widebannd data...\n");
-    sequence = ((buffer[0]&0xFF)<<24)+((buffer[1]&0xFF)<<16)+((buffer[2]&0xFF)<<8)+(buffer[3]&0xFF);
-    b = 4;
+    b = 4;                      // after the sequence number
     while (b < 1028) {
         sample   = (int)((signed char) buffer[b++])<<8;
         sample  |= (int)((unsigned char)buffer[b++]&0xFF);

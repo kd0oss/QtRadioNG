@@ -4,13 +4,8 @@
 #include <QtCore>
 #include <QObject>
 
-#if QT_VERSION >= 0x050000
-#include <QtWidgets/QAction>
-#include <QtWidgets/QMenu>
-#else
 #include <QAction>
 #include <QMenu>
-#endif
 
 #include <QString>
 #include <QSettings>
@@ -26,17 +21,7 @@ public:
     void add(QString,long long,long long,long long,long long,int,int);
     void del(int index);
     void select(QAction* action);
-    QString getTitle();
-    long long getMinFrequency();
-    long long getMaxFrequency();
-    long long getIFFrequency();
 
-    long long getFrequency();
-    int getMode();
-    int getFilter();
-    void setFrequency(long long f);
-    void setMode(int m);
-    void setFilter(int f);
 
     int count();
     XvtrEntry* getXvtrAt(int index);

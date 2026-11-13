@@ -20,9 +20,9 @@ BookmarksEditDialog::BookmarksEditDialog(QWidget *parent,Bookmarks* bookmarks) :
         ui->bookmarksListWidget->addItem(bookmark->getTitle());
     }
 
-    connect(ui->deletePushButton,SIGNAL(clicked()),this,SLOT(deleteBookmark()));
-    connect(ui->updatePushButton,SIGNAL(clicked()),this,SLOT(updateBookmark()));
-    connect(ui->bookmarksListWidget,SIGNAL(currentRowChanged(int)),this,SLOT(bookmarkRowChanged(int)));
+    connect(ui->deletePushButton,&QPushButton::clicked,this,&BookmarksEditDialog::deleteBookmark);
+    connect(ui->updatePushButton,&QPushButton::clicked,this,&BookmarksEditDialog::updateBookmark);
+    connect(ui->bookmarksListWidget,&QListWidget::currentRowChanged,this,&BookmarksEditDialog::bookmarkRowChanged);
 
 }
 

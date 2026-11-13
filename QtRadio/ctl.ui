@@ -23,7 +23,7 @@
    <property name="geometry">
     <rect>
      <x>80</x>
-     <y>49</y>
+     <y>30</y>
      <width>191</width>
      <height>19</height>
     </rect>
@@ -51,13 +51,13 @@
    <property name="geometry">
     <rect>
      <x>80</x>
-     <y>30</y>
+     <y>10</y>
      <width>191</width>
      <height>20</height>
     </rect>
    </property>
    <property name="text">
-    <string>1      Audio Gain %   100</string>
+    <string>1      Audio Stream Gain %   100</string>
    </property>
    <property name="alignment">
     <set>Qt::AlignCenter</set>
@@ -121,9 +121,9 @@
    <property name="geometry">
     <rect>
      <x>229</x>
-     <y>74</y>
+     <y>79</y>
      <width>48</width>
-     <height>28</height>
+     <height>25</height>
     </rect>
    </property>
    <property name="toolTip">
@@ -134,6 +134,72 @@
    </property>
    <property name="checkable">
     <bool>true</bool>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_3">
+   <property name="geometry">
+    <rect>
+     <x>80</x>
+     <y>40</y>
+     <width>191</width>
+     <height>20</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>1            Speaker Gain %       100</string>
+   </property>
+   <property name="alignment">
+    <set>Qt::AlignCenter</set>
+   </property>
+  </widget>
+  <widget class="QSlider" name="SpkrAudioSlider">
+   <property name="geometry">
+    <rect>
+     <x>80</x>
+     <y>60</y>
+     <width>191</width>
+     <height>19</height>
+    </rect>
+   </property>
+   <property name="toolTip">
+    <string>Volume control</string>
+   </property>
+   <property name="minimum">
+    <number>1</number>
+   </property>
+   <property name="maximum">
+    <number>100</number>
+   </property>
+   <property name="value">
+    <number>46</number>
+   </property>
+   <property name="orientation">
+    <enum>Qt::Horizontal</enum>
+   </property>
+   <property name="tickPosition">
+    <enum>QSlider::TicksBelow</enum>
+   </property>
+  </widget>
+  <widget class="QProgressBar" name="audioLevelBar">
+   <property name="geometry">
+    <rect>
+     <x>74</x>
+     <y>80</y>
+     <width>150</width>
+     <height>23</height>
+    </rect>
+   </property>
+   <property name="toolTip">
+    <string>Mic/Audio Level</string>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">color: qlineargradient(spread:pad, x1:0, y1:0.011, x2:1, y2:0, stop:0.432432 rgba(60, 192, 56, 255), stop:0.897297 rgba(255, 0, 72, 255));</string>
+   </property>
+   <property name="value">
+    <number>8</number>
+   </property>
+   <property name="textVisible">
+    <bool>false</bool>
    </property>
   </widget>
  </widget>

@@ -28,8 +28,6 @@ public:
     FrequencyInfo(long long min,long long max,QString descr,int b,bool t);
     QString getDescription();
     bool isFrequency(long long frequency);
-    int getBand();
-    bool canTransmit();
 private:
     long long minFrequency;
     long long maxFrequency;

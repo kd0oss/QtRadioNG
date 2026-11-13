@@ -29,7 +29,7 @@
 #include <QSettings>
 #include <QDebug>
 #include <QAudioFormat>
-#include <QAudioDeviceInfo>
+#include <QAudioDevice>
 #include <QKeyEvent>
 
 #include "ui_Configure.h"
@@ -61,18 +61,9 @@ public:
     void removeHost(QString host);
     int getReceiver();
     
-    int getSpectrumHigh();
-    int getSpectrumLow();
-    int getFps();
     int getAvg();
-    void setSpectrumHigh(int high);
-    void setSpectrumLow(int low);
 
-    int getWaterfallHigh();
-    int getWaterfallLow();
 
-    void setWaterfallHigh(int high);
-    void setWaterfallLow(int low);
 
     int  getWindowType();
     int  getRxFilterWindow();
@@ -92,32 +83,25 @@ public:
     double getSdromThreshold();
     bool getGeometryState();
     bool getTxAllowed();
-    void setTxAllowed(bool newstate);
     bool setPasswd(QString ServerName);
     QString thisuser;
     QString thispass;
     bool getRxIQcheckboxState();
     double getRxIQspinBoxValue();
-    int getCwPitch();
     bool getRxIQdivCheckBoxState();
     bool getRxDCBlockValue(); //KD0OSS
     bool getTxDCBlockValue(); //KD0OSS
 
-    int  getRxAGCSlopeValue(); //KD0OSS
-    int  getRxAGCMaxGainValue(); //KD0OSS
     int  getRxAGCAttackValue(); //KD0OSS
     int  getRxAGCDecayValue(); //KD0OSS
     int  getRxAGCHangValue(); //KD0OSS
     int  getRxAGCFixedGainValue(); //KD0OSS
     int  getRxAGCHangThreshValue(); //KD0OSS
 
-    bool getLevelerEnabledValue(); //KD0OSS
 //    int  getLevelerMaxGainValue(); //KD0OSS
     int  getLevelerAttackValue(); //KD0OSS
     int  getLevelerDecayValue(); //KD0OSS
-    int  getLevelerHangValue(); //KD0OSS
 
-    bool getALCEnabledValue(); //KD0OSS
     int  getALCAttackValue(); //KD0OSS
     int  getALCDecayValue(); //KD0OSS
     int  getALCMaxGainValue(); //KD0OSS
@@ -131,10 +115,10 @@ signals:
     void waterfallHighChanged(int high);
     void waterfallLowChanged(int low);
     void waterfallAutomaticChanged(bool state);
-    void audioDeviceChanged(QAudioDeviceInfo info,int rate,int channels,QAudioFormat::Endian order);
-    void micDeviceChanged(QAudioDeviceInfo info,int rate,int channels,QAudioFormat::Endian order);
+    void audioDeviceChanged(QAudioDevice info,int rate,int channels);
+    void micDeviceChanged(QAudioDevice info,int rate,int channels);
     void get_audio_devices(QComboBox* comboBox);
-    void micDeviceChanged(QAudioDeviceInfo info);
+    void micDeviceChanged(QAudioDevice info);
 
     void nrValuesChanged(int taps,int delay,double gain,double leak);
     void anfValuesChanged(int taps,int delay,double gain,double leak);
@@ -185,6 +169,8 @@ signals:
     void nb2ModeChanged(int);
     void rxFilterWindowChanged(int);
     void txFilterWindowChanged(int);
+    void encodingChanged(int);
+    void micEncodingChanged(int);
 
 
 public slots:
@@ -228,7 +214,7 @@ public slots:
 private slots:
     void on_pBtnAddHost_clicked();
     void on_pBtnRemHost_clicked();
-//    void on_encodingComboBox_currentIndexChanged(int index);
+    void on_encodingComboBox_currentIndexChanged(int index);
 /*    void onNbTransitionChanged(double); //KD0OSS
     void onNbLeadChanged(double); //KD0OSS
     void onNbLagChanged(double); //KD0OSS */
@@ -239,7 +225,7 @@ private slots:
     void onRxAgcHangChanged(int); //KD0OSS
     void onRxAgcFixedGainChanged(int); //KD0OSS
     void onRxAgcHangThreshChanged(int); //KD0OSS
-    void onLevelerStateChanged(int); //KD0OSS
+    void onLevelerStateChanged(bool checked); //KD0OSS
     //void onLevelerMaxGainChanged(int); //KD0OSS
     void onLevelerAttackChanged(int); //KD0OSS
     void onLevelerDecayChanged(int); //KD0OSS
@@ -255,7 +241,7 @@ private slots:
 
     void on_spinBox_cwPitch_valueChanged(int arg1);
 
-//    void on_MicEncodingComboBox_currentIndexChanged(int index);
+    void on_MicEncodingComboBox_currentIndexChanged(int index);
 
     void on_avgSpinBox_valueChanged(int arg1);
 

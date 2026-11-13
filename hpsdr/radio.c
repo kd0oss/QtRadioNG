@@ -45,34 +45,15 @@
 #include "old_protocol.h"
 
 #define min(x,y) (x<y?x:y)
-#define max(x,y) (x<y?y:x)
 
 struct utsname unameData;
 //struct _mode_settings mode_settings[MODES];
 
 int dot;
 int dash;
-int memory_tune=0;
-int full_tune=0;
 
-char *mode_string[]={
-    "LSB"
-    ,"USB"
-    ,"DSB"
-    ,"CWL"
-    ,"CWU"
-    ,"FMN"
-    ,"AM"
-    ,"DIGU"
-    ,"SPEC"
-    ,"DIGL"
-    ,"SAM"
-    ,"DRM"
-};
 
 DISCOVERED *radio = NULL;
-int region=REGION_OTHER;
-int band = band20;
 int disablePA = true;
 
 RECEIVER *receiver[MAX_RECEIVERS];
@@ -80,24 +61,17 @@ RECEIVER *active_receiver;
 TRANSMITTER *transmitter;
 int active_receivers = 0;
 
-unsigned int radio_id = 0;
 int buffer_size=1024; // 64, 128, 256, 512, 1024, 2048
-int atlas_penelope=0;
 int atlas_clock_source_10mhz=0;
 int atlas_clock_source_128mhz=0;
-int atlas_config=0;
 int atlas_mic_source=0;
-int atlas_janus=0;
 
 int classE=0;
 int eer_pwm_min=100;
 int eer_pwm_max=800;
 double div_cos=1.0;        // I factor for diversity
 double div_sin=1.0;	   // Q factor for diversity
-double div_gain=0.0;	   // gain for diversity (in dB)
-double div_phase=0.0;	   // phase for diversity (in degrees, 0 ... 360)
 
-int tx_out_of_band=0;
 int filter_board=ALEX;
 int pa_enabled=PA_ENABLED;
 int pa_power=0;
@@ -112,11 +86,7 @@ int mic_ptt_tip_bias_ring=0;
 int receivers=RECEIVERS;
 
 ADC adc[2];
-DAC dac[2];
 int adc_attenuation[2];
-int lt2208Dither = 0;
-int lt2208Random = 0;
-int attenuation = 0; // 0dB
 int protocol;
 int device;
 int new_pa_board=0; // Indicates Rev.24 PA board for HERMES/ANGELIA/ORION
@@ -141,7 +111,6 @@ unsigned int IO1;
 unsigned int IO2;
 unsigned int IO3;
 int supply_volts;
-int ptt=0;
 int mox=0;
 int tune=0;
 int have_rx_gain=0;
@@ -166,7 +135,6 @@ int cw_keyer_hang_time=500; // ms
 int cw_keyer_sidetone_frequency=800; // Hz
 int cw_breakin=1; // 0=disabled 1=enabled
 
-int cw_is_on_vfo_freq=1;   // 1= signal on VFO freq, 0= signal offset by side tone
 unsigned char OCtune=0;
 int OCfull_tune_time=2800; // ms
 int OCmemory_tune_time=550; // ms
@@ -577,7 +545,7 @@ bool start_radio(int radio_id)
         case NEW_DEVICE_HERMES_LITE:
         case NEW_DEVICE_HERMES_LITE2:
             n_adc=1;
-            radio->wideband = (WIDEBAND*)malloc(sizeof(WIDEBAND));
+            radio->wideband = (WIDEBAND*)calloc(1, sizeof(WIDEBAND)); // zeroed: samples, channel, pixels, pixel_samples
             radio->wideband->buffer_size = 16384;
             radio->wideband->adc = 0;
             radio->wideband->input_buffer = malloc((radio->wideband->buffer_size)*sizeof(int16_t));
@@ -675,45 +643,6 @@ int isTransmitting()
 {
     return mox | vox | tune;
 } // end isTransmitting
-
-
-void radio_change_receivers(int r)
-{
-    fprintf(stderr, "radio_change_receivers: from %d to %d\n", receivers, r);
-
-    if (receivers == r) return;
-
-    //
-    // When changing the number of receivers, restart the
-    // old protocol
-    //
-    if (protocol == ORIGINAL_PROTOCOL)
-    {
-        old_protocol_stop();
-    }
-
-    switch (r)
-    {
-    case 1:
-        receivers = 1;
-        break;
-    case 2:
-        receivers = 2;
-        break;
-    }
-
-    active_receiver = receiver[0];
-
-    if (protocol == NEW_PROTOCOL)
-    {
-        schedule_high_priority();
-    }
-
-    if (protocol == ORIGINAL_PROTOCOL)
-    {
-        old_protocol_run();
-    }
-} // end radio_change_receivers
 
 
 void start_receivers(int radio_id)
@@ -870,9 +799,16 @@ static int calcLevel(double d, double pa_calibration)
 } // end calcLevel
 
 
-void set_tx_power(int8_t pow)
+void set_tx_power(uint8_t pow)
 {
-    transmitter->drive = pow;
+    // QtRadio's "Drive Level %" slider runs 0..255 (labelled 0..100 %) and is a
+    // fraction of full output POWER. The radio's drive byte scales AMPLITUDE, and
+    // power goes with amplitude squared, so drive = 255 * sqrt(fraction) makes the
+    // slider linear in watts (as piHPSDR's calcLevel does). 'drive' keeps the percent.
+    if (transmitter == NULL)
+        return;
+    transmitter->drive_level = (int)lround(255.0 * sqrt((double)pow / 255.0));
+    transmitter->drive = (pow * 100 + 127) / 255;
     if (protocol == NEW_PROTOCOL)
     {
         schedule_high_priority();
@@ -882,7 +818,7 @@ void set_tx_power(int8_t pow)
         for (int i=1; i<8; i++)
             ozy_send_buffer();
     }
-    fprintf(stderr, "Set TX Power: %u\n", pow);
+    fprintf(stderr, "Set TX Power: %d%% of full power -> drive_level=%d\n", transmitter->drive, transmitter->drive_level);
 } // end set_tx_power
 
 
@@ -938,7 +874,7 @@ int create_manifest()
         sprintf(line, "<status>%d</status>\n", d->status);
         xml = (char*)realloc((char*)xml, strlen(xml)+strlen(line)+1);
         strcat(xml, line);
-        if (d->protocol >= 1 && d->wideband != NULL)
+        if (radio_supports_wideband(d))
             sprintf(line, "<bandscope>1</bandscope>\n");
         else
             sprintf(line, "<bandscope>0</bandscope>\n");
@@ -999,12 +935,6 @@ int create_manifest()
     fprintf(stderr, "Manifest created: Size: %d\n", (int)strlen(discovered_xml));
     return 0;
 } // end create_manifest
-
-
-int band_get_current()
-{
-    return band;
-} // end band_get_current
 
 
 void set_alex_rx_antenna(int8_t idx, int v)
@@ -1126,21 +1056,6 @@ void mic_boost_cb(bool enable)
 } // end mic_boost_cb
 
 
-void linein_gain_cb(int gain)
-{
-    linein_gain = gain;
-    if (protocol == NEW_PROTOCOL)
-    {
-        schedule_high_priority();
-    }
-    else
-    {
-        for (int i=1; i<8; i++)
-            ozy_send_buffer();
-    }
-} // end linein_gain_cb
-
-
 void setFrequency(int8_t idx, long long f)
 {
     ////////  int v=active_receiver->id;
@@ -1197,11 +1112,51 @@ void setFrequency(int8_t idx, long long f)
 } // end setFrequency
 
 
+bool wideband_requested = false;
+
+
+/* Radios for which start_radio() creates a WIDEBAND object (see the device
+ * switch there). Used for the manifest, which is built before start_radio(). */
+bool radio_supports_wideband(DISCOVERED *d)
+{
+    if (d == NULL || d->protocol != NEW_PROTOCOL)
+        return false;
+    switch (d->device)
+    {
+    case NEW_DEVICE_HERMES:
+    case NEW_DEVICE_HERMES2:
+    case NEW_DEVICE_HERMES_LITE:
+    case NEW_DEVICE_HERMES_LITE2:
+        return true;
+    default:
+        return false;
+    }
+} // end radio_supports_wideband
+
+
+/* Start or stop the radio's wideband stream (Protocol 2 General packet). */
+void set_wideband_requested(bool enable)
+{
+    if (wideband_requested == enable)
+        return;
+    wideband_requested = enable;
+    if (radio != NULL && radio->wideband != NULL)
+        radio->wideband->samples = 0;   // start a fresh buffer next time
+    if (protocol == NEW_PROTOCOL)
+        schedule_general();
+    fprintf(stderr, "Bandscope %s.\n", enable ? "started" : "stopped");
+} // end set_wideband_requested
+
+
 void add_wideband_sample(WIDEBAND *w, int16_t sample)
 {
+    if (!wideband_requested)
+        return;
+    if (w->samples < 0 || w->samples >= w->buffer_size)
+        w->samples = 0;
     w->input_buffer[w->samples] = sample;
     w->samples = w->samples+1;
-    if (w->samples >= 16384)
+    if (w->samples >= w->buffer_size)
     {
         send_WB_IQ_buffer(w->channel);
         w->samples = 0;

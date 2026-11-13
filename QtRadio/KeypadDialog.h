@@ -2,15 +2,9 @@
 #define KEYPADDIALOG_H
 
 #include <QtCore>
-#if QT_VERSION >= 0x050000
-#include <QtWidgets/QDialog>
-#include <QtWidgets/QAbstractButton>
-#include <QtWidgets/QDialogButtonBox>
-#else
 #include <QDialog>
 #include <QAbstractButton>
 #include <QDialogButtonBox>
-#endif
 
 
 #include <QKeyEvent>
@@ -27,7 +21,6 @@ class KeypadDialog : public QDialog
 public:
     explicit KeypadDialog(QWidget *parent = 0);
     ~KeypadDialog();
-    long long getFrequency();
     void clear();
 	void commitFrequency();
 

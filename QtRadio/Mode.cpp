@@ -25,6 +25,7 @@
 
 
 #include "Mode.h"
+#include "pluginregistry.h"
 
 Mode::Mode() {
     currentMode=MODE_LSB;
@@ -88,6 +89,17 @@ QString Mode::getStringMode(int mode) {
             break;
         case MODE_DRM:
             m="DRM";
+            break;
+        case MODE_FMW:
+            m="FMW";
+            break;
+        default:
+            if (PluginRegistry::isPluginMode(mode))
+            {
+                m = PluginRegistry::instance()->modeName(mode);
+                if (m.isEmpty())
+                    m = QString("P%1").arg(mode);      // its plugin is not running
+            }
             break;
     }
 

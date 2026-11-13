@@ -27,11 +27,7 @@
 #define	BAND_H
 
 #include <QtCore>
-#if QT_VERSION >= 0x050000
-#include <QtWidgets/QAction>
-#else
 #include <QAction>
-#endif
 
 #include <QObject>
 #include <QSettings>
@@ -81,7 +77,6 @@ public:
     QString getStringMem();
     int getMode();
     int getFilter();
-    int getInfo();
     int getSpectrumHigh();
     int getSpectrumLow();
     int getWaterfallHigh();
@@ -93,7 +88,6 @@ public:
     void setWaterfallHigh(int h);
     void setWaterfallLow(int l);
     void loadSettings(QSettings* settings);
-    void saveSettings(QSettings* settings);
     void readSettings(QSettings* settings);
     void writeSettings(QSettings* settings);
     void memCopy(int target, bool direction);

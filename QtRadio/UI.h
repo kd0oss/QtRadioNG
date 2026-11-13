@@ -51,7 +51,6 @@
 #include "BookmarkDialog.h"
 #include "Bookmark.h"
 #include "Bookmarks.h"
-#include "BookmarksDialog.h"
 #include "BookmarksEditDialog.h"
 #include "Xvtr.h"
 #include "XvtrEntry.h"
@@ -62,6 +61,8 @@
 #include "G711A.h"
 //#include "hermesframe.h"
 #include "EqualizerDialog.h"
+#include "pluginregistry.h"
+#include "pluginframe.h"
 
 #define AGC_FIXED 0
 #define AGC_LONG 1
@@ -98,6 +99,7 @@ public:
     AMFilters        amFilters;
     SAMFilters       samFilters;
     FMNFilters       fmnFilters;
+    FMWFilters       fmwFilters;
     DIGUFilters      diguFilters;
     DIGLFilters      diglFilters;
     RigCtlServer    *rigCtl;
@@ -105,32 +107,34 @@ public:
     QTimer           settingsTimer[MAX_RECEIVERS];
     QWidget         *hww;
     bool             receiver_active[MAX_RECEIVERS];
-    int8_t           receiver_channel[MAX_RECEIVERS];
-    int8_t           currentRxChannel;
-    int8_t           currentTxChannel;
+    int8_t           receiver_rfstream[MAX_RECEIVERS];
+    int8_t           currentRxRfstream;   // dspserver stream id, not an index into these arrays
+    int8_t           selectedIndex;       // receiver selected in the UI, if it is one of this radio's
+    int8_t           currentTxRfstream;
     int8_t           activeReceivers;
     int8_t           txrxPair[2];
     double           currentPwr;
-    int              sampleRate[MAX_RECEIVERS];
+    long             sampleRate[MAX_RECEIVERS];
     int              fps[MAX_RECEIVERS];
     int8_t           radio_index;
-    CHANNEL          channels[MAX_RECEIVERS];
+    RFSTREAM         rfstream[MAX_RECEIVERS];
     bool             radio_started;
+    int              notchFilterIndex[MAX_RECEIVERS];
+    long long        frequency[MAX_RECEIVERS];
+    long long        selectedFrequency;
+    long long        txFrequency;
+    bool             txNow;
+    int              cwPitch;
+    double           loffset;
+    bool             local_audio;
+    bool             local_mic;
+    bool             squelch;
+    float            squelchValue[MAX_RECEIVERS];
+    bool             modeFlag[MAX_RECEIVERS]; //Signals mode is changed from main menu
 
-    int       notchFilterIndex[MAX_RECEIVERS];
-    long long frequency[MAX_RECEIVERS];
-    long long selectedFrequency;
-    long long txFrequency;
-
-    bool   txNow;
-    int    cwPitch;
-    double loffset;
-
-    bool   squelch;
-    float  squelchValue[MAX_RECEIVERS];
-    bool   modeFlag[MAX_RECEIVERS]; //Signals mode is changed from main menu
-
-    void initializeReceiver(CHANNEL *channel);
+    void initializeReceiver(RFSTREAM *rfstream);
+    int8_t rigctlIndex();
+    bool rigctlInPluginMode();
     long long rigctlGetFreq();
     QString rigctlGetMode();
     QString rigctlGetFilter();
@@ -147,7 +151,7 @@ public:
     void shutdownRadio(void);
     void saveSetting(QString, QString, QString, int8_t);
     QString loadSetting(QString, QString, int8_t);
-    int8_t getInternalIndex(int8_t channel_index);
+    int8_t getInternalIndex(int8_t rfstream_index);
 
 public slots:
     void bandChanged(int8_t, int8_t, int previousBand, int newBand);
@@ -157,6 +161,7 @@ public slots:
     void variableFilter(int8_t, int low, int high);
     void frequencyChanged(int8_t, long long frequency);
     void sampleRateChanged(int8_t, long rate);
+    void sampleRateChanged(long rate);
     void fpsChanged(int8_t, int f);
     void setFPS(int8_t);
     void enableRxEq(int8_t, bool);
@@ -174,6 +179,7 @@ public slots:
     void frequencyMoved(int8_t, int increment,int step);
     void sendCommand(QByteArray);
     void closeBandScope(void);
+    void updateBandscopeSpan(void);
     void squelchValueChanged(int8_t index, int val);
     void saveAllSettings(void);
 
@@ -190,6 +196,7 @@ signals:
     void ctlSetPTT(bool);
     void tnfSetChecked(bool);
     void tuningEnable(bool);
+    void pttTuneChange(int caller, bool ptt);//0 = MOX, 1 = Tune, 2 = VOX, 3 = Extern H'ware};
 
 private:
 
@@ -216,10 +223,10 @@ public:
 
     Radio  *radio[MAX_RADIOS];
     bool    receiver_active[MAX_RECEIVERS];
-    int8_t  receiver_channel[MAX_RECEIVERS];
+    int8_t  receiver_rfstream[MAX_RECEIVERS];
 
-    int8_t currentRxChannel;
-    int8_t currentTxChannel;
+    int8_t currentRxRfstream;
+    int8_t currentTxRfstream;
     int8_t current_index;
     double currentPwr;
     bool squelch;
@@ -234,14 +241,9 @@ public:
     AMFilters        amFilters;
     SAMFilters       samFilters;
     FMNFilters       fmnFilters;
+    FMWFilters       fmwFilters;
     DIGUFilters      diguFilters;
     DIGLFilters      diglFilters;
-
-signals:
-    void initialize_audio(int length);
-    void select_audio(QAudioDeviceInfo info,int rate, int channels, QAudioFormat::Endian byteOrder);
-    void process_audio(char* header, char* buffer, int length);
-    void HideTX(bool cantx);
 
 public slots:
     void getMeterValue(int8_t, float s, float f, float r);
@@ -301,8 +303,14 @@ public slots:
     void actionAM();
     void actionSAM();
     void actionFMN();
+    void actionFMW();
     void actionDIGL();
     void actionDIGU();
+    void actionPluginMode(int mode);
+
+    void pluginList(QString xml);
+    void pluginStatus(int plugin, QString text);
+    void pluginSetting(int plugin, QString key, QString value);
 
     void actionFilter0();
     void actionFilter1();
@@ -328,18 +336,18 @@ public slots:
     void actionLong();
 
 
-    void connected(bool*, int8_t*, int8_t*);
+    void connected(bool*, int8_t*, int8_t*, bool*, bool*);
     void disconnected(QString message);
     void audioBuffer(char* header,char* buffer);
-    void spectrumBuffer(CHANNEL);
+    void spectrumBuffer(RFSTREAM);
 
  //   void updateSpectrum();
     void masterButtonClicked(void);
 
-    void audioDeviceChanged(QAudioDeviceInfo info,int rate,int channels,QAudioFormat::Endian byteOrder);
+    void audioDeviceChanged(QAudioDevice info,int rate,int channels);
  //   void encodingChanged(int choice);
 
-    void micDeviceChanged(QAudioDeviceInfo info,int rate,int channels,QAudioFormat::Endian byteOrder);
+    void micDeviceChanged(QAudioDevice info,int rate,int channels);
     void micSendAudio(QQueue<qint16>*);
 
     void hostChanged(QString host);
@@ -373,7 +381,6 @@ public slots:
 
     void actionBookmark();
     void addBookmark();
-    void selectABookmark();
     void editBookmarks();
     void bookmarkDeleted(int);
     void bookmarkUpdated(int,QString);
@@ -387,6 +394,7 @@ public slots:
     void getBandFrequency();
     void vfoStepBtnClicked(int direction);
     void frequencyMoved(int,int);
+    void frequencyChanged(long long);
     void updateVFO(long long);
     void pttChange(int caller, bool ptt);
     void printStatusBar(QString message);
@@ -405,8 +413,14 @@ public slots:
     void enableTxEq(bool);
 
 signals:
+    void initialize_audio(int length);
+    void select_audio(QAudioDevice info,int rate, int channels);
+    void process_audio(char* header, char* buffer, int length);
+    void HideTX(bool cantx);
     void set_src_ratio(double ratio);
     void tuningEnable(bool);
+    void frequencyChanged(int8_t, long long);
+ //   void pttTuneChange(int caller, bool ptt);//0 = MOX, 1 = Tune, 2 = VOX, 3 = Extern H'ware};
 
 protected:
 //    void paintEvent(QPaintEvent*);
@@ -416,7 +430,7 @@ private slots:
     void on_zoomSpectrumSlider_sliderMoved(int position);
     void setAudioMuted(bool);
     void audioGainChanged(void);
-    void setCurrentChannel(int);
+    void setCurrentRfstream(int);
     void cessbOvershootChanged(bool);
     void aeFilterChanged(bool);
     void nrGainMethodChanged(int);
@@ -430,7 +444,6 @@ private:
     void printWindowTitle(QString message);
     void actionGain(int g);
     void setGain(bool state);
-    void setPwsMode(int mode);
     QString stringFrequency(long long frequency);
     QString getversionstring();
 
@@ -438,10 +451,15 @@ private:
 
     QTimer kickDisplay;
 
+    void removePlugins();
+    QList<PluginFrame*> pluginFrames;      // protocol plugin panels ...
+    QList<QWidget*>     pluginTabs;        // ... each in its own tab beside "Radio"
+    QList<QAction*>     pluginModeActions; // their modes in the Mode menu
+    QAction            *pluginSeparator = nullptr;
+
     Audio* audio;
     AudioInput* audioinput;
-    QAudioDeviceInfo audio_device;
-    QAudioFormat::Endian audio_byte_order;
+    QAudioDevice audio_device;
     QMutex audio_mutex;
     char* first_audio_buffer;
     char* first_audio_header;
@@ -470,7 +488,6 @@ private:
     int viewZoomLevel;
 
     BookmarkDialog bookmarkDialog;
-    BookmarksDialog* bookmarksDialog;
     BookmarksEditDialog* bookmarksEditDialog;
 
     Bookmarks bookmarks;
