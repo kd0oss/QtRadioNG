@@ -29,8 +29,13 @@ message(STATUS "WDSP: ${WDSP_LIBRARY}")
 find_package(Threads REQUIRED)
 find_package(OpenMP REQUIRED COMPONENTS C)
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(DSPSERVER_DEPS REQUIRED IMPORTED_TARGET
-    fftw3 samplerate openssl libevent libevent_openssl)
+set(DSPSERVER_PKG_LIST fftw3 samplerate openssl libevent libevent_openssl)
+if(NOT WIN32)
+    list(APPEND DSPSERVER_PKG_LIST libevent_pthreads)
+endif()
+pkg_check_modules(DSPSERVER_DEPS REQUIRED IMPORTED_TARGET ${DSPSERVER_PKG_LIST})
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/platform.cmake")
 
 add_executable(dspserver
     audiostream.c
