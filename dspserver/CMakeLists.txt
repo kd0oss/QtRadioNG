@@ -57,9 +57,10 @@ target_link_libraries(dspserver PRIVATE
     OpenMP::OpenMP_C
     qtr_platform
     Threads::Threads
-    avrt
     m)
-if(NOT WIN32)
+if(WIN32)
+    target_link_libraries(dspserver PRIVATE avrt)
+else()
     target_link_libraries(dspserver PRIVATE rt)     # timer_create (Windows: compat/win/qtr_timer.h)
 endif()
 set_target_properties(dspserver PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
