@@ -93,9 +93,7 @@ const char *version = "20241108;-primary"; //YYYYMMDD; text desc
 #include <string.h>
 #include <math.h>
 #include <getopt.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include "qtr_net.h"
 #include <signal.h>
 #include <sys/param.h>
 
@@ -191,14 +189,22 @@ struct dspserver_config config;
 
 int main(int argc, char* argv[]) 
 {
+    const char *home;
+
     memset(&config, 0, sizeof(config));
+    qtr_net_init();
 
     // Register signal and signal handler
     signal(SIGINT, signal_shutdown);
 
     strcpy(config.server_address, "127.0.0.1"); // localhost
-    strcpy(config.share_config_file, getenv("HOME"));
-    strcat(config.share_config_file, "/dspserver.conf");
+    // HOME is not normally set on Windows outside an MSYS2 shell
+    home = getenv("HOME");
+    if (home == NULL)
+        home = getenv("USERPROFILE");
+    if (home == NULL)
+        home = ".";
+    snprintf(config.share_config_file, sizeof(config.share_config_file), "%s/dspserver.conf", home);
 
     processCommands(argc, argv, &config);
 

@@ -25,11 +25,9 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <stdatomic.h>
-#include <sys/socket.h>
 #include <sys/time.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <arpa/inet.h>
+
+#include "qtr_net.h"
 
 #include "api.h"
 #include "vita.h"
@@ -69,7 +67,6 @@ bool flex_discover(const char *want_serial, int timeout_s, FLEX_RADIO_INFO *info
     int s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     int on = 1;
     struct sockaddr_in a;
-    struct timeval tv = {1, 0};
     time_t end = time(NULL) + timeout_s;
     bool found = false;
 
@@ -80,15 +77,15 @@ bool flex_discover(const char *want_serial, int timeout_s, FLEX_RADIO_INFO *info
     setsockopt(s, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on));
 #endif
     setsockopt(s, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
-    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    sock_set_rcvtimeo(s, 1000);
     memset(&a, 0, sizeof(a));
     a.sin_family = AF_INET;
     a.sin_addr.s_addr = htonl(INADDR_ANY);
     a.sin_port = htons(FLEX_DISCOVERY_PORT);
     if (bind(s, (struct sockaddr*)&a, sizeof(a)) < 0)
     {
-        perror("flexradio: discovery bind");
-        close(s);
+        sock_perror("flexradio: discovery bind");
+        sock_close(s);
         return false;
     }
 
@@ -123,7 +120,7 @@ bool flex_discover(const char *want_serial, int timeout_s, FLEX_RADIO_INFO *info
         if (want_serial == NULL || want_serial[0] == '\0' || strstr(info->serial, want_serial) != NULL)
             found = true;
     }
-    close(s);
+    sock_close(s);
     return found;
 } // end flex_discover
 
@@ -207,7 +204,8 @@ static void *reader_thread(void *arg)
             break;
         if (n < 0)
         {
-            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+            int e = sock_error();
+            if (e == SOCK_EAGAIN || e == SOCK_EWOULDBLOCK || e == SOCK_EINTR || e == SOCK_ETIMEDOUT)
                 continue;
             break;
         }
@@ -240,7 +238,6 @@ static void *reader_thread(void *arg)
 bool flex_connect(const char *ip, int port, flex_status_fn status)
 {
     struct sockaddr_in a;
-    struct timeval tv = {0, 500000};
     struct timespec deadline;
     int on = 1;
 
@@ -256,19 +253,19 @@ bool flex_connect(const char *ip, int port, flex_status_fn status)
     a.sin_port = htons((uint16_t)port);
     if (inet_pton(AF_INET, ip, &a.sin_addr) != 1 || connect(sock, (struct sockaddr*)&a, sizeof(a)) < 0)
     {
-        fprintf(stderr, "flexradio: cannot connect to %s:%d: %s\n", ip, port, strerror(errno));
-        close(sock);
+        fprintf(stderr, "flexradio: cannot connect to %s:%d: %s\n", ip, port, sock_strerror(sock_error()));
+        sock_close(sock);
         sock = -1;
         return false;
     }
-    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    sock_set_rcvtimeo(sock, 500);
     setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
 
     atomic_store(&connected, true);
     if (pthread_create(&reader_id, NULL, reader_thread, NULL) != 0)
     {
         atomic_store(&connected, false);
-        close(sock);
+        sock_close(sock);
         sock = -1;
         return false;
     }
@@ -336,7 +333,7 @@ void flex_disconnect(void)
     }
     if (sock >= 0)
     {
-        close(sock);
+        sock_close(sock);
         sock = -1;
     }
 } // end flex_disconnect

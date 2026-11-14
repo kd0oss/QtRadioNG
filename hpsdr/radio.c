@@ -25,10 +25,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <semaphore.h>
-#include <sys/socket.h>
+#include "qtr_net.h"
 #include <sys/types.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 
 #include "discovered.h"
 #include "receiver.h"
@@ -44,7 +42,9 @@
 #include "new_protocol.h"
 #include "old_protocol.h"
 
+#ifndef min
 #define min(x,y) (x<y?x:y)
+#endif
 
 struct utsname unameData;
 //struct _mode_settings mode_settings[MODES];
@@ -1171,6 +1171,14 @@ int main_start(char *dsp_server_address)
 
     sprintf(name, "org.kd0oss.hpsdr_new.pid%d", getpid());
     activatehpsdr();
+    if (devices == 0)
+    {
+        // Nothing to offer dspserver: without a radio there is no manifest.
+        fprintf(stderr, "hpsdr: no HPSDR radio found on any network interface; not connecting to dspserver.\n"
+                        "hpsdr: check that the radio is powered and on the same subnet as this computer,\n"
+                        "hpsdr: and that the firewall lets hpsdr receive UDP from it.\n");
+        return 1;
+    }
     if (devices > 0)
     {
         create_manifest();

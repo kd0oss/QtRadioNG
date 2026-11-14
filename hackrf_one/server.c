@@ -26,11 +26,9 @@
 #include <time.h>
 #include <pthread.h>
 #include <stdatomic.h>
-#include <sys/socket.h>
 #include <sys/time.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <arpa/inet.h>
+
+#include "qtr_net.h"
 
 #include "server.h"
 #include "device.h"
@@ -79,7 +77,7 @@ static int udp_socket(void)
 
     if (s < 0)
     {
-        perror("hackrf_one: socket");
+        sock_perror("hackrf_one: socket");
         return -1;
     }
     setsockopt(s, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size));
@@ -126,7 +124,7 @@ static void send_iq_block(void *user, const double *iq, int n)
         buffer.data[k * 2 + 1] = iq[k * 2];
     }
     if (sendto(iq_socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr*)&iq_dest, sizeof(iq_dest)) < 0)
-        perror("hackrf_one: sendto rx iq");
+        sock_perror("hackrf_one: sendto rx iq");
 } // end send_iq_block
 
 
@@ -149,7 +147,7 @@ static void send_wb_frame(void)
         buffer.length = 16384;          // int16 values: 8192 complex samples
         memcpy(buffer.data, wb_frame + p * 16384, sizeof(buffer.data));
         if (sendto(wb_socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr*)&dest, sizeof(dest)) < 0)
-            perror("hackrf_one: sendto bandscope");
+            sock_perror("hackrf_one: sendto bandscope");
     }
 } // end send_wb_frame
 
@@ -297,7 +295,8 @@ static void *audio_drain_thread(void *arg)
     (void)arg;
     while (!atomic_load(&stop_requested))
     {
-        if (recv(audio_socket, buf, sizeof(buf), 0) < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
+        if (recv(audio_socket, buf, sizeof(buf), 0) < 0 && sock_error() != SOCK_EAGAIN && sock_error() != SOCK_EWOULDBLOCK
+                && sock_error() != SOCK_EINTR && sock_error() != SOCK_ETIMEDOUT)
             usleep(100000);
     }
     return NULL;
@@ -306,7 +305,6 @@ static void *audio_drain_thread(void *arg)
 
 static void start_audio_drain(void)
 {
-    struct timeval tv = {0, 200000};
     struct sockaddr_in dest = dsp_endpoint(RX_AUDIO_PORT + opts.radio_id + port_offset);
     char sync[2] = {0, 0};
 
@@ -315,7 +313,7 @@ static void start_audio_drain(void)
         audio_socket = udp_socket();
         if (audio_socket < 0)
             return;
-        setsockopt(audio_socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+        sock_set_rcvtimeo(audio_socket, 200);
     }
     // dspserver learns our address from this datagram (see make_connection)
     sendto(audio_socket, sync, sizeof(sync), 0, (struct sockaddr*)&dest, sizeof(dest));
@@ -631,13 +629,14 @@ static bool read_full(int s, unsigned char *buf, int n)
             return false;
         if (r < 0)
         {
-            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
+            int e = sock_error();
+            if (e == SOCK_EAGAIN || e == SOCK_EWOULDBLOCK || e == SOCK_EINTR || e == SOCK_ETIMEDOUT)
             {
                 if (atomic_load(&stop_requested))
                     return false;
                 continue;
             }
-            perror("hackrf_one: command channel");
+            sock_perror("hackrf_one: command channel");
             return false;
         }
         got += (int)r;
@@ -707,13 +706,12 @@ int server_run(const SERVER_OPTIONS *options)
     while (!atomic_load(&stop_requested))
     {
         struct sockaddr_in a = dsp_endpoint(COMMAND_PORT);
-        struct timeval tv = {0, 500000};
         int on = 1;
         int s = socket(AF_INET, SOCK_STREAM, 0);
 
         if (s < 0)
         {
-            perror("hackrf_one: socket");
+            sock_perror("hackrf_one: socket");
             break;
         }
         if (connect(s, (struct sockaddr*)&a, sizeof(a)) < 0)
@@ -721,17 +719,17 @@ int server_run(const SERVER_OPTIONS *options)
             if (!waiting_reported)
                 fprintf(stderr, "hackrf_one: waiting for dspserver at %s:%d\n", opts.dsp_server_address, COMMAND_PORT);
             waiting_reported = true;
-            close(s);
+            sock_close(s);
             sleep(1);
             continue;
         }
         waiting_reported = false;
-        setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+        sock_set_rcvtimeo(s, 500);
         setsockopt(s, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
         fprintf(stderr, "hackrf_one: connected to dspserver %s:%d\n", opts.dsp_server_address, COMMAND_PORT);
 
         serve_connection(s);
-        close(s);
+        sock_close(s);
 
         // dspserver went away: stop streaming and wait for it to come back
         if (tx_is_attached())
@@ -764,11 +762,11 @@ int server_run(const SERVER_OPTIONS *options)
     chain = NULL;
     pthread_mutex_unlock(&chain_lock);
     if (iq_socket >= 0)
-        close(iq_socket);
+        sock_close(iq_socket);
     if (wb_socket >= 0)
-        close(wb_socket);
+        sock_close(wb_socket);
     if (audio_socket >= 0)
-        close(audio_socket);
+        sock_close(audio_socket);
     fprintf(stderr, "hackrf_one: exit\n");
     return 0;
 } // end server_run

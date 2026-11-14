@@ -21,7 +21,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <netinet/in.h>
+#include "qtr_net.h"
 
 /* ipaddr goes in the MIC_BUFFER packets and must equal the manifest's <ip_address>. */
 const char *tx_attach(int8_t index, struct in_addr dsp_address, int radio_id, const char *ipaddr);

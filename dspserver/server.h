@@ -49,16 +49,20 @@
 
 #include "../common.h"
 #include <sys/queue.h>
+#include "qtr_net.h"
+#include "qtr_timer.h"
 #include <stdbool.h>
 //#include <ortp/ortp.h>   // unused; not linked
+#ifdef USE_SSL
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/rand.h>
+#include <event2/bufferevent_ssl.h>
+#endif
 #include <event.h>
 #include <event2/thread.h>
 //#include <event2/buffer.h>
 #include <event2/listener.h>
-#include <event2/bufferevent_ssl.h>
 
 #define SPECTRUM_BUFFER_SIZE 8192
 #define MAX_RFSTREAMS        35
@@ -281,5 +285,7 @@ void *memory_thread(void *);
 void client_set_timing(void);
 void answer_question(char *message, char *clienttype, struct bufferevent *bev);
 void printversion(void);
-SSL_CTX *evssl_init(void);   // USE_SSL only
+#ifdef USE_SSL
+SSL_CTX *evssl_init(void);
+#endif
 #endif

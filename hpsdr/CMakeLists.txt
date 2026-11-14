@@ -11,6 +11,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 find_package(Threads REQUIRED)
+include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/platform.cmake")
 
 add_executable(hpsdr
     discovered.c
@@ -26,6 +27,6 @@ add_executable(hpsdr
     main.c)
 
 target_compile_options(hpsdr PRIVATE -Wall)
-target_link_libraries(hpsdr PRIVATE Threads::Threads m)
+target_link_libraries(hpsdr PRIVATE qtr_platform Threads::Threads m)
 
 install(TARGETS hpsdr RUNTIME DESTINATION bin)

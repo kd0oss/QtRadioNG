@@ -30,7 +30,7 @@ find_package(Threads REQUIRED)
 find_package(OpenMP REQUIRED COMPONENTS C)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(DSPSERVER_DEPS REQUIRED IMPORTED_TARGET
-    fftw3 samplerate openssl libevent libevent_openssl libevent_pthreads)
+    fftw3 samplerate openssl libevent libevent_openssl)
 
 add_executable(dspserver
     audiostream.c
@@ -48,13 +48,20 @@ if(EXISTS "${WDSP_DIR}")
     target_include_directories(dspserver PRIVATE "${WDSP_DIR}")
 endif()
 target_compile_options(dspserver PRIVATE -Wall -Wno-unused-function)
+if(USE_SSL)
+    target_compile_definitions(dspserver PRIVATE USE_SSL)
+endif()
 target_link_libraries(dspserver PRIVATE
     "${WDSP_LIBRARY}"
     PkgConfig::DSPSERVER_DEPS
     OpenMP::OpenMP_C
+    qtr_platform
     Threads::Threads
-    rt
+    avrt
     m)
+if(NOT WIN32)
+    target_link_libraries(dspserver PRIVATE rt)     # timer_create (Windows: compat/win/qtr_timer.h)
+endif()
 set_target_properties(dspserver PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 install(TARGETS dspserver RUNTIME DESTINATION bin)

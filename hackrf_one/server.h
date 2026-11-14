@@ -25,7 +25,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <netinet/in.h>
+#include "qtr_net.h"
 
 // ports (same as hpsdr/server.h and dspserver)
 #define RX_IQ_PORT_0     10000

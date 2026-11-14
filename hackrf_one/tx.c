@@ -38,13 +38,14 @@
 #include <time.h>
 #include <pthread.h>
 #include <stdatomic.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
+
+#include "qtr_net.h"
 
 #include "server.h"
 #include "device.h"
 #include "txchain.h"
 #include "hackrf.h"
+#include "qtr_sleep.h"
 
 #define TX_IN_RATE      192000
 #define TX_FIFO_SIZE    TX_IN_RATE           // 1 s
@@ -151,7 +152,8 @@ static void *tx_iq_thread(void *arg)
         ssize_t n = recv(sock, (char*)&buffer, sizeof(buffer), 0);
         if (n < 0)
         {
-            if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
+            int e = sock_error();
+            if (e != SOCK_EAGAIN && e != SOCK_EWOULDBLOCK && e != SOCK_EINTR && e != SOCK_ETIMEDOUT)
                 usleep(10000);
             continue;
         }
@@ -213,9 +215,9 @@ static void *mic_pace_thread(void *arg)
             next.tv_sec++;
             next.tv_nsec -= 1000000000L;
         }
-        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, NULL);
+        qtr_sleep_until(&next);
     }
-    close(s);
+    sock_close(s);
     return NULL;
 } // end mic_pace_thread
 
@@ -223,7 +225,6 @@ static void *mic_pace_thread(void *arg)
 const char *tx_attach(int8_t index, struct in_addr dsp_address, int radio_id)
 {
     struct sockaddr_in dest;
-    struct timeval tv = {0, 200000};
     char sync[2] = {0, 0};
 
     if (attached)
@@ -239,7 +240,7 @@ const char *tx_attach(int8_t index, struct in_addr dsp_address, int radio_id)
         return DEVICE_FAILED;
     int size = 1 << 21;
     setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size));
-    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    sock_set_rcvtimeo(sock, 200);
 
     dsp_addr = dsp_address;
     radio = radio_id;
@@ -255,7 +256,7 @@ const char *tx_attach(int8_t index, struct in_addr dsp_address, int radio_id)
     atomic_store(&threads_stop, false);
     if (pthread_create(&rx_thread_id, NULL, tx_iq_thread, NULL) != 0)
     {
-        close(sock);
+        sock_close(sock);
         sock = -1;
         return DEVICE_FAILED;
     }
@@ -263,7 +264,7 @@ const char *tx_attach(int8_t index, struct in_addr dsp_address, int radio_id)
     {
         atomic_store(&threads_stop, true);
         pthread_join(rx_thread_id, NULL);
-        close(sock);
+        sock_close(sock);
         sock = -1;
         return DEVICE_FAILED;
     }
@@ -325,7 +326,7 @@ const char *tx_detach(void)
     atomic_store(&threads_stop, true);
     pthread_join(rx_thread_id, NULL);
     pthread_join(pace_thread_id, NULL);
-    close(sock);
+    sock_close(sock);
     sock = -1;
     attached = false;
     pthread_mutex_lock(&tx_lock);

@@ -22,13 +22,9 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <errno.h>
-#include <unistd.h>
 #include <pthread.h>
-#include <netdb.h>
-#include <sys/socket.h>
-#include <sys/select.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
+
+#include "qtr_net.h"
 
 #include "plugin_client.h"
 
@@ -47,7 +43,7 @@ static bool write_all(int fd, const void *buf, size_t n)
         ssize_t w = send(fd, (const char*)buf + off, n - off, MSG_NOSIGNAL);
         if (w <= 0)
         {
-            if (w < 0 && errno == EINTR)
+            if (w < 0 && sock_error() == SOCK_EINTR)
                 continue;
             return false;
         }
@@ -65,7 +61,7 @@ static bool read_all(int fd, void *buf, size_t n)
         ssize_t r = recv(fd, (char*)buf + off, n - off, 0);
         if (r <= 0)
         {
-            if (r < 0 && errno == EINTR)
+            if (r < 0 && sock_error() == SOCK_EINTR)
                 continue;
             return false;
         }
@@ -142,6 +138,7 @@ PLUGIN_CONN *plugin_open(const char *host, int port, const char *xml)
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     snprintf(service, sizeof(service), "%d", port);
+    qtr_net_init();
     if (getaddrinfo(host, service, &hints, &res) != 0)
     {
         fprintf(stderr, "plugin: cannot resolve %s\n", host);
@@ -154,7 +151,7 @@ PLUGIN_CONN *plugin_open(const char *host, int port, const char *xml)
             continue;
         if (connect(fd, ai->ai_addr, ai->ai_addrlen) == 0)
             break;
-        close(fd);
+        sock_close(fd);
         fd = -1;
     }
     freeaddrinfo(res);
@@ -181,7 +178,7 @@ void plugin_close(PLUGIN_CONN *c)
 {
     if (c == NULL)
         return;
-    close(c->fd);
+    sock_close(c->fd);
     pthread_mutex_destroy(&c->wlock);
     free(c);
 } // end plugin_close

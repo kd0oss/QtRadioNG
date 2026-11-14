@@ -28,6 +28,7 @@
 #include <signal.h>
 #include <getopt.h>
 
+#include "qtr_net.h"
 #include "server.h"
 
 static void on_signal(int sig)
@@ -53,7 +54,9 @@ static void usage(const char *prog)
 int main(int argc, char *argv[])
 {
     SERVER_OPTIONS opts;
+#ifndef _WIN32
     struct sigaction sa;
+#endif
     int c;
 
     memset(&opts, 0, sizeof(opts));
@@ -96,11 +99,18 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+#ifdef _WIN32
+    // the loops look at the stop flag at least every 500 ms
+    signal(SIGINT, on_signal);
+    signal(SIGTERM, on_signal);
+#else
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = on_signal;
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
     signal(SIGPIPE, SIG_IGN);
+#endif
+    qtr_net_init();
 
     return server_run(&opts);
 } // end main

@@ -20,13 +20,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
+#include "qtr_net.h"
 #include <sys/time.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <net/if_arp.h>
 #include <net/if.h>
 #include <ifaddrs.h>
 #include <semaphore.h>
@@ -383,27 +378,29 @@ static void open_udp_socket() {
         tmp=data_socket;
         data_socket=-1;
         usleep(100000);
-        close(tmp);
+        sock_close(tmp);
     }
     tmp=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
     if (tmp<0) {
-        perror("old_protocol: create socket failed for data_socket\n");
+        sock_perror("old_protocol: create socket failed for data_socket");
         exit(-1);
     }
 
     int optval = 1;
     if (setsockopt(tmp, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval))<0) {
-        perror("data_socket: SO_REUSEADDR");
+        sock_perror("data_socket: SO_REUSEADDR");
     }
+#ifdef SO_REUSEPORT
     if (setsockopt(tmp, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval))<0) {
-        perror("data_socket: SO_REUSEPORT");
+        sock_perror("data_socket: SO_REUSEPORT");
     }
+#endif
     optval=0xffff;
     if (setsockopt(tmp, SOL_SOCKET, SO_SNDBUF, &optval, sizeof(optval))<0) {
-        perror("data_socket: SO_SNDBUF");
+        sock_perror("data_socket: SO_SNDBUF");
     }
     if (setsockopt(tmp, SOL_SOCKET, SO_RCVBUF, &optval, sizeof(optval))<0) {
-        perror("data_socket: SO_RCVBUF");
+        sock_perror("data_socket: SO_RCVBUF");
     }
 
     //
@@ -412,17 +409,14 @@ static void open_udp_socket() {
     // instructing the radio to switch to TCP. Then this call has to finish eventually
     // and the next recvfrom() then uses the TCP socket.
     //
-    struct timeval tv;
-    tv.tv_sec=0;
-    tv.tv_usec=100000;
-    if (setsockopt(tmp, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv))<0) {
-        perror("data_socket: SO_RCVTIMEO");
+    if (sock_set_rcvtimeo(tmp, 100)<0) {
+        sock_perror("data_socket: SO_RCVTIMEO");
     }
 
     // bind to the interface
     printf("binding UDP socket to %s:%d\n",inet_ntoa(radio->info.network.interface_address.sin_addr),ntohs(radio->info.network.interface_address.sin_port));
     if (bind(tmp,(struct sockaddr*)&radio->info.network.interface_address,radio->info.network.interface_length)<0) {
-        perror("old_protocol: bind socket failed for data_socket\n");
+        sock_perror("old_protocol: bind socket failed for data_socket");
         exit(-1);
     }
 
@@ -441,7 +435,7 @@ static void open_tcp_socket() {
         tmp=tcp_socket;
         tcp_socket=-1;
         usleep(100000);
-        close(tmp);
+        sock_close(tmp);
     }
     memcpy(&data_addr,&radio->info.network.address,radio->info.network.address_length);
     data_addr.sin_port=htons(DATA_PORT);
@@ -450,25 +444,27 @@ static void open_tcp_socket() {
 
     tmp=socket(AF_INET, SOCK_STREAM, 0);
     if (tmp < 0) {
-        perror("tcp_socket: create socket failed for TCP socket");
+        sock_perror("tcp_socket: create socket failed for TCP socket");
         exit(-1);
     }
     int optval = 1;
     if (setsockopt(tmp, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval))<0) {
-        perror("tcp_socket: SO_REUSEADDR");
+        sock_perror("tcp_socket: SO_REUSEADDR");
     }
+#ifdef SO_REUSEPORT
     if (setsockopt(tmp, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval))<0) {
-        perror("tcp_socket: SO_REUSEPORT");
+        sock_perror("tcp_socket: SO_REUSEPORT");
     }
+#endif
     if (connect(tmp,(const struct sockaddr *)&data_addr,sizeof(data_addr)) < 0) {
-        perror("tcp_socket: connect");
+        sock_perror("tcp_socket: connect");
     }
     optval=0xffff;
     if (setsockopt(tmp, SOL_SOCKET, SO_SNDBUF, &optval, sizeof(optval))<0) {
-        perror("tcp_socket: SO_SNDBUF");
+        sock_perror("tcp_socket: SO_SNDBUF");
     }
     if (setsockopt(tmp, SOL_SOCKET, SO_RCVBUF, &optval, sizeof(optval))<0) {
-        perror("tcp_socket: SO_RCVBUF");
+        sock_perror("tcp_socket: SO_RCVBUF");
     }
     tcp_socket=tmp;
     printf("TCP socket established: %d\n", tcp_socket);
@@ -509,7 +505,7 @@ void *receive_thread(void *arg)
                     left=1032;
                     while (left > 0) {
                         ret=recvfrom(tcp_socket,buffer+bytes_read,(size_t)(left),0,NULL,0);
-                        if (ret < 0 && errno == EAGAIN) continue; // time-out
+                        if (ret < 0 && sock_would_block(sock_error())) continue; // time-out
                         if (ret < 0) break;                       // error
                         bytes_read += ret;
                         left -= ret;
@@ -520,14 +516,14 @@ void *receive_thread(void *arg)
                     }
                 } else if (data_socket >= 0) {
                     bytes_read=recvfrom(data_socket,buffer,sizeof(buffer),0,(struct sockaddr*)&addr,&length);
-                    if (bytes_read < 0 && errno != EAGAIN) perror("old_protocol recvfrom UDP:");
+                    if (bytes_read < 0 && !sock_would_block(sock_error())) sock_perror("old_protocol recvfrom UDP");
                     //printf("%s: bytes_read=%d\n",__FUNCTION__,bytes_read);
                 } else {
                     // This could happen in METIS start/stop sequences
                     usleep(100000);
                     continue;
                 }
-                if (bytes_read >= 0 || errno != EAGAIN) break;
+                if (bytes_read >= 0 || !sock_would_block(sock_error())) break;
             }
             if (bytes_read <= 0) {
                 continue;
@@ -2177,7 +2173,7 @@ static void metis_start_stop(int command) {
             tmp=tcp_socket;
             tcp_socket=-1;
             usleep(100000);  // give some time to swallow incoming TCP packets
-            close(tmp);
+            sock_close(tmp);
             printf("TCP socket closed\n");
         }
 
@@ -2201,7 +2197,7 @@ static void metis_send_buffer(unsigned char* buffer,int length) {
             exit(-1);
         }
         if (sendto(tcp_socket,buffer,length,0,NULL, 0) != length) {
-            perror("sendto socket failed for TCP metis_send_data\n");
+            sock_perror("sendto socket failed for TCP metis_send_data");
         }
     } else if (data_socket >= 0) {
   //      fprintf(stderr,"%s: sendto %d for %s:%d length=%d\n",__FUNCTION__,data_socket,inet_ntoa(data_addr.sin_addr),ntohs(data_addr.sin_port),length);

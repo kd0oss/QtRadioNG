@@ -24,10 +24,9 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <stdatomic.h>
-#include <sys/socket.h>
 #include <sys/time.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+
+#include "qtr_net.h"
 
 #include "radio.h"
 #include "vita.h"
@@ -322,22 +321,21 @@ static bool open_udp(void)
 {
     struct sockaddr_in a;
     socklen_t al = sizeof(a);
-    struct timeval tv = {0, 200000};
     int size = 4 << 20;
 
     udp_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (udp_socket < 0)
         return false;
     setsockopt(udp_socket, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size));
-    setsockopt(udp_socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    sock_set_rcvtimeo(udp_socket, 200);
     memset(&a, 0, sizeof(a));
     a.sin_family = AF_INET;
     a.sin_addr.s_addr = htonl(INADDR_ANY);
     a.sin_port = htons((uint16_t)opts.udp_port);
     if (bind(udp_socket, (struct sockaddr*)&a, sizeof(a)) < 0)
     {
-        perror("flexradio: UDP bind");
-        close(udp_socket);
+        sock_perror("flexradio: UDP bind");
+        sock_close(udp_socket);
         udp_socket = -1;
         return false;
     }
@@ -388,7 +386,7 @@ bool radio_open(const RADIO_OPTIONS *options, radio_iq_fn iq, void *user)
         return false;
     if (!flex_connect(info.ip, info.port, on_status))
     {
-        close(udp_socket);
+        sock_close(udp_socket);
         udp_socket = -1;
         return false;
     }
@@ -480,7 +478,7 @@ void radio_close(void)
     }
     if (udp_socket >= 0)
     {
-        close(udp_socket);
+        sock_close(udp_socket);
         udp_socket = -1;
     }
     atomic_store(&iq_stream_id, 0);

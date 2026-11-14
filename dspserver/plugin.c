@@ -44,15 +44,26 @@
 #include <time.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <arpa/inet.h>
+#include "qtr_net.h"
 #include <samplerate.h>
 #include <event2/bufferevent.h>
 
 #include "plugin.h"
 #include "server.h"
+
+/* strndup is POSIX 2008 and missing from mingw-w64 */
+static char *plugin_strndup(const char *s, size_t n)
+{
+    size_t len = strnlen(s, n);
+    char *p = malloc(len + 1);
+
+    if (p != NULL)
+    {
+        memcpy(p, s, len);
+        p[len] = '\0';
+    }
+    return p;
+}
 
 #define PRIME_MS        120
 #define FIFO_SECONDS    2
@@ -344,7 +355,7 @@ static void *writer_thread(void *arg)
             ssize_t w = send(p->fd, q->data + off, len - off, MSG_NOSIGNAL);
             if (w <= 0)
             {
-                if (w < 0 && errno == EINTR)
+                if (w < 0 && sock_error() == SOCK_EINTR)
                     continue;
                 break;
             }
@@ -883,7 +894,7 @@ static bool read_all(int fd, void *buf, size_t n)
         ssize_t r = recv(fd, (char*)buf + off, n - off, 0);
         if (r <= 0)
         {
-            if (r < 0 && errno == EINTR)
+            if (r < 0 && sock_error() == SOCK_EINTR)
                 continue;
             return false;
         }
@@ -902,7 +913,7 @@ static bool on_register(PLUGIN *p, const char *xml)
     if (t == NULL)
         return false;
     size_t tl = strcspn(t, ">");
-    char *tag = strndup(t, tl);
+    char *tag = plugin_strndup(t, tl);
     if (!xml_attr(tag, "name", p->name, sizeof(p->name)))
         snprintf(p->name, sizeof(p->name), "plugin%d", p->id);
     free(tag);
@@ -911,7 +922,7 @@ static bool on_register(PLUGIN *p, const char *xml)
     for (t = strstr(xml, "<mode"); t != NULL && p->nmodes < PLUGIN_MAX_MODES; t = strstr(t + 5, "<mode"))
     {
         PLUGIN_MODE *m = &p->mode[p->nmodes];
-        tag = strndup(t, strcspn(t, ">"));
+        tag = plugin_strndup(t, strcspn(t, ">"));
         if (!xml_attr(tag, "name", m->name, sizeof(m->name)))
         {
             free(tag);
@@ -992,7 +1003,7 @@ static void plugin_close(PLUGIN *p)
     }
     p->qtail = NULL;
     p->qbytes = 0;
-    close(p->fd);
+    sock_close(p->fd);
     fprintf(stderr, "plugin: %s disconnected\n", p->name);
     free(p->xml);
     p->xml = NULL;
@@ -1082,15 +1093,15 @@ static void *listen_thread(void *arg)
     struct sockaddr_in addr;
 
     (void)arg;
-    setsockopt(ls, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+    sock_set_reuseaddr(ls);
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
     addr.sin_port = htons(PLUGIN_PORT);
     if (bind(ls, (struct sockaddr*)&addr, sizeof(addr)) < 0 || listen(ls, 4) < 0)
     {
-        perror("plugin: cannot listen on the plugin port");
-        close(ls);
+        sock_perror("plugin: cannot listen on the plugin port");
+        sock_close(ls);
         return NULL;
     }
     fprintf(stderr, "plugin: listening on port %d\n", PLUGIN_PORT);
@@ -1104,7 +1115,7 @@ static void *listen_thread(void *arg)
 
         if (fd < 0)
         {
-            if (errno == EINTR)
+            if (sock_error() == SOCK_EINTR)
                 continue;
             usleep(100000);
             continue;
@@ -1133,7 +1144,7 @@ static void *listen_thread(void *arg)
         if (p == NULL)
         {
             fprintf(stderr, "plugin: too many plugins, connection from %s refused\n", inet_ntoa(from.sin_addr));
-            close(fd);
+            sock_close(fd);
             continue;
         }
         fprintf(stderr, "plugin: connection from %s\n", inet_ntoa(from.sin_addr));

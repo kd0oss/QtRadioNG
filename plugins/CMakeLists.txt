@@ -16,10 +16,12 @@ set(CMAKE_C_EXTENSIONS ON)
 find_package(Threads REQUIRED)
 
 # the plugin side of the protocol, for every plugin
+include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/platform.cmake")
+
 add_library(plugin_client STATIC lib/plugin_client.c)
 target_include_directories(plugin_client PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/lib" "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_compile_options(plugin_client PRIVATE -Wall -Wextra)
-target_link_libraries(plugin_client PUBLIC Threads::Threads)
+target_link_libraries(plugin_client PUBLIC qtr_platform Threads::Threads)
 
 # example: narrow band FM outside WDSP, and a template for new plugins
 add_executable(example_plugin example/example.c)

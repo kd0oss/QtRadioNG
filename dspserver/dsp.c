@@ -3,10 +3,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
+#include "qtr_net.h"
 #include <signal.h>
 #include <string.h>
 #include <pthread.h>
@@ -31,6 +28,13 @@
 #include "wdsp.h"
 #include "buffer.h"
 #include "G711A.h"
+
+#ifndef MAX
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
+#endif
+#ifndef MIN
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#endif
 #include "util.h"
 
 #define true  1
@@ -52,7 +56,7 @@ extern sem_t bufferevent_semaphore,
 int8_t active_receivers = 0;
 int8_t active_transmitters = 0;
 
-extern timer_t spectrum_timerid[MAX_RFSTREAMS];
+extern QTR_TIMER spectrum_timer[MAX_RFSTREAMS];
 extern float *widebandBuffer[5];
 
 bool bUseNB2 = false;
@@ -826,7 +830,7 @@ char *dsp_command(struct _client_entry *current_item, unsigned char *message)
 
         case STOPXCVR:
         {
-            timer_delete(spectrum_timerid[stream]);
+            qtr_timer_stop(&spectrum_timer[stream]);
             usleep(5000);
             sem_wait(&iq_semaphore);
             if (rfstream[stream].isTX)

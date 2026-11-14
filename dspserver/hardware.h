@@ -33,6 +33,8 @@
 extern "C" {
 #endif
 #include <stdbool.h>
+#include <stdint.h>
+#include <pthread.h>
 //#include "server.h"
 
 #define WIDEBAND_CHANNEL MAX_RFSTREAMS-1

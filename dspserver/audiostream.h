@@ -31,6 +31,7 @@
 * @return
 */
 
+#include <stdint.h>
 #include <sys/queue.h>
 #include <semaphore.h>
 

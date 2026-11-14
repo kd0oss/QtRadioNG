@@ -17,6 +17,7 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_EXTENSIONS ON)
 
 find_package(Threads REQUIRED)
+include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/platform.cmake")
 
 add_executable(flexradio
     main.c
@@ -28,7 +29,7 @@ add_executable(flexradio
     txaudio.c)
 
 target_compile_options(flexradio PRIVATE -Wall -Wextra)
-target_link_libraries(flexradio PRIVATE Threads::Threads m)
+target_link_libraries(flexradio PRIVATE qtr_platform Threads::Threads m)
 
 install(TARGETS flexradio RUNTIME DESTINATION bin)
 

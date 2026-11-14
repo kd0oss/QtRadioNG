@@ -20,18 +20,12 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <net/if_arp.h>
+#include "qtr_net.h"
 #include <net/if.h>
 #include <ifaddrs.h>
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <sys/select.h>
 #include <pthread.h>
 #include <unistd.h>
 
@@ -54,7 +48,7 @@ static void discover(struct ifaddrs* iface) {
     struct sockaddr_in *sa;
     struct sockaddr_in *mask;
     struct sockaddr_in to_addr={0};
-    int flags;
+    fd_set efds;
     struct timeval tv;
     int optval;
     socklen_t optlen;
@@ -73,7 +67,7 @@ static void discover(struct ifaddrs* iface) {
         fprintf(stderr,"Trying to detect at TCP addr %s\n", ipaddr_tcp);
         memset(&to_addr, 0, sizeof(to_addr));
         to_addr.sin_family = AF_INET;
-        if (inet_aton(ipaddr_tcp, &to_addr.sin_addr) == 0) {
+        if (inet_pton(AF_INET, ipaddr_tcp, &to_addr.sin_addr) != 1) {
             fprintf(stderr,"discover: TCP addr %s is invalid!\n",ipaddr_tcp);
             return;
         }
@@ -81,7 +75,7 @@ static void discover(struct ifaddrs* iface) {
 
         discovery_socket=socket(AF_INET, SOCK_STREAM, 0);
         if(discovery_socket<0) {
-            perror("discover: create socket failed for TCP discovery_socket\n");
+            sock_perror("discover: create socket failed for TCP discovery_socket");
             return;
         }
         //
@@ -95,12 +89,11 @@ static void discover(struct ifaddrs* iface) {
         // - Do not forget to make the socket blocking again.
         //
         // Step 1. Make socket non-blocking and connect()
-        flags=fcntl(discovery_socket, F_GETFL, 0);
-        fcntl(discovery_socket, F_SETFL, flags | O_NONBLOCK);
+        sock_set_nonblocking(discovery_socket, 1);
         rc=connect(discovery_socket, (const struct sockaddr *)&to_addr, sizeof(to_addr));
-        if ((errno != EINPROGRESS) && (rc < 0)) {
-            perror("discover: connect() failed for TCP discovery_socket:");
-            close(discovery_socket);
+        if ((rc < 0) && !sock_connect_pending(sock_error())) {
+            sock_perror("discover: connect() failed for TCP discovery_socket");
+            sock_close(discovery_socket);
             return;
         }
         // Step 2. Use select to wait for the connection
@@ -108,17 +101,19 @@ static void discover(struct ifaddrs* iface) {
         tv.tv_usec=0;
         FD_ZERO(&fds);
         FD_SET(discovery_socket, &fds);
-        rc=select(discovery_socket+1, NULL, &fds, NULL, &tv);
+        FD_ZERO(&efds);
+        FD_SET(discovery_socket, &efds);    // Windows reports a refused connect here
+        rc=select(discovery_socket+1, NULL, &fds, &efds, &tv);
         if (rc < 0) {
-            perror("discover: select() failed on TCP discovery_socket:");
-            close(discovery_socket);
+            sock_perror("discover: select() failed on TCP discovery_socket");
+            sock_close(discovery_socket);
             return;
         }
         // If no connection occured, return
         if (rc == 0) {
             // select timed out
             fprintf(stderr,"discover: select() timed out on TCP discovery socket\n");
-            close(discovery_socket);
+            sock_close(discovery_socket);
             return;
         }
         // Step 3. select() succeeded. Check success of connect()
@@ -126,18 +121,18 @@ static void discover(struct ifaddrs* iface) {
         rc=getsockopt(discovery_socket, SOL_SOCKET, SO_ERROR, &optval, &optlen);
         if (rc < 0) {
             // this should very rarely happen
-            perror("discover: getsockopt() failed on TCP discovery_socket:");
-            close(discovery_socket);
+            sock_perror("discover: getsockopt() failed on TCP discovery_socket");
+            sock_close(discovery_socket);
             return;
         }
         if (optval != 0) {
             // connect did not succeed
             fprintf(stderr,"discover: connect() on TCP socket did not succeed\n");
-            close(discovery_socket);
+            sock_close(discovery_socket);
             return;
         }
         // Step 4. reset the socket to normal (blocking) mode
-        fcntl(discovery_socket, F_SETFL, flags &  ~O_NONBLOCK);
+        sock_set_nonblocking(discovery_socket, 0);
     } else {
 
         strcpy(interface_name,iface->ifa_name);
@@ -146,7 +141,7 @@ static void discover(struct ifaddrs* iface) {
         // send a broadcast to locate hpsdr boards on the network
         discovery_socket=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
         if(discovery_socket<0) {
-            perror("discover: create socket failed for discovery_socket:");
+            sock_perror("discover: create socket failed for discovery_socket");
             exit(-1);
         }
 
@@ -160,7 +155,7 @@ static void discover(struct ifaddrs* iface) {
         //interface_addr.sin_port = htons(DISCOVERY_PORT*2);
         interface_addr.sin_port = htons(0); // system assigned port
         if(bind(discovery_socket,(struct sockaddr*)&interface_addr,sizeof(interface_addr))<0) {
-            perror("discover: bind socket failed for discovery_socket:");
+            sock_perror("discover: bind socket failed for discovery_socket");
             return;
         }
 
@@ -181,7 +176,9 @@ static void discover(struct ifaddrs* iface) {
     }
     optval = 1;
     setsockopt(discovery_socket, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+#ifdef SO_REUSEPORT
     setsockopt(discovery_socket, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+#endif
 
     rc=devices;
     // start a receive thread to collect discovery response packets
@@ -206,14 +203,14 @@ static void discover(struct ifaddrs* iface) {
     }
 
     if(sendto(discovery_socket,buffer,len,0,(struct sockaddr*)&to_addr,sizeof(to_addr))<0) {
-        perror("discover: sendto socket failed for discovery_socket:");
+        sock_perror("discover: sendto socket failed for discovery_socket");
         return;
     }
 
     // wait for receive thread to complete
     pthread_join(discover_thread_id, NULL);
 
-    close(discovery_socket);
+    sock_close(discovery_socket);
 
     if (iface == NULL) {
         fprintf(stderr,"discover: exiting TCP discover for %s\n",ipaddr_tcp);
@@ -257,13 +254,15 @@ int stemlab_get_info(int id) {
 
     discovery_socket = socket(AF_INET, SOCK_DGRAM, 0);
     if (discovery_socket < 0) {
-        perror("stemlab_get_info socket():");
+        sock_perror("stemlab_get_info socket()");
         return(1);
     }
 
     optval = 1;
     setsockopt(discovery_socket, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+#ifdef SO_REUSEPORT
     setsockopt(discovery_socket, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+#endif
 
     memset(&discovery_addr, 0, sizeof(discovery_addr));
     discovery_addr.sin_family=AF_INET;
@@ -273,7 +272,7 @@ int stemlab_get_info(int id) {
     discovery_addr.sin_port=htons(0);
     ret=bind(discovery_socket, (struct sockaddr *)&discovery_addr, sizeof(discovery_addr));
     if (ret < 0) {
-        perror("stemlab_get_info bind():");
+        sock_perror("stemlab_get_info bind()");
         return 1;
     }
     setsockopt(discovery_socket, SOL_SOCKET, SO_BROADCAST, &optval, sizeof(optval));
@@ -298,14 +297,14 @@ int stemlab_get_info(int id) {
                (struct sockaddr*)&(discovered[id].info.network.address),
                sizeof(discovered[id].info.network.address));
     if (ret < 63) {
-        perror("stemlab_get_info UDP sendto():");
+        sock_perror("stemlab_get_info UDP sendto()");
         return -1;
     }
 
     // wait for receive thread to complete
     g_thread_join(discover_thread_id);
 
-    close(discovery_socket);
+    sock_close(discovery_socket);
 
     // if all went well, we have now filled in data for exactly
     // one device.
@@ -319,17 +318,19 @@ int stemlab_get_info(int id) {
 
     discovery_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (discovery_socket < 0) {
-        perror("stemlab_get_info socket():");
+        sock_perror("stemlab_get_info socket()");
         return 1;
     }
 
     optval = 1;
     setsockopt(discovery_socket, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+#ifdef SO_REUSEPORT
     setsockopt(discovery_socket, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+#endif
     ret=connect(discovery_socket, (struct sockaddr*)&(discovered[id].info.network.address),
                 sizeof(discovered[id].info.network.address));
     if (ret < 0) {
-        perror("stemlab_get_info connect():");
+        sock_perror("stemlab_get_info connect()");
         return 1;
     }
 
@@ -353,14 +354,14 @@ int stemlab_get_info(int id) {
                (struct sockaddr*)&(discovered[id].info.network.address),
                sizeof(discovered[id].info.network.address));
     if (ret < 1032) {
-        perror("stemlab_get_info TCP  sendto():");
+        sock_perror("stemlab_get_info TCP  sendto()");
         return -1;
     }
 
     // wait for receive thread to complete
     g_thread_join(discover_thread_id);
 
-    close(discovery_socket);
+    sock_close(discovery_socket);
 
     // if all went well, we have now filled in data for exactly
     // one device. We must set a flag that this one can ONLY do
@@ -380,21 +381,18 @@ static void* discover_receive_thread(void *data) {
     socklen_t len;
     unsigned char buffer[2048];
     int bytes_read;
-    struct timeval tv;
     int i;
 
     fprintf(stderr,"discover_receive_thread\n");
 
-    tv.tv_sec = 2;
-    tv.tv_usec = 0;
-    setsockopt(discovery_socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv,sizeof(struct timeval));
+    sock_set_rcvtimeo(discovery_socket, 2000);
 
     len=sizeof(addr);
     while(1) {
-        bytes_read=recvfrom(discovery_socket,buffer,sizeof(buffer),1032,(struct sockaddr*)&addr,&len);
+        bytes_read=recvfrom(discovery_socket,buffer,sizeof(buffer),0,(struct sockaddr*)&addr,&len);
         if(bytes_read<0) {
             fprintf(stderr,"discovery: bytes read %d\n", bytes_read);
-            perror("old_discovery: recvfrom socket failed for discover_receive_thread");
+            sock_perror("old_discovery: recvfrom socket failed for discover_receive_thread");
             break;
         }
         if (bytes_read == 0) break;

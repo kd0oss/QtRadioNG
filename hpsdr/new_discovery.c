@@ -20,14 +20,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <net/if_arp.h>
+#include "qtr_net.h"
 #include <net/if.h>
-#include <netinet/in.h>
 #include <ifaddrs.h>
 #include <string.h>
 #include <errno.h>
@@ -113,13 +107,15 @@ void new_discover(struct ifaddrs* iface)
     // send a broadcast to locate metis boards on the network
     discovery_socket=socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
     if (discovery_socket<0) {
-        perror("new_discover: create socket failed for discovery_socket\n");
+        sock_perror("new_discover: create socket failed for discovery_socket");
         exit(-1);
     }
 
     int optval = 1;
     setsockopt(discovery_socket, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+#ifdef SO_REUSEPORT
     setsockopt(discovery_socket, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+#endif
 
     sa = (struct sockaddr_in *) iface->ifa_addr;
     mask = (struct sockaddr_in *) iface->ifa_netmask;
@@ -131,7 +127,7 @@ void new_discover(struct ifaddrs* iface)
     interface_addr.sin_addr.s_addr = sa->sin_addr.s_addr;
     interface_addr.sin_port = htons(0);
     if (bind(discovery_socket,(struct sockaddr*)&interface_addr,sizeof(interface_addr))<0) {
-        perror("new_discover: bind socket failed for discovery_socket\n");
+        sock_perror("new_discover: bind socket failed for discovery_socket");
         exit(-1);
     }
 
@@ -177,14 +173,14 @@ void new_discover(struct ifaddrs* iface)
     }
 
     if (sendto(discovery_socket,buffer,60,0,(struct sockaddr*)&to_addr,sizeof(to_addr))<0) {
-        perror("new_discover: sendto socket failed for discovery_socket\n");
+        sock_perror("new_discover: sendto socket failed for discovery_socket");
         return;
     }
 
     // wait for receive thread to complete
     pthread_join(discover_thread_id, NULL);
 
-    close(discovery_socket);
+    sock_close(discovery_socket);
 
     fprintf(stderr,"new_discover: exiting discover for %s\n",iface->ifa_name);
 }
@@ -196,14 +192,10 @@ void *new_discover_receive_thread(void *data)
     socklen_t len;
     unsigned char buffer[2048];
     int bytes_read;
-    struct timeval tv;
     int i;
     double frequency_min, frequency_max;
 
-    tv.tv_sec = 2;
-    tv.tv_usec = 0;
-
-    setsockopt(discovery_socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv,sizeof(struct timeval));
+    sock_set_rcvtimeo(discovery_socket, 2000);
 
     len=sizeof(addr);
     while (1)
@@ -211,7 +203,7 @@ void *new_discover_receive_thread(void *data)
         bytes_read=recvfrom(discovery_socket,buffer,sizeof(buffer),0,(struct sockaddr*)&addr,&len);
         if (bytes_read<0) {
             fprintf(stderr,"new_discover: bytes read %d\n", bytes_read);
-            perror("new_discover: recvfrom socket failed for discover_receive_thread");
+            sock_perror("new_discover: recvfrom socket failed for discover_receive_thread");
             break;
         }
         fprintf(stderr,"new_discover: received %d bytes\n",bytes_read);

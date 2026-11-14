@@ -22,7 +22,7 @@
 #ifndef _DISCOVERED_H
 #define _DISCOVERED_H
 
-#include <netinet/in.h>
+#include "qtr_net.h"
 #include "receiver.h"
 
 #define MAX_DEVICES 16

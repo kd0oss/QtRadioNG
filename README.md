@@ -48,6 +48,68 @@ dspserver/README.txt for WDSP.
 
 QtRadio keeps its qmake project (QtRadio/QtRadio.pro).
 
+### Building on Windows (MSYS2)
+
+Everything builds in the MSYS2 **UCRT64** environment (start the "MSYS2
+UCRT64" shell). Install the tools and libraries:
+
+    pacman -S --needed git make \
+        mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake \
+        mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-pkgconf \
+        mingw-w64-ucrt-x86_64-fftw mingw-w64-ucrt-x86_64-libsamplerate \
+        mingw-w64-ucrt-x86_64-libevent mingw-w64-ucrt-x86_64-libusb \
+        mingw-w64-ucrt-x86_64-hackrf mingw-w64-ucrt-x86_64-codec2 \
+        mingw-w64-ucrt-x86_64-qt6-base mingw-w64-ucrt-x86_64-qt6-multimedia
+
+libm17 (for the M17 plugin) is not packaged; build it from source into
+the UCRT64 prefix:
+
+    git clone https://github.com/M17-Project/libm17
+    cmake -S libm17 -B libm17/build -G Ninja -DCMAKE_INSTALL_PREFIX=/ucrt64
+    cmake --build libm17/build && cmake --install libm17/build
+
+WDSP is not packaged either. Its sources (see dspserver/README.txt) keep
+the original Windows code, so build them as a DLL directly, leaving out
+`linux_port.c`:
+
+    cd wdsp/src
+    for f in *.c; do
+        [ "$f" = linux_port.c ] && continue
+        gcc -O3 -Wno-incompatible-pointer-types -c "$f" || break
+    done
+    mkdir -p ../win && gcc -shared -o ../win/libwdsp.dll *.o \
+        -Wl,--out-implib,../win/libwdsp.dll.a -lfftw3 -lavrt -lwinmm
+
+(`-Wno-incompatible-pointer-types` is for analyzer.c, which GCC 14 and
+later otherwise reject.) Then build QtRadioNG as on Linux, pointing at
+that directory:
+
+    cmake -B build -G Ninja -DWDSP_DIR=/path/to/wdsp/win
+    cmake --build build
+
+and QtRadio with Qt 6's qmake (`qmake6`; plain `qmake` if that is the
+name your install uses):
+
+    cd QtRadio && qmake6 && make -j
+
+Notes for Windows:
+
+* Run the programs from the UCRT64 shell, or copy the DLLs they need next
+  to them (`ldd build/dspserver/dspserver.exe | grep ucrt64` lists them,
+  plus libwdsp.dll).
+* The first dspserver start creates WDSP's FFT wisdom file in its working
+  directory. On Windows WDSP opens a separate console window for this and
+  asks you not to close it; it takes several minutes.
+* dspserver.conf is read from `$HOME`, or `%USERPROFILE%` when HOME is not
+  set.
+* Windows Firewall asks once per program whether it may accept network
+  connections; allow dspserver (and the radio programs, which receive
+  UDP from the radio).
+* The SSL client listener is off by default on all platforms; turn it on
+  with `-DUSE_SSL=ON` (needs OpenSSL and libevent_openssl).
+* The tests (`ctest`) need Python 3 with numpy, e.g.
+  `pacman -S mingw-w64-ucrt-x86_64-python-numpy`.
+
 ## Several radios
 
 Several radio programs (hpsdr, hackrf_one, flexradio) can be connected to

@@ -51,10 +51,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
+#include "qtr_net.h"
 #include <signal.h>
 #include <string.h>
 #include <pthread.h>
@@ -95,7 +92,7 @@
 #define MIC_MSG_SIZE 518 //64
 #define MIC_ALAW_BUFFER_SIZE 512 //58
 
-#define SPECTRUM_TIMER_NS (20*1000000L)
+#define SPECTRUM_TIMER_MS 20
 
 
 extern int8_t active_receivers;
@@ -150,9 +147,9 @@ static unsigned char mic_buffer[MIC_ALAW_BUFFER_SIZE];
 
 
 // For timer based spectrum data (instead of sending one spectrum frame per getspectrum command from clients)
-timer_t spectrum_timerid[MAX_RFSTREAMS];
+QTR_TIMER spectrum_timer[MAX_RFSTREAMS];
 
-static timer_t wideband_timerid[MAX_RFSTREAMS];   // indexed by stream (bandscope = MAX_RFSTREAMS-1)
+static QTR_TIMER wideband_timer[MAX_RFSTREAMS];   // indexed by stream (bandscope = MAX_RFSTREAMS-1)
 float *widebandBuffer[5];
 bool   wb_complex[MAX_RFSTREAMS];   // set by wb_iq_thread from the packets it receives
 
@@ -225,8 +222,8 @@ void do_accept_wideband(evutil_socket_t listener, short event, void *arg);
 void wideband_readcb(struct bufferevent *bev, void *ctx);
 void wideband_writecb(struct bufferevent *bev, void *ctx);
 
-void spectrum_timer_handler(union sigval);
-void wideband_timer_handler(union sigval);
+void spectrum_timer_handler(int stream);
+void wideband_timer_handler(int stream);
 
 
 
@@ -360,7 +357,11 @@ void server_init(int receiver)
         rx_audio_enabled[i] = false;
     }
 
+#ifdef _WIN32
+    evthread_use_windows_threads();
+#else
     evthread_use_pthreads();
+#endif
 
     // initialize WDSP
     char wisdom_directory[1024];
@@ -389,7 +390,9 @@ void server_init(int receiver)
     sem_init(&wb_iq_semaphore, 0, 1);
     sem_init(&rx_audio_semaphore, 0, 1);
     
+#ifdef SIGPIPE
     signal(SIGPIPE, SIG_IGN);
+#endif
 
     port = BASE_PORT;
     port_ssl = BASE_PORT_SSL;
@@ -488,14 +491,11 @@ void *tx_thread(void *arg)
     radio_mic_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (radio_mic_socket < 0)
     {
-        perror("tx_thread: create radio mic audio socket failed");
+        sock_perror("tx_thread: create radio mic audio socket failed");
         exit(1);
     }
 
-    struct timeval read_timeout;
-    read_timeout.tv_sec = 0;
-    read_timeout.tv_usec = 10;
-    setsockopt(radio_mic_socket, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
+    sock_set_rcvtimeo_us(radio_mic_socket, 10);
 
     memset(&radio_mic_addr, 0, radio_mic_length);
     radio_mic_addr.sin_family = AF_INET;
@@ -504,8 +504,8 @@ void *tx_thread(void *arg)
 
     if (bind(radio_mic_socket, (struct sockaddr*)&radio_mic_addr, radio_mic_length) < 0)
     {
-        perror("tx_init: bind socket failed for radio mic socket (no mic from the radio)");
-        close(radio_mic_socket);
+        sock_perror("tx_init: bind socket failed for radio mic socket (no mic from the radio)");
+        sock_close(radio_mic_socket);
         radio_mic_socket = -1;
     }
 
@@ -616,7 +616,7 @@ void *tx_thread(void *arg)
         } // end else item
     } // end while
     if (radio_mic_socket > -1)
-        close(radio_mic_socket);
+        sock_close(radio_mic_socket);
     free(data_out);
     fprintf(stderr, "tx_thread stopped.\n");
     atomic_store(&tx_running[stream], false);
@@ -716,7 +716,7 @@ void* rx_audio_thread(void* arg)
     }
     rx_audio_queued[stream] = 0;
     sem_post(&rx_audio_semaphore);
-    close(radio_audio_socket[stream]);
+    sock_close(radio_audio_socket[stream]);
     rx_audio_enabled[rfstream[stream].radio.radio_id] = false;
     fprintf(stderr, "rx_audio_thread stopped.\n");
     return NULL;
@@ -734,14 +734,11 @@ void start_rx_audio(int8_t stream)
     radio_audio_socket[stream] = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (radio_audio_socket[stream] < 0)
     {
-        perror("start_rx_audio: create radio audio socket failed");
+        sock_perror("start_rx_audio: create radio audio socket failed");
         exit(1);
     }
     
-    struct timeval read_timeout;
-    read_timeout.tv_sec = 0;
-    read_timeout.tv_usec = 10;
-    setsockopt(radio_audio_socket[stream], SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
+    sock_set_rcvtimeo_us(radio_audio_socket[stream], 10);
     
     radio_audio_length[stream] = sizeof(radio_audio_addr[stream]);
     memset(&radio_audio_addr[stream], 0, radio_audio_length[stream]);
@@ -751,8 +748,8 @@ void start_rx_audio(int8_t stream)
     
     if (bind(radio_audio_socket[stream], (struct sockaddr*)&radio_audio_addr[stream], radio_audio_length[stream]) < 0)
     {
-        perror("rx_audio: bind socket failed for radio audio socket (no audio to the radio)");
-        close(radio_audio_socket[stream]);
+        sock_perror("rx_audio: bind socket failed for radio audio socket (no audio to the radio)");
+        sock_close(radio_audio_socket[stream]);
         return;
     }
 
@@ -773,7 +770,6 @@ void start_rx_audio(int8_t stream)
 
 void* client_thread(void* arg)
 {
-    int on = 1;
     struct event_base *base;
     struct event *listener_event;
     struct sockaddr_in server;
@@ -790,16 +786,14 @@ void* client_thread(void* arg)
     serverSocket = socket(AF_INET,SOCK_STREAM, 0);
     if (serverSocket == -1)
     {
-        perror("client socket");
+        sock_perror("client socket");
         return NULL;
     }
 
     evutil_make_socket_nonblocking(serverSocket);
     evutil_make_socket_closeonexec(serverSocket);
 
-#ifndef WIN32
-    setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-#endif
+    sock_set_reuseaddr(serverSocket);
 
     memset(&server, 0, sizeof(server));
     server.sin_family = AF_INET;
@@ -808,7 +802,7 @@ void* client_thread(void* arg)
 
     if (bind(serverSocket,(struct sockaddr *)&server,sizeof(server)) < 0)
     {
-        perror("client bind");
+        sock_perror("client bind");
         fprintf(stderr, "port = %d\n", BASE_PORT);
         return NULL;
     }
@@ -817,7 +811,7 @@ void* client_thread(void* arg)
 
     if (listen(serverSocket, 5) == -1)
     {
-        perror("client listen");
+        sock_perror("client listen");
         exit(1);
     }
 #ifdef USE_SSL
@@ -860,7 +854,7 @@ void* client_thread(void* arg)
     thread_cleanup();
     SSL_CTX_free(ctx);
 #endif
-    close(serverSocket);
+    sock_close(serverSocket);
     fprintf(stderr, "command client thread stopped\n");
     return NULL;
 } // end client_thread
@@ -1245,22 +1239,7 @@ unsigned long pthreads_thread_id(void)
 
 void spectrum_timer_init(int stream)
 {
-    struct itimerspec value;
-    struct sigevent sev;
-
-    value.it_value.tv_sec = 0;
-    value.it_value.tv_nsec = SPECTRUM_TIMER_NS;
-
-    value.it_interval.tv_sec = 0;
-    value.it_interval.tv_nsec = SPECTRUM_TIMER_NS;
-
-    sev.sigev_notify = SIGEV_THREAD;
-    sev.sigev_notify_function = spectrum_timer_handler;
-    sev.sigev_notify_attributes = NULL;
-    sev.sigev_value.sival_int = stream;
-
-    timer_create(CLOCK_REALTIME, &sev, &spectrum_timerid[stream]);
-    timer_settime(spectrum_timerid[stream], 0, &value, NULL);
+    qtr_timer_start(&spectrum_timer[stream], SPECTRUM_TIMER_MS, spectrum_timer_handler, stream);
     fprintf(stderr, "spectrum timer for rf stream %d initialized\n", stream);
 } // end spectrum_timer_init
 
@@ -1301,11 +1280,11 @@ static bool spectrum_frame_due(int stream, int fps)
     return true;
 } // end spectrum_frame_due
 
-void spectrum_timer_handler(union sigval usv)
+void spectrum_timer_handler(int stream)
 {  // this is called every 20 ms
     int           flag = 0;
     client_entry *item, *last_item = NULL;
-    int8_t i = usv.sival_int;
+    int8_t i = (int8_t)stream;
 
     // This must match the size declared in WDSP
     float spectrumBuffer[SAMPLE_BUFFER_SIZE];
@@ -1390,7 +1369,6 @@ void spectrum_timer_handler(union sigval usv)
 
 void* spectrum_client_thread(void* arg)
 {
-    int on = 1;
     struct event_base *base;
     struct event *listener_event;
     struct sockaddr_in server;
@@ -1402,16 +1380,14 @@ void* spectrum_client_thread(void* arg)
     spectrumSocket = socket(AF_INET,SOCK_STREAM, 0);
     if (spectrumSocket == -1)
     {
-        perror("spectrum_client socket");
+        sock_perror("spectrum_client socket");
         return NULL;
     }
 
     evutil_make_socket_nonblocking(spectrumSocket);
     evutil_make_socket_closeonexec(spectrumSocket);
 
-#ifndef WIN32
-    setsockopt(spectrumSocket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-#endif
+    sock_set_reuseaddr(spectrumSocket);
 
     memset(&server, 0, sizeof(server));
     server.sin_family = AF_INET;
@@ -1420,7 +1396,7 @@ void* spectrum_client_thread(void* arg)
 
     if (bind(spectrumSocket, (struct sockaddr *)&server, sizeof(server)) < 0)
     {
-        perror("spectrum client bind");
+        sock_perror("spectrum client bind");
         fprintf(stderr,"port = %d\n", BASE_PORT+1);
         return NULL;
     }
@@ -1429,7 +1405,7 @@ void* spectrum_client_thread(void* arg)
 
     if (listen(spectrumSocket, 5) == -1)
     {
-        perror("spectrum client listen");
+        sock_perror("spectrum client listen");
         exit(1);
     }
 
@@ -1442,7 +1418,7 @@ void* spectrum_client_thread(void* arg)
 
     event_base_loop(base, 0);
 
-    close(spectrumSocket);
+    sock_close(spectrumSocket);
     fprintf(stderr, "spectrum client thread stopped\n");
     return NULL;
 } // end spectrum_client_thread
@@ -1636,30 +1612,15 @@ void do_accept_spectrum(evutil_socket_t listener, short event, void *arg)
  
 void wideband_timer_init(int stream)
 {
-    struct itimerspec value;
-    struct sigevent sev;
-
-    value.it_value.tv_sec = 0;
-    value.it_value.tv_nsec = SPECTRUM_TIMER_NS;
-
-    value.it_interval.tv_sec = 0;
-    value.it_interval.tv_nsec = SPECTRUM_TIMER_NS;
-
-    sev.sigev_notify = SIGEV_THREAD;
-    sev.sigev_notify_function = wideband_timer_handler;
-    sev.sigev_notify_attributes = NULL;
-    sev.sigev_value.sival_int = stream;
-
-    timer_create(CLOCK_REALTIME, &sev, &wideband_timerid[stream]);
-    timer_settime(wideband_timerid[stream], 0, &value, NULL);
+    qtr_timer_start(&wideband_timer[stream], SPECTRUM_TIMER_MS, wideband_timer_handler, stream);
 } // end wideband_timer_init
 
 
-void wideband_timer_handler(union sigval usv)
+void wideband_timer_handler(int stream)
 {   // this is called every 20 ms
     int flag = 0;
     client_entry *item, *last_item = NULL;
-    int8_t i = usv.sival_int;
+    int8_t i = (int8_t)stream;
 
     if (active_rfstreams <= 0) return;
 
@@ -1732,7 +1693,6 @@ void wideband_timer_handler(union sigval usv)
 
 void* wideband_client_thread(void* arg)
 {
-    int on = 1;
     struct event_base *base;
     struct event *listener_event;
     struct sockaddr_in server;
@@ -1744,16 +1704,14 @@ void* wideband_client_thread(void* arg)
     widebandSocket = socket(AF_INET,SOCK_STREAM, 0);
     if (widebandSocket == -1)
     {
-        perror("wideband_client socket");
+        sock_perror("wideband_client socket");
         return NULL;
     }
 
     evutil_make_socket_nonblocking(widebandSocket);
     evutil_make_socket_closeonexec(widebandSocket);
 
-#ifndef WIN32
-    setsockopt(widebandSocket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-#endif
+    sock_set_reuseaddr(widebandSocket);
 
     memset(&server, 0, sizeof(server));
     server.sin_family = AF_INET;
@@ -1762,7 +1720,7 @@ void* wideband_client_thread(void* arg)
 
     if (bind(widebandSocket, (struct sockaddr *)&server, sizeof(server)) < 0)
     {
-        perror("wideband client bind");
+        sock_perror("wideband client bind");
         fprintf(stderr,"port = %d\n", BASE_PORT+30);
         return NULL;
     }
@@ -1771,7 +1729,7 @@ void* wideband_client_thread(void* arg)
 
     if (listen(widebandSocket, 5) == -1)
     {
-        perror("wideband client listen");
+        sock_perror("wideband client listen");
         exit(1);
     }
 
@@ -1784,7 +1742,7 @@ void* wideband_client_thread(void* arg)
 
     event_base_loop(base, 0);
 
-    close(widebandSocket);
+    sock_close(widebandSocket);
     fprintf(stderr, "wideband client thread stopped\n");
     return NULL;
 } // end wideband_client_thread
@@ -1901,7 +1859,7 @@ void wideband_readcb(struct bufferevent *bev, void *ctx)
             rfstream[ch].radio.radio_id = message[2];
             hw_set_bandscope(rfstream[ch].radio.radio_id, false);
             current_item->rfstream_enabled[ch] = false;
-            timer_delete(wideband_timerid[ch]);
+            qtr_timer_stop(&wideband_timer[ch]);
             usleep(5000);
             enable_wideband(ch, false);
             sem_wait(&wb_bufevent_semaphore);
@@ -2047,7 +2005,6 @@ void do_accept_wideband(evutil_socket_t listener, short event, void *arg)
 
 void* audio_client_thread(void* arg)
 {
-    int on = 1;
     struct event_base *base;
     struct event *listener_event;
     struct sockaddr_in server;
@@ -2059,16 +2016,14 @@ void* audio_client_thread(void* arg)
     audioSocket = socket(AF_INET,SOCK_STREAM, 0);
     if (audioSocket == -1)
     {
-        perror("audio_client socket");
+        sock_perror("audio_client socket");
         return NULL;
     }
 
     evutil_make_socket_nonblocking(audioSocket);
     evutil_make_socket_closeonexec(audioSocket);
 
-#ifndef WIN32
-    setsockopt(audioSocket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-#endif
+    sock_set_reuseaddr(audioSocket);
 
     memset(&server, 0, sizeof(server));
     server.sin_family = AF_INET;
@@ -2077,7 +2032,7 @@ void* audio_client_thread(void* arg)
 
     if (bind(audioSocket, (struct sockaddr *)&server, sizeof(server)) < 0)
     {
-        perror("audio client bind");
+        sock_perror("audio client bind");
         fprintf(stderr,"port=%d\n", BASE_PORT+10);
         return NULL;
     }
@@ -2086,7 +2041,7 @@ void* audio_client_thread(void* arg)
 
     if (listen(audioSocket, 5) == -1)
     {
-        perror("audio client listen");
+        sock_perror("audio client listen");
         exit(1);
     }
 
@@ -2099,7 +2054,7 @@ void* audio_client_thread(void* arg)
 
     event_base_loop(base, 0);
 
-    close(audioSocket);
+    sock_close(audioSocket);
     fprintf(stderr, "audio client thread stopped\n");
     return NULL;
 } // end audio_client_thread
@@ -2290,7 +2245,6 @@ void do_accept_audio(evutil_socket_t listener, short event, void *arg)
 
 void* mic_audio_client_thread(void* arg)
 {
-    int on = 1;
     struct event_base *base;
     struct event *listener_event;
     struct sockaddr_in server;
@@ -2302,16 +2256,14 @@ void* mic_audio_client_thread(void* arg)
     micSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (micSocket == -1)
     {
-        perror("mic_audio_client socket");
+        sock_perror("mic_audio_client socket");
         return NULL;
     }
 
     evutil_make_socket_nonblocking(micSocket);
     evutil_make_socket_closeonexec(micSocket);
 
-#ifndef WIN32
-    setsockopt(micSocket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-#endif
+    sock_set_reuseaddr(micSocket);
 
     memset(&server, 0, sizeof(server));
     server.sin_family = AF_INET;
@@ -2320,7 +2272,7 @@ void* mic_audio_client_thread(void* arg)
 
     if (bind(micSocket, (struct sockaddr *)&server, sizeof(server)) < 0)
     {
-        perror("mic audio client bind");
+        sock_perror("mic audio client bind");
         fprintf(stderr,"port=%d\n", BASE_PORT+20);
         return NULL;
     }
@@ -2329,7 +2281,7 @@ void* mic_audio_client_thread(void* arg)
 
     if (listen(micSocket, 5) == -1)
     {
-        perror("mic audio client listen");
+        sock_perror("mic audio client listen");
         exit(1);
     }
 
@@ -2342,7 +2294,7 @@ void* mic_audio_client_thread(void* arg)
 
     event_base_loop(base, 0);
 
-    close(micSocket);
+    sock_close(micSocket);
     fprintf(stderr, "mic audio client thread stopped\n");
     return NULL;
 } // end mic_audio_client_thread

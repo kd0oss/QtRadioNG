@@ -1,6 +1,8 @@
 #ifndef RADIO_H
 #define RADIO_H
 
+#include <stdint.h>
+#include <stdbool.h>
 #include "adc.h"
 #include "dac.h"
 #include "discovered.h"

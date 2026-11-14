@@ -22,6 +22,7 @@
 #include <stdatomic.h>
 #include <complex.h>
 #include <libhackrf/hackrf.h>
+#include "qtr_sleep.h"
 
 #define MAX_TONES      8
 #define TRANSFER_BYTES 262144
@@ -174,7 +175,7 @@ static void *stream_thread(void *arg)
             next.tv_sec++;
             next.tv_nsec -= 1000000000L;
         }
-        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, NULL);
+        qtr_sleep_until(&next);
 
         hackrf_transfer tr;
         memset(&tr, 0, sizeof(tr));
@@ -285,7 +286,7 @@ static void *tx_stream_thread(void *arg)
             next.tv_sec++;
             next.tv_nsec -= 1000000000L;
         }
-        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, NULL);
+        qtr_sleep_until(&next);
 
         hackrf_transfer tr;
         memset(&tr, 0, sizeof(tr));

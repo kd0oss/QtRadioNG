@@ -31,10 +31,7 @@
 #include <string.h>
 #include <semaphore.h>
 #include <time.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include "qtr_net.h"
 #include <unistd.h>
 #include <errno.h>
 #include <stddef.h>
@@ -173,7 +170,6 @@ void* iq_thread(void* stream)
     struct sockaddr_in iq_addr;
     socklen_t iq_length = sizeof(iq_addr);
     BUFFERL buffer;
-    int on = 1;
     // this stream's own buffers and resampler (one IQ thread per receive stream)
     float *data_in;
     float *data_out;
@@ -185,15 +181,12 @@ void* iq_thread(void* stream)
     int iq_socket = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (iq_socket < 0)
     {
-        perror("iq_thread: create iq socket failed");
+        sock_perror("iq_thread: create iq socket failed");
         exit(1);
     }
 
-    struct timeval read_timeout;
-    read_timeout.tv_sec = 0;
-    read_timeout.tv_usec = 10;
-    setsockopt(iq_socket, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
-    setsockopt(iq_socket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+    sock_set_rcvtimeo_us(iq_socket, 10);
+    sock_set_reuseaddr(iq_socket);
 
     memset(&iq_addr, 0, iq_length);
     iq_addr.sin_family = AF_INET;
@@ -202,7 +195,7 @@ void* iq_thread(void* stream)
 
     if (bind(iq_socket, (struct sockaddr*)&iq_addr, iq_length) < 0)
     {
-        perror("iq_thread: bind socket failed for iq socket");
+        sock_perror("iq_thread: bind socket failed for iq socket");
         exit(1);
     }
 
@@ -341,7 +334,7 @@ void* iq_thread(void* stream)
 
         sem_post(&iq_semaphore);
     } // end while
-    close(iq_socket);
+    sock_close(iq_socket);
     if (src != NULL)
         src_delete(src);
     free(data_in);
@@ -370,7 +363,6 @@ void* wb_iq_thread(void* channel)
     int iq_socket = -1;
     socklen_t iq_length = sizeof(iq_addr);
     BUFFERWB buffer;
-    int on = 1;
     int offset = 0;
     bool frame_complex = false;
     int16_t *data = NULL;
@@ -380,11 +372,11 @@ void* wb_iq_thread(void* channel)
     iq_socket = socket(PF_INET,SOCK_DGRAM,IPPROTO_UDP);
     if (iq_socket < 0)
     {
-        perror("wb_q_thread: create iq socket failed");
+        sock_perror("wb_q_thread: create iq socket failed");
         exit(1);
     }
 
-    setsockopt(iq_socket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+    sock_set_reuseaddr(iq_socket);
 
     memset(&iq_addr, 0, iq_length);
     iq_addr.sin_family = AF_INET;
@@ -393,7 +385,7 @@ void* wb_iq_thread(void* channel)
 
     if (bind(iq_socket, (struct sockaddr*)&iq_addr, iq_length) < 0)
     {
-        perror("wb_iq_thread: bind socket failed for iq socket");
+        sock_perror("wb_iq_thread: bind socket failed for iq socket");
         exit(1);
     }
 
@@ -406,10 +398,7 @@ void* wb_iq_thread(void* channel)
 
     // Block on the socket with a timeout so the thread neither spins while the
     // bandscope is closed nor misses the stop request.
-    struct timeval read_timeout;
-    read_timeout.tv_sec = 0;
-    read_timeout.tv_usec = 100000;
-    setsockopt(iq_socket, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
+    sock_set_rcvtimeo_us(iq_socket, 100000);
 
     while (!getStopIQIssued())
     {
@@ -423,9 +412,10 @@ void* wb_iq_thread(void* channel)
         bytes_read = recvfrom(iq_socket, (char*)&buffer, sizeof(buffer), 0, (struct sockaddr*)&iq_addr, &iq_length);
         if (bytes_read < 0)
         {
-            if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
+            int err = sock_error();
+            if (!sock_would_block(err) && err != SOCK_EINTR)
             {
-                perror("recvfrom socket failed for wideband iq buffer");
+                fprintf(stderr, "recvfrom socket failed for wideband iq buffer: %s (%d)\n", sock_strerror(err), err);
                 usleep(10000);
             }
             continue;
@@ -498,7 +488,7 @@ void* wb_iq_thread(void* channel)
  //   setStopIQIssued(false);
     rfstream[ch].enabled = false;
     rfstream[ch].dsp_channel = -1;
-    close(iq_socket);
+    sock_close(iq_socket);
     free(data);
     free(samples);
     fprintf(stderr, "****** Wideband IQ thread for ch: %d closed.\n", ch);
@@ -524,7 +514,7 @@ void hw_send(unsigned char* data, int length, int stream)
         int bytes_written = sendto(tx_iq_socket[stream], (char*)&buffer, sizeof(buffer), 0, (struct sockaddr *)&tx_iq_addr[stream], tx_iq_length[stream]);
         if (bytes_written < 0)
         {
-            perror("socket error: ");
+            sock_perror("socket error");
             fprintf(stderr, "sendto tx_iq failed: %d length=%d\n", bytes_written, length);
             exit(1);
         }
@@ -884,7 +874,6 @@ bool hw_wfm_enabled(int8_t stream)
 void hw_startIQ(int stream)
 {
     int ch = stream;
-    int on = 1;
 
     // a client starts a stream: IQ must run, even if the last client to
     // leave stopped it (STARTIQ comes before the attach that also clears this)
@@ -897,10 +886,10 @@ void hw_startIQ(int stream)
         tx_iq_socket[ch] = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
         if (tx_iq_socket[ch] < 0)
         {
-            perror("hw_init: create tx_iq socket failed");
+            sock_perror("hw_init: create tx_iq socket failed");
             exit(1);
         }
-        setsockopt(tx_iq_socket[ch], SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+        sock_set_reuseaddr(tx_iq_socket[ch]);
 
         memset(&tx_iq_addr[ch], 0, tx_iq_length[ch]);
         tx_iq_addr[ch].sin_family = AF_INET;
@@ -909,7 +898,7 @@ void hw_startIQ(int stream)
 
         if (bind(tx_iq_socket[ch], (struct sockaddr*)&tx_iq_addr[ch], tx_iq_length[ch]) < 0)
         {
-            perror("hw_init: bind socket failed for tx_iq socket");
+            sock_perror("hw_init: bind socket failed for tx_iq socket");
             exit(1);
         }
 
@@ -954,16 +943,30 @@ void* command_thread(void* arg)
             char peek;
             usleep(200000);
             sem_wait(&hw_cmd_semaphore);
-            ssize_t n = recv(radio[slot].socket, &peek, 1, MSG_PEEK | MSG_DONTWAIT);
+            /* poll without blocking: only peek when select says readable */
+            int r = sock_readable(radio[slot].socket, 0);
+            ssize_t n = 1;
+            int err = 0;
+            if (r > 0)
+            {
+                n = recv(radio[slot].socket, &peek, 1, MSG_PEEK);
+                if (n < 0)
+                    err = sock_error();
+            }
+            else if (r < 0)
+            {
+                n = -1;
+                err = sock_error();
+            }
             sem_post(&hw_cmd_semaphore);
-            if (n == 0 || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR))
+            if (n == 0 || (n < 0 && err != SOCK_EAGAIN && err != SOCK_EWOULDBLOCK && err != SOCK_EINTR))
                 radio[slot].connected = false;
         }
     }
     radio[slot].connected = false;
     hw_radio_disconnected(slot);
     fprintf(stderr, "radio disconnected: slot %d\n", slot);
-    close(radio[slot].socket);
+    sock_close(radio[slot].socket);
     radio[slot].in_use = false;
     return 0;
 } // end command_thread
@@ -974,18 +977,17 @@ void* hw_command_listener_thread(void* arg)
     int csocket=0;
     struct sockaddr_in csocket_addr;
     socklen_t csocket_length = sizeof(csocket_addr);
-    int on=1;
     
     fprintf(stderr, "Starting radio command port.\n");
     // create a TCP socket to send commands to the server
     csocket = socket(AF_INET,SOCK_STREAM, 0);
     if (csocket < 0)
     {
-        perror("hw_init: create radio command socket failed");
+        sock_perror("hw_init: create radio command socket failed");
         exit(1);
     }
 
-    setsockopt(csocket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+    sock_set_reuseaddr(csocket);
 
     memset(&csocket_addr, 0, csocket_length);
 
@@ -995,12 +997,12 @@ void* hw_command_listener_thread(void* arg)
 
     if (bind(csocket, (struct sockaddr*)&csocket_addr, csocket_length) < 0)
     {
-        perror("hw_init: bind socket failed for radio command socket");
+        sock_perror("hw_init: bind socket failed for radio command socket");
         exit(1);
     }
     if (listen(csocket, 12) < 0)
     {
-        perror("Radio command socket listen failed");
+        sock_perror("Radio command socket listen failed");
         exit(1);
     }
 
@@ -1015,8 +1017,8 @@ void* hw_command_listener_thread(void* arg)
 
         if (s < 0)
         {
-            if (errno != EINTR)
-                perror("Radio command socket accept failed");
+            if (sock_error() != SOCK_EINTR)
+                sock_perror("Radio command socket accept failed");
             continue;
         }
         for (slot = 0; slot < MAX_RADIO_CONNECTIONS && radio[slot].in_use; slot++)
@@ -1025,7 +1027,7 @@ void* hw_command_listener_thread(void* arg)
         {
             fprintf(stderr, "radio connection from %s refused: already %d radio programs connected\n",
                     inet_ntoa(addr.sin_addr), MAX_RADIO_CONNECTIONS);
-            close(s);
+            sock_close(s);
             continue;
         }
         radio[slot].socket = s;
@@ -1036,7 +1038,7 @@ void* hw_command_listener_thread(void* arg)
         if (pthread_create(&radio[slot].thread_id, NULL, command_thread, (void*)(intptr_t)slot) != 0)
         {
             perror("radio command socket pthread_create failed");
-            close(s);
+            sock_close(s);
             radio[slot].in_use = false;
             continue;
         }
@@ -1402,7 +1404,7 @@ static bool recv_full(int s, char *buf, int n)
         ssize_t r = recv(s, buf + got, (size_t)(n - got), 0);
         if (r <= 0)
         {
-            if (r < 0 && errno == EINTR)
+            if (r < 0 && sock_error() == SOCK_EINTR)
                 continue;
             return false;
         }

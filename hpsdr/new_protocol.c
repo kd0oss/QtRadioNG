@@ -29,17 +29,11 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <net/if_arp.h>
+#include "qtr_net.h"
 #include <net/if.h>
 #include <ifaddrs.h>
 #include <semaphore.h>
 #include <math.h>
-#include <sys/select.h>
 #include <pthread.h>
 
 //#include <wdsp.h>
@@ -493,7 +487,9 @@ void new_protocol_init() {
 
     int optval = 1;
     setsockopt(data_socket, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+#ifdef SO_REUSEPORT
     setsockopt(data_socket, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+#endif
 
     // bind to the interface
     if (bind(data_socket,(struct sockaddr*)&radio->info.network.interface_address,radio->info.network.interface_length)<0) {
@@ -554,7 +550,7 @@ void new_protocol_init() {
         printf("thread_new failed on new_protocol_thread\n");
         exit( -1 );
     }
-    fprintf(stderr, "new_protocol_thread: id=%ld\n", new_protocol_thread_id);
+    fprintf(stderr, "new_protocol_thread: id=%lu\n", (unsigned long)new_protocol_thread_id);
 
     new_protocol_general();
     new_protocol_start();
@@ -628,7 +624,7 @@ static void new_protocol_high_priority() {
     int i;
     long long rxFrequency;
     long long txFrequency;
-    long phase;
+    uint32_t phase;    // DDS phase word (not long: 32 bits on Windows, and this goes past 2^31)
     int ddc;
 
     if (data_socket==-1) {
@@ -669,7 +665,7 @@ static void new_protocol_high_priority() {
         //
         rxFrequency = receiver[0]->frequency-receiver[0]->lo;
 
-        phase=(long)((4294967296.0*(double)rxFrequency)/122880000.0);
+        phase=(uint32_t)(long long)((4294967296.0*(double)rxFrequency)/122880000.0);
         high_priority_buffer_to_radio[ 9]=phase>>24;
         high_priority_buffer_to_radio[10]=phase>>16;
         high_priority_buffer_to_radio[11]=phase>>8;
@@ -700,7 +696,7 @@ static void new_protocol_high_priority() {
 //                }
 //            }
 //fprintf(stderr, "rxFreq: %lld\n", rxFrequency);
-            phase=(long)((4294967296.0*(double)rxFrequency)/122880000.0);
+            phase=(uint32_t)(long long)((4294967296.0*(double)rxFrequency)/122880000.0);
             high_priority_buffer_to_radio[9+(ddc*4)]=phase>>24;
             high_priority_buffer_to_radio[10+(ddc*4)]=phase>>16;
             high_priority_buffer_to_radio[11+(ddc*4)]=phase>>8;
@@ -728,7 +724,7 @@ static void new_protocol_high_priority() {
 //            }
 //        }
 
-        phase=(long)((4294967296.0*(double)txFrequency)/122880000.0);
+        phase=(uint32_t)(long long)((4294967296.0*(double)txFrequency)/122880000.0);
     }
 
     if (isTransmitting() && transmitter->puresignal) {
@@ -1316,7 +1312,7 @@ static void new_protocol_start() {
         fprintf(stderr, "pthread_new failed on new_protocol_timer_thread\n");
         exit( -1 );
     }
-    fprintf(stderr, "new_protocol_timer_thread: id=%ld\n",new_protocol_timer_thread_id);
+    fprintf(stderr, "new_protocol_timer_thread: id=%lu\n", (unsigned long)new_protocol_timer_thread_id);
 }
 
 void new_protocol_stop() {

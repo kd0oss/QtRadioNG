@@ -9,8 +9,14 @@ lessThan(QT_MAJOR_VERSION, 6): error("QtRadio requires Qt 6 (found $$QT_VERSION)
 QT       += core gui widgets network multimedia
 
 #KD0NUZ OSX Homebrew includes/libs
-INCLUDEPATH += /usr/local/include
-LIBS += -L/usr/local/lib
+unix {
+    INCLUDEPATH += /usr/local/include
+    LIBS += -L/usr/local/lib
+}
+# Windows (MSYS2 UCRT64): M_PI needs _USE_MATH_DEFINES outside GNU mode
+win32 {
+    DEFINES += _USE_MATH_DEFINES
+}
 
 QMAKE_CXXFLAGS_WARN_ON += -Wno-unused-parameter
 QMAKE_CXXFLAGS += -fopenmp

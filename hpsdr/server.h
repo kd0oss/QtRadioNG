@@ -27,14 +27,9 @@
 #ifndef SERVER_H
 #define SERVER_H
 
-#ifndef __linux__
-#include <winsock.h>
-#include "pthread.h"
-#endif
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
+#include <stdint.h>
+#include <pthread.h>
+#include "qtr_net.h"
 #include <sys/queue.h>
 #include <stdbool.h>
 
@@ -54,7 +49,7 @@
 #define CLIENT_DETACHED "Error: Client is not attached to receiver"
 
 #define INVALID_COMMAND "Error: Invalid Command"
-#define FAILED "Error: FAILED"
+#define CMD_FAILED "Error: FAILED"
 
 #define RECEIVER_NOT_ATTACHED "Error: Client does not have a receiver attached"
 #define RECEIVER_NOT_ZERO "Error: Client not attached to receiver 0"

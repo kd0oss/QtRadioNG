@@ -23,9 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <semaphore.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include "qtr_net.h"
 #include <stdbool.h>
 
 //#include "band.h"

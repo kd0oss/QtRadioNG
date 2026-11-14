@@ -1,26 +1,17 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include <string.h>
-#ifdef __linux__
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include "qtr_net.h"
 //#include <sys/ioctl.h>
-#include <sys/fcntl.h>
 #include <errno.h>
-#include <netdb.h>
 #include <pthread.h>
 #include <getopt.h>
 #include <unistd.h>
 #include <math.h>
 #include <semaphore.h>
 #include <signal.h>
-#else // Windows
-#include "pthread.h"
-#include <winsock.h>
-#include "getopt.h"
-#endif
 
 #include "server.h"
 #include "radio.h"
@@ -136,7 +127,7 @@ char* detach_receiver(int8_t idx)
         set_wideband_requested(false);   // no receivers left: no bandscope either
     }
 
-    close(rfunit[idx].client.socket);
+    sock_close(rfunit[idx].client.socket);
     rfunit[idx].client.socket = -1;
     rfunit[idx].attached = false;
     fprintf(stderr, "Receiver detached: radio id = %u  index = %u\n", rfunit[idx].radio_id, idx);
@@ -168,7 +159,7 @@ char* detach_transmitter(int8_t idx)
             free(item);
         }
         sem_post(&txiq_semaphore[idx]);
-        close(rfunit[idx].client.socket);
+        sock_close(rfunit[idx].client.socket);
         rfunit[idx].client.socket = -1;
         rfunit[idx].attached = false;
         fprintf(stderr, "Transmitter detached: radio id = %u  index = %u\n", rfunit[idx].radio_id, idx);
@@ -333,7 +324,7 @@ char* parse_command(CLIENT* client, char* command)
     {
         // set frequency
         bDone = true;
-        long long f = atol(command+2);
+        long long f = atoll(command+2);
         setFrequency(index, f);
     }
         break;
@@ -481,7 +472,7 @@ char* parse_command(CLIENT* client, char* command)
         if (pthread_create(&receiver[client->receiver].audio_thread_id, NULL, audio_thread, client) != 0)
         {
             fprintf(stderr, "failed to create audio thread for rx %d\n", client->receiver);
-            return FAILED;
+            return CMD_FAILED;
  //           exit(1);
         }
         else
@@ -576,12 +567,12 @@ void* client_thread(void* arg)
     csocket = socket(AF_INET, SOCK_STREAM, 0);
     if (csocket < 0)
     {
-        perror("Open socket failed.");
+        sock_perror("Open socket failed.");
         exit(1);
     }
 
     setsockopt(csocket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-    fcntl(csocket, F_SETFL, O_NONBLOCK);  // set to non-blocking
+    sock_set_nonblocking(csocket, 1);  // set to non-blocking
 
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
@@ -590,9 +581,16 @@ void* client_thread(void* arg)
 
     // connect
     rc = connect(csocket, (struct sockaddr*)&address, command_length);
-    if (rc < 0 && errno != EINPROGRESS)
+    if (rc < 0 && !sock_connect_pending(sock_error()))
     {
-        perror("command channel connect to DSP server failed.");
+        sock_perror("command channel connect to DSP server failed.");
+        exit(1);
+    }
+    // Finish the connect before the receive loop: on Windows recv() on a
+    // socket that is still connecting fails with WSAENOTCONN.
+    if (rc < 0 && sock_wait_connected(csocket, 5000) < 0)
+    {
+        fprintf(stderr, "command channel connect to DSP server %s failed.\n", dsp_server_address);
         exit(1);
     }
 
@@ -618,10 +616,11 @@ void* client_thread(void* arg)
         bytes_read = recv(client->socket, byte, 1, 0);
         if (bytes_read < 0)
         {  // recv error, exit program.
-            if (errno != EWOULDBLOCK)
+            int err = sock_error();
+            if (!sock_would_block(err))
             {
                 sem_post(&client_semaphore);
-                fprintf(stderr, "command channel error: %s  (%d)\n", strerror(errno), errno);
+                fprintf(stderr, "command channel error: %s  (%d)\n", sock_strerror(err), err);
                 break;
             }
         }
@@ -663,6 +662,11 @@ void* client_thread(void* arg)
             command[len] = 0;    // a short command leaves no stale bytes behind it
 
         response = parse_command(client, command);
+        if (send_manifest && discovered_xml == NULL)
+        {
+            fprintf(stderr, "No radio, so no manifest to send.\n");
+            send_manifest = false;
+        }
         if (send_manifest)
         {
             int len = strlen(discovered_xml)+1;
@@ -687,7 +691,7 @@ void* client_thread(void* arg)
 // Should only get here on recv error.
 
 #ifdef __linux__
-    close(csocket);
+    sock_close(csocket);
 #else
     closesocket(csocket);
 #endif
@@ -713,10 +717,7 @@ void init_receiver(int8_t idx)
         exit(1);
     }
 
-    struct timeval read_timeout;
-    read_timeout.tv_sec = 0;
-    read_timeout.tv_usec = 10;
-    setsockopt(rfunit[idx].client.socket, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
+    sock_set_rcvtimeo_us(rfunit[idx].client.socket, 10);
     setsockopt(rfunit[idx].client.socket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
 
     rfunit[idx].client.iq_length = sizeof(cli_addr);
@@ -850,7 +851,7 @@ void send_Mic_buffer(float sample)
 //       printf("Send to client: %d\n", rx);
     if ((mic_socket = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
     {
-        perror("socket creation failed");
+        sock_perror("socket creation failed");
         exit(EXIT_FAILURE);
     }
     cli_length = sizeof(cli_addr);
@@ -873,7 +874,7 @@ void send_Mic_buffer(float sample)
             exit(1);
         }
     }
-    close(mic_socket);
+    sock_close(mic_socket);
 } // end send_Mic_buffer
 
 
@@ -976,10 +977,7 @@ void* tx_IQ_thread(void* arg)
             fprintf(stderr, "create tx_iq_socket failed for iq_socket: %d\n", idx);
             exit(1);
         }
-        struct timeval read_timeout;
-        read_timeout.tv_sec = 0;
-        read_timeout.tv_usec = 10;
-        setsockopt(rfunit[idx].client.socket, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
+        sock_set_rcvtimeo_us(rfunit[idx].client.socket, 10);
         
         cli_length = sizeof(cli_addr);
         memset((char*)&cli_addr, 0, cli_length);
