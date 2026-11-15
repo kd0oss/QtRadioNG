@@ -22,6 +22,7 @@ public:
     Bookmark* at(int index);
     int count();
     void select(QAction* action);
+    bool hasSelection(void);
     int getBand();
     long long getFrequency();
     int getMode();
@@ -31,7 +32,9 @@ public slots:
 signals:
     void bookmarkSelected(QAction*);
 private:
+    void addPresets(void);
     QVector<Bookmark*> bookmarks;
+    QVector<Bookmark*> cbChannels;     // built-in, never saved or edited
     Bookmark* currentBookmark;
 };
 

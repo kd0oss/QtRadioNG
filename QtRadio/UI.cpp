@@ -340,6 +340,11 @@ void UI::currentReceiverChanged(int index)
     if (current_index < 0) return;
     current_index = index;
     radio[connection.rfstream[receiver_rfstream[current_index]].radio.radio_id]->selectedIndex = index;
+    // The per-receiver commands (audio gain, AGC, NR, ANF, squelch, ...) and
+    // the RX equalizer address currentRxRfstream; it was only set while
+    // connecting, so they all went to the last receiver set up.
+    currentRxRfstream = receiver_rfstream[current_index];
+    radio[connection.rfstream[currentRxRfstream].radio.radio_id]->equalizer->currentRxRfstream = currentRxRfstream;
     frequencyMoved(0, 0);
 
     QByteArray command;
@@ -777,15 +782,17 @@ void UI::connected(bool *rx_active, int8_t *rxstreams, int8_t *txrxPair, bool *l
         command.append((char)ATTACHRX);
         connection.sendCommand(command);
 
-        if (!isConnected)
-        {
-            connect(radio[r], &Radio::updateFilterMenu, this, &UI::updateFilterMenu);
-            connect(radio[r], &Radio::updateFiltersMenu, this, &UI::updateFiltersMenu);
-            connect(radio[r], &Radio::updateModeMenu, this, &UI::updateModeMenu);
-            connect(radio[r], &Radio::updateBandMenu, this, &UI::updateBandMenu);
-            connect(&radio[r]->filters[x], &Filters::filtersChanged, radio[r], &Radio::filtersChanged);
-            connect(&radio[r]->filters[x], &Filters::filterChanged, radio[r], &Radio::filterChanged);
-        }
+        // Every receiver needs its own filter connections, and every radio its
+        // menu connections; these used to be made for the first receiver
+        // only, so a mode change on any other receiver never updated its
+        // filter (panadapter bandwidth, dspserver). UniqueConnection keeps a
+        // radio with several receivers from being connected twice.
+        connect(radio[r], &Radio::updateFilterMenu, this, &UI::updateFilterMenu, Qt::UniqueConnection);
+        connect(radio[r], &Radio::updateFiltersMenu, this, &UI::updateFiltersMenu, Qt::UniqueConnection);
+        connect(radio[r], &Radio::updateModeMenu, this, &UI::updateModeMenu, Qt::UniqueConnection);
+        connect(radio[r], &Radio::updateBandMenu, this, &UI::updateBandMenu, Qt::UniqueConnection);
+        connect(&radio[r]->filters[x], &Filters::filtersChanged, radio[r], &Radio::filtersChanged, Qt::UniqueConnection);
+        connect(&radio[r]->filters[x], &Filters::filterChanged, radio[r], &Radio::filterChanged, Qt::UniqueConnection);
 
         connect(&radio[r]->band[x], &Band::bandChanged, radio[r], &Radio::bandChanged);
         connect(&radio[r]->mode[x], &Mode::modeChanged, radio[r], &Radio::modeChanged);
@@ -2455,16 +2462,15 @@ void UI::selectBookmark(QAction* action)
 {
     if (current_index < 0) return;
     bookmarks.select(action);
+    if (!bookmarks.hasSelection()) return;
 
     radio[connection.rfstream[receiver_rfstream[current_index]].radio.radio_id]->band[current_index].selectBand(bookmarks.getBand());
 
+    // Tune as the VFO and keypad do: selectBand() above has just tuned the
+    // radio to that band's stored frequency, and only updating the displays
+    // here left the receiver there while the VFO showed the bookmark.
     frequency = bookmarks.getFrequency();
-    radio[connection.rfstream[receiver_rfstream[current_index]].radio.radio_id]->band[current_index].setFrequency(frequency);
-
-    radio[connection.rfstream[receiver_rfstream[current_index]].radio.radio_id]->rxp[current_index]->setFrequency(frequency);
-
-    //    gvj code
-    widget.vfoFrame->setFrequency(frequency);
+    frequencyChanged(frequency);
 
     radio[connection.rfstream[receiver_rfstream[current_index]].radio.radio_id]->mode[current_index].setMode(current_index, receiver_rfstream[current_index], bookmarks.getMode());
 

@@ -5,10 +5,45 @@
 #include <QMenu>
 
 #include "Bookmarks.h"
+#include "Band.h"
+#include "Mode.h"
+
+// The 40 Citizens Band channels (FCC 47 CFR 95.963; the same frequencies
+// are used for CEPT 40-channel CB). Channels 23-25 are out of order.
+static const long long cbChannelHz[40] =
+{
+    26965000, 26975000, 26985000, 27005000, 27015000,   //  1 -  5
+    27025000, 27035000, 27055000, 27065000, 27075000,   //  6 - 10
+    27085000, 27105000, 27115000, 27125000, 27135000,   // 11 - 15
+    27155000, 27165000, 27175000, 27185000, 27205000,   // 16 - 20
+    27215000, 27225000, 27255000, 27235000, 27245000,   // 21 - 25
+    27265000, 27275000, 27285000, 27295000, 27305000,   // 26 - 30
+    27315000, 27325000, 27335000, 27345000, 27355000,   // 31 - 35
+    27365000, 27375000, 27385000, 27395000, 27405000    // 36 - 40
+};
+#define CB_FILTER_AM_8K 3   // AMFilters index of the 8k filter (10 kHz spacing)
 
 
 Bookmarks::Bookmarks() {
     currentBookmark=NULL;
+    addPresets();
+}
+
+// Pre-assigned bookmarks: CB channels 1-40, AM, in their own submenu.
+void Bookmarks::addPresets(void)
+{
+    for (int ch = 1; ch <= 40; ch++)
+    {
+        Bookmark *b = new Bookmark();
+        long long hz = cbChannelHz[ch - 1];
+
+        b->setTitle(QString("CB %1  (%2 MHz)").arg(ch, 2, 10, QChar('0')).arg(hz / 1e6, 0, 'f', 3));
+        b->setBand(BAND_GEN);
+        b->setFrequency(hz);
+        b->setMode(MODE_AM);
+        b->setFilter(CB_FILTER_AM_8K);
+        cbChannels.append(b);
+    }
 }
 
 // SLOTS
@@ -33,6 +68,16 @@ void Bookmarks::buildMenu(QMenu* menu) {
         connect(action,&QAction::triggered,this,&Bookmarks::triggered);
 
         qDebug()<<"  added "<<action->text();
+    }
+
+    if (!bookmarks.isEmpty())
+        menu->addSeparator();
+    QMenu *cb = menu->addMenu("CB Channels");
+    for (int i = 0; i < cbChannels.size(); ++i)
+    {
+        action = new QAction(cbChannels.at(i)->getTitle(), this);
+        cb->addAction(action);
+        connect(action, &QAction::triggered, this, &Bookmarks::triggered);
     }
 }
 
@@ -113,19 +158,35 @@ int Bookmarks::count() {
     return bookmarks.count();
 }
 
-void Bookmarks::select(QAction* action) {
+void Bookmarks::select(QAction* action)
+{
     qDebug()<<"Bookmarks::select";
 
-    // find the entry
-    for(int i=0;i<bookmarks.size();i++) {
-        currentBookmark=bookmarks.at(i);
-        if(action->text()==currentBookmark->getTitle()) {
-            break;
-        } else {
-            currentBookmark=NULL;
+    // Always start from no selection: with no saved bookmarks the old loop
+    // never ran, so the previous selection stayed and a preset chosen next
+    // tuned to the one before it.
+    currentBookmark = NULL;
+    for (int i = 0; i < bookmarks.size(); i++)
+    {
+        if (action->text() == bookmarks.at(i)->getTitle())
+        {
+            currentBookmark = bookmarks.at(i);
+            return;
         }
     }
+    for (int i = 0; i < cbChannels.size(); i++)
+    {
+        if (action->text() == cbChannels.at(i)->getTitle())
+        {
+            currentBookmark = cbChannels.at(i);
+            return;
+        }
+    }
+}
 
+bool Bookmarks::hasSelection(void)
+{
+    return currentBookmark != NULL;
 }
 
 int Bookmarks::getBand() {
